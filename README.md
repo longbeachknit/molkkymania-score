@@ -1,5 +1,5 @@
-[20260416最終.html](https://github.com/user-attachments/files/26775330/20260416.html)
-# molkkymania-score
+[index.html](https://github.com/user-attachments/files/26775928/index.html)
+
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 .app{padding:10px;max-width:480px;margin:0 auto;font-family:var(--font-sans);}
@@ -169,8 +169,8 @@ function render(){
 
 function rSetup(){
   return`<div style="padding:8px 0 4px;">
-    <div style="font-size:18px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px;">Mölkky Mania</div>
-    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:14px;">オンラインスコアシートシステム</div>
+    <div style="font-size:18px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px;">Mölkky スコアシート</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:14px;">日本モルック協会公式ルール準拠</div>
     <div class="card" style="padding:14px;margin-bottom:10px;">
       <div style="font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:10px;">試合形式</div>
       <div style="display:grid;gap:6px;">
