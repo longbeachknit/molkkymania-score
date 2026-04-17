@@ -1,537 +1,589 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-.app{padding:10px;max-width:480px;margin:0 auto;font-family:var(--font-sans);}
-.btn{padding:8px 16px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);cursor:pointer;font-size:14px;font-family:var(--font-sans);}
-.btn:hover{background:var(--color-background-secondary);}
-.btn:active{transform:scale(0.98);}
-.btn-primary{color:#fff;border-color:transparent;}
-.btn-red-o{background:var(--color-background-danger);color:var(--color-text-danger);border-color:var(--color-border-danger);}
-.btn-xs{padding:4px 10px;font-size:12px;}
-.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;}
-input[type=text]{width:100%;padding:8px 10px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:#F3F4F6;color:var(--color-text-primary);font-size:15px;font-family:var(--font-sans);}
-select{width:100%;padding:9px 10px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:#F3F4F6;color:var(--color-text-primary);font-size:15px;font-family:var(--font-sans);}
-input[type=text]:focus,select:focus{outline:none;border-color:#1D9E75;background:#fff;}
-.drag-item{padding:10px 12px;background:#F3F4F6;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);display:flex;align-items:center;gap:8px;font-size:14px;color:var(--color-text-primary);user-select:none;}
-.drag-item.dragging{opacity:0.4;}
-.drag-item.over{border-color:#1D9E75;background:#E1F5EE;}
+body{background:#f5f5f5;}
+.app{padding:10px;max-width:480px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+.btn{padding:8px 16px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#111;cursor:pointer;font-size:14px;font-family:inherit;transition:background 0.15s;}
+.btn:hover{background:#f3f4f6;}
+.btn:active{transform:scale(0.97);}
+.btn-green{background:#1D9E75;color:#fff;border-color:#1D9E75;}
+.btn-green:hover{background:#178a64;}
+.btn-blue{background:#378ADD;color:#fff;border-color:#378ADD;}
+.btn-blue:hover{background:#2e72c4;}
+.btn-red-o{background:#FEE2E2;color:#b91c1c;border-color:#fca5a5;}
+.btn-red-o:hover{background:#fecaca;}
+.btn-orange{background:#FFF7ED;color:#92400e;border-color:#fed7aa;}
+.btn-orange:hover{background:#fef3c7;}
+.btn-gray{background:#f3f4f6;color:#374151;border-color:#d1d5db;}
+.btn-gray:hover{background:#e5e7eb;}
+.btn-xs{padding:5px 11px;font-size:12px;}
+.btn-sm{padding:7px 13px;font-size:13px;}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;}
+input[type=text]{width:100%;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;background:#f3f4f6;color:#111;font-size:15px;font-family:inherit;}
+input[type=text]:focus{outline:none;border-color:#1D9E75;background:#fff;}
+select{width:100%;padding:10px 11px;border:1.5px solid #d1d5db;border-radius:8px;background:#f3f4f6;color:#111;font-size:15px;font-family:inherit;cursor:pointer;}
+select:focus{outline:none;border-color:#1D9E75;background:#fff;}
+.order-item{padding:10px 12px;background:#f3f4f6;border:1.5px solid #d1d5db;border-radius:8px;display:flex;align-items:center;gap:8px;font-size:14px;color:#111;user-select:none;}
+.order-item.dragging{opacity:0.4;}
+.order-item.over{border-color:#1D9E75;background:#E1F5EE;}
 .ss-wrap{overflow-x:auto;}
-.ss-table{border-collapse:collapse;}
-.ss-table th,.ss-table td{border:1px solid #ccc;text-align:center;vertical-align:middle;padding:4px 5px;}
-.ss-table th{background:#F3F4F6;font-size:12px;font-weight:500;}
-.ss-turn-col{width:22px;font-size:12px;color:#888;background:#F8F8F8;}
-.ss-member-th{writing-mode:vertical-rl;text-orientation:mixed;font-size:12px;min-width:28px;padding:6px 3px;}
-.ss-total-th{font-size:12px;min-width:32px;}
-.ss-cell{font-size:13px;min-width:28px;}
-.ss-total-cell{font-size:13px;font-weight:500;min-width:32px;background:#FAFAF6;}
-.ss-team-header{font-size:13px;font-weight:500;padding:5px 6px;}
+.ss-tbl{border-collapse:collapse;width:100%;}
+.ss-tbl th,.ss-tbl td{border:1px solid #bbb;text-align:center;vertical-align:middle;padding:5px 6px;}
+.ss-tbl th{background:#f3f4f6;font-size:13px;font-weight:600;}
+.turn-col{width:26px;font-size:13px;color:#888;background:#f8f8f8;}
+.mbr-th{writing-mode:vertical-rl;font-size:13px;min-width:32px;padding:8px 4px;}
+.tot-th{font-size:13px;min-width:38px;}
+.sc-cell{font-size:14px;min-width:34px;padding:5px 6px;}
+.tot-cell{font-size:14px;font-weight:600;min-width:38px;background:#fafaf6;padding:5px 6px;}
+.team-hdr{font-size:14px;font-weight:600;padding:7px 8px;}
+label.radio-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid #e5e7eb;border-radius:10px;cursor:pointer;background:#fff;}
+label.radio-card.selected{border-color:#1D9E75;background:#E1F5EE;}
 </style>
+</head>
+<body>
 <div class="app" id="app"></div>
 <script>
-const COLORS=['#1D9E75','#E24B4A'];
-const LIGHT_BG=['#E1F5EE','#FCEBEB'];
-const LIGHT_BORDER=['#9FE1CB','#F7C1C1'];
-const LIGHT_TEXT=['#085041','#A32D2D'];
-const MAX=50,RESET=25,MAXM=3;
+const C=['#1D9E75','#E24B4A'];
+const LB=['#E1F5EE','#FCEBEB'];
+const LBR=['#9FE1CB','#F7C1C1'];
+const LT=['#085041','#A32D2D'];
+const MAX=50,RST=25,MM=3;
 
 let S={
-  phase:'setup',format:'best2',
-  teams:[{id:0,name:'チームA',color:COLORS[0],members:[]},{id:1,name:'チームB',color:COLORS[1],members:[]}],
-  sets:[],cur:0,firstId:0,showHist:false,
+  phase:'setup',fmt:'best2',
+  teams:[{id:0,name:'チームA',members:[]},{id:1,name:'チームB',members:[]}],
+  sets:[],cur:0,fid:0,showHist:false,
   pFirst:null,pIdx:null,pOrders:[[],[]],
-  inputPts:'',inputMulti:'single',inputAimed:'cross',
-  prevPhase:null
+  iP:'',iM:'single',iA:'cross',
+  prev:null,ssIdx:0,
+  endPending:false,
+  tieExtend:false,
+  molkoutWinner:null
 };
 
-function fmtLabel(){return S.format==='best2'?'2先':S.format==='best3'?'3先':'表裏';}
-function needsFirstChoice(idx){if(S.format==='best2')return idx===0||idx===2;if(S.format==='best3')return idx===0||idx===4;return idx===0;}
-function isFinal(i){return(S.format==='best2'&&i===2)||(S.format==='best3'&&i===4);}
-function autoFirst(nextIdx){
-  const f=S.firstId;
-  if(S.format==='best2')return nextIdx===1?1-f:f;
-  if(S.format==='best3'){
-    if(nextIdx===2){const w=[0,0];S.sets.slice(0,2).forEach(s=>{if(s.winnerId!=null)w[s.winnerId]++;});if(w[0]===2)return 1;if(w[1]===2)return 0;return 1-S.sets[1].firstTeamId;}
-    if(nextIdx===3)return 1-S.sets[2].firstTeamId;
+const fl=()=>S.fmt==='best2'?'2先':S.fmt==='best3'?'3先':'表裏';
+const nfc=(i)=>(S.fmt==='best2')?(i===0||i===2):(S.fmt==='best3')?(i===0||i===4):i===0;
+const isFin=(i)=>(S.fmt==='best2'&&i===2)||(S.fmt==='best3'&&i===4);
+function aF(ni){
+  const f=S.fid;
+  if(S.fmt==='best2')return ni===1?1-f:f;
+  if(S.fmt==='best3'){
+    if(ni===2){const w=[0,0];S.sets.slice(0,2).forEach(s=>{if(s.wid!=null)w[s.wid]++;});if(w[0]===2)return 1;if(w[1]===2)return 0;return 1-S.sets[1].ftid;}
+    if(ni===3)return 1-S.sets[2].ftid;
     return 1-f;
   }
   return 1-f;
 }
-function getInitialOrders(nextIdx,firstId){
-  const orders=[[],[]];
+function gIO(ni,fid){
+  const o=[[],[]];
   [0,1].forEach(ti=>{
-    const isFirst=ti===firstId;let found=null;
-    for(let i=S.sets.length-1;i>=0;i--){const s=S.sets[i];if((s.firstTeamId===ti)===isFirst){const o=s.teams[ti].order;if(o&&o.length>0){found=o;break;}}}
-    if(!found&&S.sets.length>0){const prev=S.sets[S.sets.length-1];const o=prev.teams[ti].order;if(o&&o.length>0)found=o;}
-    if(!found)found=S.teams[ti].members.slice();
-    orders[ti]=found?[...found]:S.teams[ti].members.slice();
+    const isF=ti===fid;let fd=null;
+    for(let i=S.sets.length-1;i>=0;i--){const s=S.sets[i];if((s.ftid===ti)===isF){const x=s.teams[ti].order;if(x&&x.length){fd=x;break;}}}
+    if(!fd&&S.sets.length>0){const pv=S.sets[S.sets.length-1];const x=pv.teams[ti].order;if(x&&x.length)fd=x;}
+    if(!fd)fd=S.teams[ti].members.slice();
+    o[ti]=fd?[...fd]:S.teams[ti].members.slice();
   });
-  return orders;
+  return o;
 }
-function getTotals(){const t=[0,0];S.sets.forEach(s=>{t[0]+=s.teams[0].score;t[1]+=s.teams[1].score;});return t;}
-function maxSets(){return S.format==='best2'?3:S.format==='best3'?5:2;}
-function needWins(){return S.format==='best2'?2:S.format==='best3'?3:99;}
-function matchWinner(){if(S.format==='round2')return null;const w=[0,0];S.sets.forEach(s=>{if(s.winnerId!=null)w[s.winnerId]++;});const n=needWins();return w[0]>=n?0:w[1]>=n?1:null;}
-function mkSet(idx,fid,ord){return{idx,firstTeamId:fid,currentTeamId:fid,teams:[{id:0,score:0,misses:0,eliminated:false,throws:[],mi:0,order:ord[0]||[]},{id:1,score:0,misses:0,eliminated:false,throws:[],mi:0,order:ord[1]||[]}],winnerId:null,hist:[]};}
-function cs(){return S.sets[S.cur];}
-function getMbr(td,ti){const o=td.order.length>0?td.order:S.teams[ti].members;return o.length?o[td.mi%o.length]:null;}
-function dots(n){return[0,1,2].map(i=>`<div style="width:11px;height:11px;border-radius:50%;background:${i<n?'#E24B4A':'var(--color-border-tertiary)'};border:0.5px solid ${i<n?'#E24B4A':'var(--color-border-secondary)'};" ></div>`).join('');}
+const gT=()=>{const t=[0,0];S.sets.forEach(s=>{t[0]+=s.teams[0].sc;t[1]+=s.teams[1].sc;});return t;}
+const mxS=()=>S.fmt==='best2'?3:S.fmt==='best3'?5:2;
+const nW=()=>S.fmt==='best2'?2:S.fmt==='best3'?3:99;
+function mW(){if(S.fmt==='round2')return null;const w=[0,0];S.sets.forEach(s=>{if(s.wid!=null)w[s.wid]++;});const n=nW();return w[0]>=n?0:w[1]>=n?1:null;}
+function mkSet(idx,fid,ord){return{idx,ftid:fid,ctid:fid,teams:[{id:0,sc:0,ms:0,el:false,throws:[],mi:0,order:ord[0]||[]},{id:1,sc:0,ms:0,el:false,throws:[],mi:0,order:ord[1]||[]}],wid:null,hist:[]};}
+const cs=()=>S.sets[S.cur];
+function isTurnEnd(cset){const t0=cset.teams[0].throws.length,t1=cset.teams[1].throws.length;return t0===t1&&t0>0;}
+function gmb(td,ti){const o=td.order.length>0?td.order:S.teams[ti].members;return o.length?o[td.mi%o.length]:null;}
+function dots(n){return[0,1,2].map(i=>`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${i<n?'#E24B4A':'#e5e7eb'};border:1px solid ${i<n?'#E24B4A':'#d1d5db'};"></span>`).join('');}
+function svgC(t,s=22){return`<svg width="${s}" height="${s}" viewBox="0 0 22 22" style="vertical-align:middle;"><circle cx="11" cy="11" r="10" fill="none" stroke="#111" stroke-width="1.5"/><text x="11" y="15.5" text-anchor="middle" font-size="11" font-family="-apple-system,sans-serif" fill="#111">${t}</text></svg>`;}
+function svgS(t,s=22){return`<svg width="${s+6}" height="${s}" viewBox="0 0 28 22" style="vertical-align:middle;"><rect x="1" y="1" width="26" height="20" rx="3" fill="none" stroke="#111" stroke-width="1.5"/><text x="14" y="15.5" text-anchor="middle" font-size="11" font-family="-apple-system,sans-serif" fill="#111">${t}</text></svg>`;}
+
+function processEarlyEnd(){
+  const cset=cs();
+  const sc0=cset.teams[0].sc,sc1=cset.teams[1].sc;
+  if(S.fmt==='round2'){
+    cset.wid=sc0>sc1?0:sc1>sc0?1:null;
+    cset.draw=(sc0===sc1);
+  } else {
+    cset.wid=sc0>sc1?0:sc1>sc0?1:null;
+  }
+  S.endPending=false;S.tieExtend=false;
+  S.phase='earlyMatchOver';render();
+}
 
 function histTbl(upTo){
   const rows=S.sets.slice(0,upTo).map((ss,i)=>{
-    const wn=ss.winnerId!=null?S.teams[ss.winnerId].name:'−';
-    const lb=S.format==='round2'?`${i+1}セット`:`第${i+1}セット`;
-    return`<tr style="border-top:0.5px solid var(--color-border-tertiary);">
-      <td style="padding:5px 8px;font-size:13px;color:var(--color-text-secondary);">${lb}</td>
-      <td style="padding:5px 8px;font-size:13px;text-align:center;font-weight:${ss.winnerId===0?500:400};color:var(--color-text-primary);">${ss.teams[0].score}</td>
-      <td style="padding:5px 8px;font-size:13px;text-align:center;font-weight:${ss.winnerId===1?500:400};color:var(--color-text-primary);">${ss.teams[1].score}</td>
+    const wn=ss.draw?'引き分け':ss.wid!=null?S.teams[ss.wid].name:'−';
+    const lb=S.fmt==='round2'?`${i+1}セット`:`第${i+1}セット`;
+    return`<tr style="border-top:1px solid #e5e7eb;">
+      <td style="padding:5px 8px;font-size:13px;color:#6b7280;">${lb}</td>
+      <td style="padding:5px 8px;font-size:13px;text-align:center;font-weight:${ss.wid===0?600:400};">${ss.teams[0].sc}</td>
+      <td style="padding:5px 8px;font-size:13px;text-align:center;font-weight:${ss.wid===1?600:400};">${ss.teams[1].sc}</td>
       <td style="padding:5px 8px;font-size:13px;text-align:center;">${wn}</td>
     </tr>`;
   }).join('');
   if(!rows)return'';
   return`<div class="card" style="margin-bottom:12px;">
-    <div style="padding:8px 12px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:13px;color:var(--color-text-secondary);">これまでのセット結果</div>
-    <table style="width:100%;border-collapse:collapse;">
-      <thead><tr>
-        <th style="padding:5px 8px;font-size:12px;font-weight:400;color:var(--color-text-secondary);text-align:left;">セット</th>
-        <th style="padding:5px 8px;font-size:12px;font-weight:400;color:var(--color-text-secondary);text-align:center;">${S.teams[0].name}</th>
-        <th style="padding:5px 8px;font-size:12px;font-weight:400;color:var(--color-text-secondary);text-align:center;">${S.teams[1].name}</th>
-        <th style="padding:5px 8px;font-size:12px;font-weight:400;color:var(--color-text-secondary);text-align:center;">勝者</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#6b7280;">これまでのセット結果</div>
+    <table style="width:100%;border-collapse:collapse;"><thead><tr>
+      <th style="padding:5px 8px;font-size:12px;font-weight:400;color:#9ca3af;text-align:left;">セット</th>
+      <th style="padding:5px 8px;font-size:12px;font-weight:400;color:#9ca3af;text-align:center;">${S.teams[0].name}</th>
+      <th style="padding:5px 8px;font-size:12px;font-weight:400;color:#9ca3af;text-align:center;">${S.teams[1].name}</th>
+      <th style="padding:5px 8px;font-size:12px;font-weight:400;color:#9ca3af;text-align:center;">結果</th>
+    </tr></thead><tbody>${rows}</tbody></table>
   </div>`;
 }
 function doReset(){
-  if(!window.confirm('これまでの結果をすべて破棄して試合を終了しますか？'))return;
-  S={phase:'setup',format:S.format,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,firstId:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],inputPts:'',inputMulti:'single',inputAimed:'cross',prevPhase:null};render();
+  S={phase:'setup',fmt:S.fmt,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],iP:'',iM:'single',iA:'cross',prev:null,ssIdx:0,endPending:false,tieExtend:false,molkoutWinner:null};render();
 }
-function goNextSet(ni){
-  S.pIdx=ni;const fid=needsFirstChoice(ni)?S.firstId:autoFirst(ni);
-  S.pFirst=fid;S.pOrders=getInitialOrders(ni,fid);
-  S.phase=needsFirstChoice(ni)?'firstChoice':'orderSetup';render();
+function goNext(ni){
+  S.pIdx=ni;const fid=nfc(ni)?S.fid:aF(ni);
+  S.pFirst=fid;S.pOrders=gIO(ni,fid);
+  S.phase=nfc(ni)?'firstChoice':'orderSetup';render();
 }
 
 function render(){
   const app=document.getElementById('app');
-  if(S.phase==='setup')app.innerHTML=rSetup();
-  else if(S.phase==='firstChoice')app.innerHTML=rFirst();
-  else if(S.phase==='orderSetup')app.innerHTML=rOrder();
-  else if(S.phase==='game')app.innerHTML=rGame();
-  else if(S.phase==='scoresheet')app.innerHTML=rScoreSheet();
-  else if(S.phase==='setOver')app.innerHTML=rSetOver();
-  else if(S.phase==='matchOver')app.innerHTML=rMatchOver();
+  const p=S.phase;
+  if(p==='setup')app.innerHTML=rSetup();
+  else if(p==='firstChoice')app.innerHTML=rFirst();
+  else if(p==='orderSetup')app.innerHTML=rOrder();
+  else if(p==='game')app.innerHTML=rGame();
+  else if(p==='scoresheet')app.innerHTML=rSS();
+  else if(p==='setOver')app.innerHTML=rSetOver();
+  else if(p==='matchOver')app.innerHTML=rMatchOver();
+  else if(p==='earlyMatchOver')app.innerHTML=rEarlyMatchOver();
+  else if(p==='molkout')app.innerHTML=rMolkout();
   bind();
-  if(S.phase==='orderSetup')setTimeout(()=>bindDrag(),0);
+  if(p==='orderSetup')setTimeout(bindDrag,0);
 }
 
 function rSetup(){
   return`<div style="padding:8px 0 4px;">
-    <div style="font-size:20px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px;">Mölkky スコアシート</div>
-    <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;">日本モルック協会公式ルール準拠</div>
+    <div style="font-size:22px;font-weight:700;color:#111;margin-bottom:2px;">Mölkky スコアシート</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">日本モルック協会公式ルール準拠</div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="font-size:15px;font-weight:500;color:var(--color-text-primary);margin-bottom:10px;">試合形式</div>
+      <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:10px;">試合形式</div>
       <div style="display:grid;gap:8px;">
         ${[['best2','2セット先取'],['best3','3セット先取'],['round2','2セット勝負（表裏）']].map(([v,l])=>`
-        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid ${S.format===v?'#1D9E75':'var(--color-border-tertiary)'};border-radius:var(--border-radius-md);cursor:pointer;background:${S.format===v?'#E1F5EE':'var(--color-background-primary)'};">
-          <input type="radio" name="fmt" value="${v}" ${S.format===v?'checked':''} style="width:auto;accent-color:#1D9E75;"/>
-          <span style="font-size:15px;color:${S.format===v?'#085041':'var(--color-text-primary)'};">${l}</span>
+        <label class="radio-card ${S.fmt===v?'selected':''}">
+          <input type="radio" name="fmt" value="${v}" ${S.fmt===v?'checked':''} style="width:auto;accent-color:#1D9E75;"/>
+          <span style="font-size:15px;color:${S.fmt===v?'#085041':'#111'};">${l}</span>
         </label>`).join('')}
       </div>
     </div>
     ${[0,1].map(i=>`<div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <div style="width:12px;height:12px;border-radius:50%;background:${COLORS[i]};flex-shrink:0;"></div>
-        <span style="font-size:15px;font-weight:500;color:var(--color-text-primary);">チーム ${i+1}</span>
+        <div style="width:12px;height:12px;border-radius:50%;background:${C[i]};flex-shrink:0;"></div>
+        <span style="font-size:15px;font-weight:600;color:#111;">チーム ${i+1}</span>
       </div>
-      <div style="margin-bottom:10px;"><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:4px;">チーム名</div><input type="text" id="tn${i}" value="${S.teams[i].name}"/></div>
-      <div><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:4px;">メンバー（カンマ区切り、省略可）</div><input type="text" id="tm${i}" value="${S.teams[i].members.join(', ')}" placeholder="例: 田中, 鈴木"/></div>
+      <div style="margin-bottom:10px;"><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チーム名</div><input type="text" id="tn${i}" value="${S.teams[i].name}"/></div>
+      <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">メンバー（カンマ区切り、省略可）</div><input type="text" id="tm${i}" value="${S.teams[i].members.join(', ')}" placeholder="例: 田中, 鈴木"/></div>
     </div>`).join('')}
-    <button class="btn btn-primary" id="btn-next" style="width:100%;padding:14px;font-size:16px;background:#1D9E75;">次へ →</button>
+    <button class="btn btn-green" id="btn-next" style="width:100%;padding:14px;font-size:16px;">次へ →</button>
   </div>`;
 }
 
 function rFirst(){
   const si=S.pIdx!=null?S.pIdx:S.sets.length,sn=si+1;
-  const sl=S.format==='round2'?`${sn}セット目`:`第${sn}セット`;
-  const pf=S.pFirst!=null?S.pFirst:S.firstId;
-  const fin=isFinal(si),tots=getTotals(),isDraw=fin&&tots[0]===tots[1];
+  const sl=S.fmt==='round2'?`${sn}セット目`:`第${sn}セット`;
+  const pf=S.pFirst!=null?S.pFirst:S.fid;
+  const fin=isFin(si),tots=gT(),isDraw=fin&&tots[0]===tots[1];
   const chooser=fin&&!isDraw?(tots[0]>tots[1]?0:1):null;
   let top='';
   if(fin){top=isDraw
-    ?`<div style="background:var(--color-background-warning);border:0.5px solid var(--color-border-warning);border-radius:var(--border-radius-md);padding:12px;margin-bottom:14px;font-size:14px;color:var(--color-text-warning);">それまでのセットの合計点が同点のため、ドローショットをして先攻後攻を決めてください。</div>`
-    :`<div style="background:#E1F5EE;border:0.5px solid #9FE1CB;border-radius:var(--border-radius-md);padding:12px;margin-bottom:14px;font-size:14px;color:#085041;">合計点が高い <strong>${S.teams[chooser].name}（${tots[chooser]}点）</strong> が先攻後攻を選択できます。</div>`;}
+    ?`<div style="background:#FFF7ED;border:1.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:14px;font-size:14px;color:#92400e;">合計点が同点のため、ドローショットをして先攻後攻を決めてください。</div>`
+    :`<div style="background:#E1F5EE;border:1.5px solid #9FE1CB;border-radius:10px;padding:12px;margin-bottom:14px;font-size:14px;color:#085041;">合計点が高い <strong>${S.teams[chooser].name}（${tots[chooser]}点）</strong> が先攻後攻を選択できます。</div>`;}
   return`<div style="padding:8px 0 4px;">
     ${si>0?histTbl(si):''}
-    <div style="font-size:16px;font-weight:500;color:var(--color-text-primary);margin-bottom:8px;">${sl} 先攻チームを選択</div>${top}
+    <div style="font-size:17px;font-weight:600;color:#111;margin-bottom:8px;">${sl} 先攻チームを選択</div>${top}
     ${[0,1].map(i=>`<div style="margin-bottom:10px;">
-      <button class="btn fc-btn" data-id="${i}" style="width:100%;padding:16px;border:2px solid ${pf===i?COLORS[i]:'var(--color-border-tertiary)'};background:${pf===i?LIGHT_BG[i]:'var(--color-background-primary)'};">
+      <button class="btn fc-btn" data-id="${i}" style="width:100%;padding:16px;border:2.5px solid ${pf===i?C[i]:'#d1d5db'};background:${pf===i?LB[i]:'#fff'};border-radius:10px;">
         <div style="display:flex;align-items:center;gap:12px;justify-content:center;">
-          <div style="width:14px;height:14px;border-radius:50%;background:${COLORS[i]};"></div>
-          <span style="font-size:17px;font-weight:500;color:var(--color-text-primary);">${S.teams[i].name}</span>
-          ${fin&&chooser!=null&&i===chooser?`<span style="font-size:12px;background:${LIGHT_BG[i]};color:${LIGHT_TEXT[i]};padding:3px 8px;border-radius:99px;">選択権あり</span>`:''}
-          ${pf===i?`<span style="font-size:12px;background:${LIGHT_BG[i]};color:${LIGHT_TEXT[i]};padding:3px 9px;border-radius:99px;">先攻</span>`:''}
+          <div style="width:14px;height:14px;border-radius:50%;background:${C[i]};"></div>
+          <span style="font-size:17px;font-weight:600;color:#111;">${S.teams[i].name}</span>
+          ${fin&&chooser!=null&&i===chooser?`<span style="font-size:12px;background:${LB[i]};color:${LT[i]};padding:3px 8px;border-radius:99px;border:1px solid ${LBR[i]};">選択権あり</span>`:''}
+          ${pf===i?`<span style="font-size:12px;background:${C[i]};color:#fff;padding:3px 9px;border-radius:99px;">先攻 ✓</span>`:''}
         </div>
       </button>
     </div>`).join('')}
     <div style="display:flex;gap:8px;margin-top:12px;">
-      ${si===0?`<button class="btn" id="btn-bk-setup" style="flex:1;">戻る</button>`:''}
-      <button class="btn btn-primary" id="btn-go-order" style="${si===0?'flex:2;':'width:100%;'}padding:14px;font-size:16px;background:#1D9E75;">投げ順を設定 →</button>
+      ${si===0?`<button class="btn btn-gray" id="btn-bk-setup" style="flex:1;">戻る</button>`:''}
+      <button class="btn btn-green" id="btn-go-order" style="${si===0?'flex:2;':'width:100%;'}padding:14px;font-size:16px;">投げ順を設定 →</button>
     </div>
   </div>`;
 }
 
 function rOrder(){
   const si=S.pIdx!=null?S.pIdx:S.sets.length,sn=si+1;
-  const sl=S.format==='round2'?`${sn}セット目`:`第${sn}セット`;
+  const sl=S.fmt==='round2'?`${sn}セット目`:`第${sn}セット`;
   const pf=S.pFirst!=null?S.pFirst:0;
-  const autoSwap=!needsFirstChoice(si);
+  const autoSwap=!nfc(si),isSecondPlus=si>0;
   return`<div style="padding:8px 0 4px;">
     ${si>0?histTbl(si):''}
-    <div style="font-size:16px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px;">${sl} 投げ順の設定</div>
-    ${autoSwap?`<div style="background:${LIGHT_BG[pf]};border:0.5px solid ${LIGHT_BORDER[pf]};border-radius:var(--border-radius-md);padding:10px 12px;margin-bottom:12px;font-size:13px;color:${LIGHT_TEXT[pf]};">先攻後攻は自動入れ替え：先攻 <strong>${S.teams[pf].name}</strong></div>`:''}
-    <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">ドラッグで並び替えができます</div>
+    <div style="font-size:17px;font-weight:600;color:#111;margin-bottom:6px;">${sl} 投げ順の設定</div>
+    ${autoSwap?`<div style="background:${LB[pf]};border:1.5px solid ${LBR[pf]};border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:${LT[pf]};">先攻後攻は自動入れ替え：先攻 <strong>${S.teams[pf].name}</strong></div>`:''}
+    <div style="font-size:13px;color:#6b7280;margin-bottom:12px;">↑↓ボタンまたはドラッグで並び替え</div>
     ${[0,1].map(ti=>{
       const team=S.teams[ti],ord=S.pOrders[ti].length>0?S.pOrders[ti]:team.members;
-      if(!team.members.length)return`<div class="card" style="padding:12px;margin-bottom:12px;opacity:0.5;"><div style="font-size:14px;color:var(--color-text-secondary);">${team.name} — メンバー未登録</div></div>`;
+      if(!team.members.length)return`<div class="card" style="padding:12px;margin-bottom:12px;opacity:0.5;"><div style="font-size:14px;color:#9ca3af;">${team.name} — メンバー未登録</div></div>`;
       return`<div class="card" style="padding:12px;margin-bottom:12px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-          <div style="width:10px;height:10px;border-radius:50%;background:${COLORS[ti]};flex-shrink:0;"></div>
-          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary);">${team.name}</span>
-          <span style="font-size:13px;color:var(--color-text-secondary);margin-left:auto;">${pf===ti?'先攻':'後攻'}</span>
+          <div style="width:10px;height:10px;border-radius:50%;background:${C[ti]};flex-shrink:0;"></div>
+          <span style="font-size:14px;font-weight:600;color:#111;">${team.name}</span>
+          <span style="font-size:13px;margin-left:auto;background:${pf===ti?LB[ti]:'#f3f4f6'};color:${pf===ti?LT[ti]:'#374151'};padding:2px 8px;border-radius:99px;">${pf===ti?'先攻':'後攻'}</span>
         </div>
         <div id="order-list-${ti}" data-team="${ti}" style="display:grid;gap:6px;">
-          ${ord.map((m,i)=>`<div class="drag-item" data-team="${ti}" data-idx="${i}">
-            <span style="font-size:13px;color:var(--color-text-secondary);min-width:22px;">${i+1}.</span>
-            <span style="font-size:15px;">${m}</span>
-            <span style="margin-left:auto;font-size:20px;color:var(--color-text-secondary);cursor:grab;">≡</span>
+          ${ord.map((m,i)=>`<div class="order-item" draggable="true" data-team="${ti}" data-idx="${i}">
+            <span style="font-size:13px;color:#9ca3af;min-width:22px;">${i+1}.</span>
+            <span style="font-size:15px;flex:1;">${m}</span>
+            <button class="btn btn-gray btn-xs move-up" data-team="${ti}" data-idx="${i}" ${i===0?'disabled':''} style="padding:4px 8px;">↑</button>
+            <button class="btn btn-gray btn-xs move-dn" data-team="${ti}" data-idx="${i}" ${i===ord.length-1?'disabled':''} style="padding:4px 8px;">↓</button>
+            <span style="font-size:18px;color:#9ca3af;cursor:grab;padding:0 2px;">≡</span>
           </div>`).join('')}
         </div>
       </div>`;
     }).join('')}
     <div style="display:flex;gap:8px;margin-top:4px;">
-      <button class="btn" id="btn-bk-first" style="flex:1;">← 戻る</button>
-      <button class="btn btn-primary" id="btn-start" style="flex:2;padding:14px;font-size:16px;background:#1D9E75;">ゲーム開始</button>
+      ${isSecondPlus?`<button class="btn btn-gray" id="btn-bk-order-to-setover" style="flex:1;">← 戻る</button>`:`<button class="btn btn-gray" id="btn-bk-first" style="flex:1;">← 戻る</button>`}
+      <button class="btn btn-green" id="btn-start" style="flex:2;padding:14px;font-size:16px;">ゲーム開始 ▶</button>
     </div>
   </div>`;
 }
 
 function rGame(){
-  const cset=cs(),ct=cset.currentTeamId;
-  const wins=[0,0];S.sets.forEach((s,si)=>{if(si<S.cur&&s.winnerId!=null)wins[s.winnerId]++;});
-  const sn=S.cur+1,sl=S.format==='round2'?`${sn}セット目`:`第${sn}セット`;
-  const ctd=cset.teams[ct],cm=getMbr(ctd,ct);
-  const hasPrev=S.cur>0;
-  const isFirst=cset.teams[0].throws.length===0&&cset.teams[1].throws.length===0;
-  const panelBg=LIGHT_BG[ct],panelBorder=LIGHT_BORDER[ct],panelText=LIGHT_TEXT[ct],panelColor=COLORS[ct];
+  const cset=cs(),ct=cset.ctid;
+  const wins=[0,0];S.sets.forEach((s,si)=>{if(si<S.cur&&s.wid!=null)wins[s.wid]++;});
+  const sn=S.cur+1,sl=S.fmt==='round2'?`${sn}セット目`:`第${sn}セット`;
+  const ctd=cset.teams[ct],cm=gmb(ctd,ct);
+  const hasPrev=S.cur>0,isFirst=cset.teams[0].throws.length===0&&cset.teams[1].throws.length===0;
+  const pBg=LB[ct],pBr=LBR[ct],pTx=LT[ct],pCl=C[ct];
+  const hasThrows=cset.teams[0].throws.length>0||cset.teams[1].throws.length>0;
   return`<div style="padding:6px 0 4px;">
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
-      <div style="font-size:12px;padding:3px 8px;border-radius:99px;background:var(--color-background-secondary);color:var(--color-text-secondary);">${fmtLabel()}</div>
-      <div style="font-size:15px;font-weight:500;color:var(--color-text-primary);">${sl}</div>
-      ${S.format!=='round2'?`<div style="display:flex;gap:4px;">${[0,1].map(i=>`<div style="font-size:12px;padding:3px 8px;border-radius:99px;background:${wins[i]>0?LIGHT_BG[i]:'var(--color-background-secondary)'};color:${wins[i]>0?LIGHT_TEXT[i]:'var(--color-text-secondary)'};">${S.teams[i].name} ${wins[i]}勝</div>`).join('')}</div>`:''}
+      <span style="font-size:12px;padding:3px 8px;border-radius:99px;background:#f3f4f6;color:#6b7280;font-weight:600;">${fl()}</span>
+      <span style="font-size:15px;font-weight:700;color:#111;">${sl}</span>
+      ${S.fmt!=='round2'?`<div style="display:flex;gap:4px;">${[0,1].map(i=>`<span style="font-size:12px;padding:3px 8px;border-radius:99px;background:${wins[i]>0?LB[i]:'#f3f4f6'};color:${wins[i]>0?LT[i]:'#6b7280'};">${S.teams[i].name} ${wins[i]}勝</span>`).join('')}</div>`:''}
       <div style="display:flex;gap:4px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end;">
-        ${hasPrev?`<button class="btn btn-xs" id="btn-hist">${S.showHist?'▲':'▼ 前セット結果'}</button>`:''}
-        <button class="btn btn-xs" id="btn-scoresheet">スコアシート</button>
-        ${isFirst?`<button class="btn btn-xs" id="btn-bk-order">← 戻る</button>`:`<button class="btn btn-xs" id="btn-undo" ${cset.hist.length===0?'disabled':''}>↩ 戻す</button>`}
-        <button class="btn btn-xs" id="btn-reset">最初から</button>
+        ${hasPrev?`<button class="btn btn-gray btn-xs" id="btn-hist">${S.showHist?'▲':'▼ 前セット'}</button>`:''}
+        <button class="btn btn-blue btn-xs" id="btn-scoresheet">スコアシート</button>
+        ${isFirst?`<button class="btn btn-gray btn-xs" id="btn-bk-order">← 戻る</button>`:`<button class="btn btn-gray btn-xs" id="btn-undo" ${cset.hist.length===0?'disabled':''}>↩ 戻す</button>`}
+        ${hasThrows?`<button class="btn btn-orange btn-xs" id="btn-early-end">試合終了</button>`:''}
       </div>
     </div>
+    ${S.endPending?`<div style="background:#FFF7ED;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#92400e;">⏳ <strong>後攻の投擲が終わり次第、試合を終了します</strong></div>`:''}
+    ${S.tieExtend?`<div style="background:#EEF2FF;border:1.5px solid #a5b4fc;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#3730a3;">🔁 <strong>このターンまでの合計点が同点のため、もう1ターン延長します。</strong>得点差がついた時点で試合終了となります。</div>`:''}
     ${S.showHist&&hasPrev?histTbl(S.cur):''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
       ${[0,1].map(i=>{
         const td=cset.teams[i],ic=i===ct;
-        return`<div class="card" style="border-color:${ic?COLORS[i]:'var(--color-border-tertiary)'};border-width:${ic?'2.5px':'0.5px'};">
-          <div style="padding:8px 12px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;gap:6px;">
-            <div style="width:10px;height:10px;border-radius:50%;background:${COLORS[i]};flex-shrink:0;"></div>
-            <span style="font-size:13px;font-weight:500;color:var(--color-text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${S.teams[i].name}</span>
-            ${td.eliminated?'<span style="font-size:11px;color:var(--color-text-danger);background:var(--color-background-danger);padding:1px 6px;border-radius:99px;">失格</span>':ic?`<span style="font-size:11px;color:${LIGHT_TEXT[i]};background:${LIGHT_BG[i]};padding:1px 6px;border-radius:99px;">投てき中</span>`:''}
+        return`<div class="card" style="border:${ic?`2.5px solid ${C[i]}`:'1px solid #e5e7eb'};">
+          <div style="padding:8px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:6px;background:${ic?LB[i]:'#fff'};">
+            <div style="width:10px;height:10px;border-radius:50%;background:${C[i]};flex-shrink:0;"></div>
+            <span style="font-size:13px;font-weight:600;color:${ic?LT[i]:'#111'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${S.teams[i].name}</span>
+            ${td.el?'<span style="font-size:11px;color:#b91c1c;background:#FEE2E2;padding:1px 6px;border-radius:99px;">失格</span>':ic?`<span style="font-size:11px;color:${LT[i]};background:${LB[i]};padding:1px 6px;border-radius:99px;border:1px solid ${LBR[i]};">投てき中</span>`:''}
           </div>
-          <div style="padding:12px 14px;text-align:center;border-bottom:0.5px solid var(--color-border-tertiary);">
-            <span style="font-size:56px;font-weight:500;line-height:1;color:var(--color-text-primary);">${td.score}</span>
-            <div style="font-size:13px;color:var(--color-text-secondary);margin-top:2px;">/ 50点</div>
+          <div style="padding:14px;text-align:center;border-bottom:1px solid #e5e7eb;">
+            <span style="font-size:64px;font-weight:700;line-height:1;color:#111;">${td.sc}</span>
+            <div style="font-size:13px;color:#9ca3af;margin-top:3px;">/ 50点</div>
           </div>
-          <div style="padding:6px 12px;display:flex;align-items:center;gap:6px;">
-            <span style="font-size:12px;color:var(--color-text-secondary);">連続ミス</span>
-            <div style="display:flex;gap:4px;">${dots(td.misses)}</div>
+          <div style="padding:8px 12px;display:flex;align-items:center;gap:6px;">
+            <span style="font-size:12px;color:#6b7280;">連続ミス</span>
+            <div style="display:flex;gap:4px;">${dots(td.ms)}</div>
           </div>
         </div>`;
       }).join('')}
     </div>
-    ${!cset.winnerId?`
-    <div class="card" style="border-color:${panelColor};border-width:1.5px;">
-      <div style="padding:12px 14px;background:${panelBg};border-bottom:0.5px solid ${panelBorder};">
-        <div style="font-size:12px;color:${panelText};margin-bottom:4px;">${cset.firstTeamId===ct?'先攻':'後攻'}</div>
+    ${!cset.wid?`
+    <div class="card" style="border:2px solid ${pCl};">
+      <div style="padding:12px 14px;background:${pBg};border-bottom:1.5px solid ${pBr};">
+        <div style="font-size:12px;color:${pTx};margin-bottom:4px;font-weight:600;">${cset.ftid===ct?'▶ 先攻':'後攻'}</div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <div style="width:12px;height:12px;border-radius:50%;background:${panelColor};flex-shrink:0;"></div>
-          <span style="font-size:20px;font-weight:500;color:${panelText};">${S.teams[ct].name}</span>
-          ${cm?`<span style="font-size:18px;color:${panelText};font-weight:500;">/ ${cm}</span>`:''}
-          <span style="font-size:16px;color:${panelText};margin-left:auto;font-weight:500;">${ctd.score} 点</span>
+          <div style="width:12px;height:12px;border-radius:50%;background:${pCl};flex-shrink:0;"></div>
+          <span style="font-size:18px;font-weight:600;color:${pTx};">${S.teams[ct].name}</span>
+          ${cm?`<span style="font-size:12px;color:${pTx};opacity:0.7;margin:0 2px;">/</span><span style="font-size:22px;font-weight:700;color:${pTx};">${cm}</span>`:''}
+          <span style="font-size:16px;color:${pTx};margin-left:auto;font-weight:700;">${ctd.sc}点</span>
         </div>
       </div>
-      <div style="padding:12px 14px;">
+      <div style="padding:12px 14px;background:#fff;">
         <div style="display:grid;gap:10px;margin-bottom:10px;">
-          <div>
-            <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:5px;">① 得点</div>
+          <div><div style="font-size:13px;color:#6b7280;margin-bottom:5px;font-weight:600;">① 得点</div>
             <select id="sel-pts">
-              <option value="" ${S.inputPts===''?'selected':''} disabled>— 得点を選択してください —</option>
-              <option value="miss" ${S.inputPts==='miss'?'selected':''}>ミス（0点）</option>
-              ${Array.from({length:12},(_,i)=>`<option value="${12-i}" ${S.inputPts===String(12-i)?'selected':''}>${12-i}点</option>`).join('')}
+              <option value="" ${S.iP===''?'selected':''} disabled>— 得点を選択してください —</option>
+              <option value="miss" ${S.iP==='miss'?'selected':''}>ミス（0点）</option>
+              ${Array.from({length:12},(_,i)=>`<option value="${12-i}" ${S.iP===String(12-i)?'selected':''}>${12-i}点</option>`).join('')}
             </select>
           </div>
-          <div>
-            <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:5px;">② 単品狙い or 複数本狙い</div>
-            <select id="sel-multi">
-              <option value="single" ${S.inputMulti==='single'?'selected':''}>単品</option>
-              <option value="multi" ${S.inputMulti==='multi'?'selected':''}>複数本</option>
-            </select>
+          <div><div style="font-size:13px;color:#6b7280;margin-bottom:5px;font-weight:600;">② 単品狙い or 複数本狙い</div>
+            <select id="sel-multi"><option value="single" ${S.iM==='single'?'selected':''}>単品</option><option value="multi" ${S.iM==='multi'?'selected':''}>複数本</option></select>
           </div>
-          <div>
-            <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:5px;">③ 結果</div>
-            <select id="sel-aimed">
-              <option value="circle" ${S.inputAimed==='circle'?'selected':''}>○ 狙い通り</option>
-              <option value="cross" ${S.inputAimed==='cross'?'selected':''}>× 狙い通りでない</option>
-            </select>
+          <div><div style="font-size:13px;color:#6b7280;margin-bottom:5px;font-weight:600;">③ 結果</div>
+            <select id="sel-aimed"><option value="circle" ${S.iA==='circle'?'selected':''}>○ 狙い通り</option><option value="cross" ${S.iA==='cross'?'selected':''}>× 狙い通りでない</option></select>
           </div>
         </div>
-        <div id="preview" style="font-size:14px;color:var(--color-text-secondary);margin-bottom:10px;min-height:20px;padding:4px 0;"></div>
-        <button class="btn btn-primary" id="btn-confirm" style="width:100%;padding:14px;font-size:17px;background:${panelColor};">確定</button>
+        <div id="preview" style="font-size:14px;color:#6b7280;margin-bottom:10px;min-height:20px;padding:4px 6px;background:#f9fafb;border-radius:6px;"></div>
+        <button class="btn btn-green" id="btn-confirm" style="width:100%;padding:14px;font-size:17px;background:${pCl};border-color:${pCl};">確定 ✓</button>
       </div>
     </div>`:''}
   </div>`;
 }
 
-// ★ スコアシート（投擲点数 + 計列に累計、ミス=横棒、3ミス失格行追加）
-function buildScoreSheet(cset){
-  const firstTi=cset.firstTeamId;
-  const secondTi=1-firstTi;
-  const members=[
-    cset.teams[0].order.length>0?cset.teams[0].order:S.teams[0].members.length>0?S.teams[0].members:['投てき者'],
-    cset.teams[1].order.length>0?cset.teams[1].order:S.teams[1].members.length>0?S.teams[1].members:['投てき者']
+function buildSS(cset){
+  const fti=cset.ftid,sti=1-fti;
+  const mbrs=[
+    cset.teams[0].order.length>0?cset.teams[0].order:S.teams[0].members.length?S.teams[0].members:['投てき者'],
+    cset.teams[1].order.length>0?cset.teams[1].order:S.teams[1].members.length?S.teams[1].members:['投てき者']
   ];
-  const nM=[members[0].length,members[1].length];
+  const nM=[mbrs[0].length,mbrs[1].length];
   const maxT=Math.max(cset.teams[0].throws.length,cset.teams[1].throws.length);
-  const colspanFirst=nM[firstTi]+1;
-  const colspanSecond=nM[secondTi]+1;
-
-  function memberHeaders(ti){
-    return members[ti].map(m=>`<th class="ss-member-th" style="border:1px solid #ccc;">${m}</th>`).join('');
+  const cF=nM[fti]+1,cS=nM[sti]+1;
+  const mhdr=(ti)=>mbrs[ti].map(m=>`<th class="mbr-th" style="border:1px solid #bbb;">${m}</th>`).join('');
+  function tDisp(th){
+    if(!th)return'';
+    if(th.miss)return`<span style="color:#9ca3af;font-size:15px;">—</span>`;
+    const sc=th.raw!==undefined?th.raw:th.pts;
+    if(th.result==='circle'&&th.multi)return svgS(sc,22);
+    if(th.result==='circle')return svgC(sc,22);
+    return`<span style="font-weight:600;font-size:14px;">${sc}</span>`;
   }
-
-  // スコアセルの表示：投擲で取った点数（1〜12）または横棒
-  function throwScoreDisplay(th,r,multi){
-    if(!th) return'';
-    if(th.miss) return`<span style="color:#888;">—</span>`;
-    // 取得点数（rawPtsがあればそれ、なければptsを使う）
-    const scored=th.raw!==undefined?th.raw:th.pts;
-    if(r==='circle'&&multi) return`<span style="display:inline-flex;align-items:center;justify-content:center;border:1.5px solid var(--color-text-primary);border-radius:2px;min-width:20px;height:20px;padding:0 2px;font-size:12px;font-weight:500;">${scored}</span>`;
-    if(r==='circle') return`<span style="display:inline-flex;align-items:center;justify-content:center;border:1.5px solid var(--color-text-primary);border-radius:50%;width:22px;height:22px;font-size:12px;font-weight:500;">${scored}</span>`;
-    return`<span style="font-weight:500;">${scored}</span>`;
+  const prevC=[0,0];
+  function totDisp(th,ti){
+    if(!th)return'';
+    if(th.miss)return`<span style="color:#6b7280;">${prevC[ti]}</span>`;
+    if(th.over){prevC[ti]=th.cumul;return`<span style="color:#b45309;font-weight:600;">${th.cumul}</span>`;}
+    prevC[ti]=th.cumul;return`<span style="font-weight:600;">${th.cumul}</span>`;
   }
-
-  // 計列：常に累計点を表示（ミス後も前回と同じ累計を表示）
-  function totalDisplay(th,prevCumul){
-    if(!th) return'';
-    if(th.miss) return`<span style="color:#666;">${prevCumul}</span>`;
-    if(th.over) return`<span style="color:#BA7517;">${th.cumul}</span>`;
-    return`<span style="font-weight:500;">${th.cumul}</span>`;
+  let rows='';
+  for(let t=0;t<maxT;t++){
+    const thF=cset.teams[fti].throws[t],thS=cset.teams[sti].throws[t];
+    const mF=thF?t%nM[fti]:-1,mS=thS?t%nM[sti]:-1;
+    const cF2=mbrs[fti].map((_,mi)=>mi!==mF||!thF?`<td class="sc-cell" style="border:1px solid #bbb;"></td>`:`<td class="sc-cell" style="border:1px solid #bbb;">${tDisp(thF)}</td>`).join('');
+    const cS2=mbrs[sti].map((_,mi)=>mi!==mS||!thS?`<td class="sc-cell" style="border:1px solid #bbb;"></td>`:`<td class="sc-cell" style="border:1px solid #bbb;">${tDisp(thS)}</td>`).join('');
+    rows+=`<tr><td class="turn-col" style="border:1px solid #bbb;">${t+1}</td>${cF2}<td class="tot-cell" style="border:1px solid #bbb;border-right:2.5px solid #aaa;">${totDisp(thF,fti)}</td>${cS2}<td class="tot-cell" style="border:1px solid #bbb;">${totDisp(thS,sti)}</td></tr>`;
   }
-
-  function buildRows(){
-    const rows=[];
-    // 各チームの直前累計（ミス時に前の値を参照するため）
-    const prevCumul=[0,0];
-
-    for(let t=0;t<maxT;t++){
-      const thF=cset.teams[firstTi].throws[t];
-      const thS=cset.teams[secondTi].throws[t];
-      const mIdxF=thF?t%nM[firstTi]:-1;
-      const mIdxS=thS?t%nM[secondTi]:-1;
-
-      // 先攻チームのセル
-      const cellsF=members[firstTi].map((_,mi)=>{
-        if(mi!==mIdxF||!thF) return`<td class="ss-cell" style="border:1px solid #ccc;"></td>`;
-        return`<td class="ss-cell" style="border:1px solid #ccc;">${throwScoreDisplay(thF,thF.result,thF.multi)}</td>`;
-      }).join('');
-      const totalFHtml=totalDisplay(thF,prevCumul[firstTi]);
-      if(thF&&!thF.miss) prevCumul[firstTi]=thF.cumul;
-
-      // 後攻チームのセル
-      const cellsS=members[secondTi].map((_,mi)=>{
-        if(mi!==mIdxS||!thS) return`<td class="ss-cell" style="border:1px solid #ccc;"></td>`;
-        return`<td class="ss-cell" style="border:1px solid #ccc;">${throwScoreDisplay(thS,thS.result,thS.multi)}</td>`;
-      }).join('');
-      const totalSHtml=totalDisplay(thS,prevCumul[secondTi]);
-      if(thS&&!thS.miss) prevCumul[secondTi]=thS.cumul;
-
-      rows.push(`<tr>
-        <td class="ss-turn-col" style="border:1px solid #ccc;font-size:12px;color:#888;text-align:center;">${t+1}</td>
-        ${cellsF}
-        <td class="ss-total-cell" style="border:1px solid #ccc;border-right:2px solid #aaa;">${totalFHtml}</td>
-        ${cellsS}
-        <td class="ss-total-cell" style="border:1px solid #ccc;">${totalSHtml}</td>
-      </tr>`);
-    }
-
-    // 3ミス失格行：失格チームがいる場合、最終行に0/50を追記
-    const elimF=cset.teams[firstTi].eliminated;
-    const elimS=cset.teams[secondTi].eliminated;
-    if(elimF||elimS){
-      const tNum=maxT+1;
-      const fFinalTotal=elimF?`<span style="color:#E24B4A;font-weight:500;">0</span>`:`<span style="color:#1D9E75;font-weight:500;">50</span>`;
-      const sFinalTotal=elimS?`<span style="color:#E24B4A;font-weight:500;">0</span>`:`<span style="color:#1D9E75;font-weight:500;">50</span>`;
-      const emptyF=members[firstTi].map(()=>`<td class="ss-cell" style="border:1px solid #ccc;background:#FFF8F8;"></td>`).join('');
-      const emptyS=members[secondTi].map(()=>`<td class="ss-cell" style="border:1px solid #ccc;background:#FFF8F8;"></td>`).join('');
-      rows.push(`<tr style="background:#FFF8F8;">
-        <td class="ss-turn-col" style="border:1px solid #ccc;font-size:11px;color:#E24B4A;text-align:center;">失</td>
-        ${emptyF}
-        <td class="ss-total-cell" style="border:1px solid #ccc;border-right:2px solid #aaa;background:#FFF8F8;">${fFinalTotal}</td>
-        ${emptyS}
-        <td class="ss-total-cell" style="border:1px solid #ccc;background:#FFF8F8;">${sFinalTotal}</td>
-      </tr>`);
-    }
-
-    if(!rows.length){
-      rows.push(`<tr><td colspan="${1+colspanFirst+colspanSecond}" style="border:1px solid #ccc;padding:10px;font-size:12px;color:#aaa;text-align:center;">まだ投てきなし</td></tr>`);
-    }
-    return rows.join('');
+  const eF=cset.teams[fti].el,eS=cset.teams[sti].el;
+  if(eF||eS){
+    const fe=eF?`<span style="color:#E24B4A;font-weight:700;">0</span>`:`<span style="color:#1D9E75;font-weight:700;">50</span>`;
+    const se=eS?`<span style="color:#E24B4A;font-weight:700;">0</span>`:`<span style="color:#1D9E75;font-weight:700;">50</span>`;
+    rows+=`<tr style="background:#fff8f8;"><td class="turn-col" style="border:1px solid #bbb;font-size:11px;color:#E24B4A;font-weight:700;">失</td>${mbrs[fti].map(()=>`<td class="sc-cell" style="border:1px solid #bbb;background:#fff8f8;"></td>`).join('')}<td class="tot-cell" style="border:1px solid #bbb;border-right:2.5px solid #aaa;background:#fff8f8;">${fe}</td>${mbrs[sti].map(()=>`<td class="sc-cell" style="border:1px solid #bbb;background:#fff8f8;"></td>`).join('')}<td class="tot-cell" style="border:1px solid #bbb;background:#fff8f8;">${se}</td></tr>`;
   }
-
-  return`<div class="ss-wrap">
-    <table class="ss-table">
-      <thead>
-        <tr>
-          <th class="ss-turn-col" style="border:1px solid #ccc;"></th>
-          <th colspan="${colspanFirst}" class="ss-team-header" style="border:1px solid #ccc;border-right:2px solid #aaa;background:${LIGHT_BG[firstTi]};color:${LIGHT_TEXT[firstTi]};">
-            ${S.teams[firstTi].name}（先攻）${cset.teams[firstTi].eliminated?' 失格':''}
-          </th>
-          <th colspan="${colspanSecond}" class="ss-team-header" style="border:1px solid #ccc;background:${LIGHT_BG[secondTi]};color:${LIGHT_TEXT[secondTi]};">
-            ${S.teams[secondTi].name}（後攻）${cset.teams[secondTi].eliminated?' 失格':''}
-          </th>
-        </tr>
-        <tr>
-          <th class="ss-turn-col" style="border:1px solid #ccc;"></th>
-          ${memberHeaders(firstTi)}
-          <th class="ss-total-th" style="border:1px solid #ccc;border-right:2px solid #aaa;">計</th>
-          ${memberHeaders(secondTi)}
-          <th class="ss-total-th" style="border:1px solid #ccc;">計</th>
-        </tr>
-      </thead>
-      <tbody>${buildRows()}</tbody>
-    </table>
-  </div>
-  <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;">
-    ${[firstTi,secondTi].map(ti=>`<div style="display:flex;align-items:center;gap:6px;">
-      <div style="width:10px;height:10px;border-radius:50%;background:${COLORS[ti]};"></div>
-      <span style="font-size:13px;color:var(--color-text-primary);">${S.teams[ti].name}</span>
-      <span style="font-size:12px;color:var(--color-text-secondary);">連続ミス</span>
-      <div style="display:flex;gap:3px;">${dots(cset.teams[ti].misses)}</div>
-    </div>`).join('')}
-  </div>`;
+  if(!rows)rows=`<tr><td colspan="${1+cF+cS}" style="border:1px solid #bbb;padding:12px;font-size:13px;color:#9ca3af;text-align:center;">まだ投てきなし</td></tr>`;
+  return`<div class="ss-wrap"><table class="ss-tbl"><thead>
+    <tr><th class="turn-col" style="border:1px solid #bbb;"></th>
+      <th colspan="${cF}" class="team-hdr" style="border:1px solid #bbb;border-right:2.5px solid #aaa;background:${LB[fti]};color:${LT[fti]};">${S.teams[fti].name}（先攻）</th>
+      <th colspan="${cS}" class="team-hdr" style="border:1px solid #bbb;background:${LB[sti]};color:${LT[sti]};">${S.teams[sti].name}（後攻）</th>
+    </tr>
+    <tr><th class="turn-col" style="border:1px solid #bbb;"></th>
+      ${mhdr(fti)}<th class="tot-th" style="border:1px solid #bbb;border-right:2.5px solid #aaa;">計</th>
+      ${mhdr(sti)}<th class="tot-th" style="border:1px solid #bbb;">計</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-function rScoreSheet(){
-  const sn=S.cur+1;
-  const sl=S.format==='round2'?`${sn}セット目`:`第${sn}セット`;
-  const cset=cs();
+function rSS(){
+  const total=S.sets.length,idx=S.ssIdx,cset=S.sets[idx];
+  const sn=idx+1,sl=S.fmt==='round2'?`${sn}セット目`:`第${sn}セット`;
+  const canP=idx>0,canN=idx<total-1;
   return`<div style="padding:6px 0 4px;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-      <button class="btn" id="btn-back-game" style="font-size:14px;padding:8px 14px;">← 戻る</button>
-      <div>
-        <div style="font-size:12px;color:var(--color-text-secondary);">${fmtLabel()}</div>
-        <div style="font-size:16px;font-weight:500;color:var(--color-text-primary);">${sl} スコアシート</div>
-      </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <button class="btn btn-gray btn-sm" id="btn-back-ss">← 戻る</button>
+      <div style="flex:1;"><div style="font-size:12px;color:#6b7280;">${fl()}</div><div style="font-size:16px;font-weight:700;color:#111;">スコアシート</div></div>
     </div>
-    ${buildScoreSheet(cset)}
-    ${S.cur>0?histTbl(sn):''}
+    ${total>1?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;justify-content:center;">
+      <button class="btn btn-gray btn-sm" id="btn-ss-prev" ${canP?'':'disabled'} style="min-width:48px;font-size:16px;">◀</button>
+      <span style="font-size:15px;font-weight:700;color:#111;min-width:80px;text-align:center;">${sl}</span>
+      <button class="btn btn-gray btn-sm" id="btn-ss-next" ${canN?'':'disabled'} style="min-width:48px;font-size:16px;">▶</button>
+    </div>`:`<div style="font-size:15px;font-weight:700;color:#111;margin-bottom:10px;">${sl}</div>`}
+    ${buildSS(cset)}
   </div>`;
 }
 
 function rSetOver(){
-  const cset=cs(),wt=cset.winnerId!=null?S.teams[cset.winnerId]:null;
-  const sn=S.cur+1,sl=S.format==='round2'?`${sn}セット目`:`第${sn}セット`;
-  const wins=[0,0];S.sets.forEach(s=>{if(s.winnerId!=null)wins[s.winnerId]++;});
-  const mw=matchWinner(),isLast=S.cur>=maxSets()-1||mw!=null,ni=S.cur+1,cu=cset.hist.length>0;
+  const cset=cs(),wt=cset.wid!=null?S.teams[cset.wid]:null;
+  const sn=S.cur+1,sl=S.fmt==='round2'?`${sn}セット目`:`第${sn}セット`;
+  const wins=[0,0];S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});
+  const mw=mW(),isLast=S.cur>=mxS()-1||mw!=null,ni=S.cur+1,cu=cset.hist.length>0;
   return`<div style="padding:12px 0;">
-    <div style="text-align:center;padding:16px 0 14px;">
-      <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:6px;">${fmtLabel()} | ${sl} 終了</div>
-      ${wt?`<div style="font-size:22px;font-weight:500;color:var(--color-text-primary);">${wt.name} セット勝利</div>`:`<div style="font-size:20px;font-weight:500;color:var(--color-text-primary);">このセットは無効</div>`}
+    <div style="text-align:center;padding:14px 0 12px;">
+      <div style="font-size:14px;color:#6b7280;margin-bottom:6px;">${fl()} | ${sl} 終了</div>
+      ${wt?`<div style="font-size:24px;font-weight:700;color:#111;">${wt.name} セット勝利 🎉</div>`:`<div style="font-size:20px;font-weight:700;color:#111;">このセットは無効</div>`}
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:10px;">${sl} スコア</div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:10px;">${sl} スコア</div>
       ${[0,1].map(i=>{const td=cset.teams[i];return`
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary);">
-          <div style="width:12px;height:12px;border-radius:50%;background:${COLORS[i]};flex-shrink:0;"></div>
-          <span style="flex:1;font-size:15px;color:var(--color-text-primary);">${S.teams[i].name}</span>
-          <span style="font-size:18px;font-weight:500;color:var(--color-text-primary);">${td.score}点</span>
-          ${cset.winnerId===i?`<span style="font-size:12px;color:${LIGHT_TEXT[i]};background:${LIGHT_BG[i]};padding:3px 10px;border-radius:99px;">勝利</span>`:''}
-          ${td.eliminated?'<span style="font-size:12px;color:var(--color-text-danger);background:var(--color-background-danger);padding:3px 10px;border-radius:99px;">失格</span>':''}
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f3f4f6;">
+          <div style="width:12px;height:12px;border-radius:50%;background:${C[i]};flex-shrink:0;"></div>
+          <span style="flex:1;font-size:15px;color:#111;">${S.teams[i].name}</span>
+          <span style="font-size:20px;font-weight:700;color:#111;">${td.sc}点</span>
+          ${cset.wid===i?`<span style="font-size:12px;color:${LT[i]};background:${LB[i]};padding:3px 10px;border-radius:99px;border:1px solid ${LBR[i]};">勝利</span>`:''}
+          ${td.el?'<span style="font-size:12px;color:#b91c1c;background:#FEE2E2;padding:3px 10px;border-radius:99px;">失格</span>':''}
         </div>`}).join('')}
     </div>
-    <button class="btn btn-xs" id="btn-scoresheet-setover" style="width:100%;margin-bottom:12px;padding:10px;font-size:14px;">スコアシートを確認する</button>
+    <button class="btn btn-blue btn-sm" id="btn-ss-setover" style="width:100%;margin-bottom:12px;padding:10px;font-size:14px;">📋 スコアシートを確認する</button>
     ${S.cur>0?histTbl(sn):''}
-    ${S.format!=='round2'?`<div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:10px;">現在の勝敗</div>
+    ${S.fmt!=='round2'?`<div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#6b7280;margin-bottom:10px;">現在の勝敗</div>
       ${[0,1].map(i=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
-        <div style="width:12px;height:12px;border-radius:50%;background:${COLORS[i]};flex-shrink:0;"></div>
-        <span style="flex:1;font-size:15px;color:var(--color-text-primary);">${S.teams[i].name}</span>
-        <span style="font-size:17px;font-weight:500;color:var(--color-text-primary);">${wins[i]}勝</span>
+        <div style="width:12px;height:12px;border-radius:50%;background:${C[i]};flex-shrink:0;"></div>
+        <span style="flex:1;font-size:15px;color:#111;">${S.teams[i].name}</span>
+        <span style="font-size:17px;font-weight:700;color:#111;">${wins[i]}勝</span>
       </div>`).join('')}
     </div>`:``}
     <button class="btn btn-red-o" id="btn-undo-end" style="width:100%;margin-bottom:10px;padding:12px;font-size:15px;" ${cu?'':'disabled'}>↩ 最後の1投に戻す</button>
-    ${mw!=null?`<div style="text-align:center;padding:8px 0 14px;"><div style="font-size:17px;font-weight:500;color:var(--color-text-primary);">試合終了 — ${S.teams[mw].name} の勝利！</div></div>
-      <button class="btn btn-primary" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;background:#1D9E75;">結果を見る</button>`
-    :isLast?`<button class="btn btn-primary" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;background:#1D9E75;">試合終了 → 結果へ</button>`
-    :`<button class="btn btn-primary" id="btn-next-set" data-next="${ni}" style="width:100%;padding:14px;font-size:16px;background:#1D9E75;">次のセットへ →</button>`}
-    <button class="btn" id="btn-reset" style="width:100%;margin-top:10px;padding:12px;">最初から</button>
+    ${mw!=null?`<div style="text-align:center;padding:10px 0 14px;background:${LB[mw]};border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:${LT[mw]};">🏆 試合終了 — ${S.teams[mw].name} の勝利！</div></div>
+      <button class="btn btn-green" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;">結果を見る</button>`
+    :isLast?`<button class="btn btn-green" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;">試合終了 → 結果へ</button>`
+    :`<button class="btn btn-green" id="btn-next-set" data-next="${ni}" style="width:100%;padding:14px;font-size:16px;">次のセットへ →</button>`}
+    <button class="btn btn-gray" id="btn-reset" style="width:100%;margin-top:10px;padding:12px;">最初から</button>
   </div>`;
 }
 
 function rMatchOver(){
-  const wins=[0,0];S.sets.forEach(s=>{if(s.winnerId!=null)wins[s.winnerId]++;});const mw=matchWinner();
+  const wins=[0,0];S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});const mw=mW();
+  // ★ 表裏の場合は合計点も表示
+  const totals=gT();
+  const drawCount=S.sets.filter(s=>s.draw).length;
   return`<div style="padding:12px 0;text-align:center;">
-    <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:4px;">${fmtLabel()} 試合終了</div>
-    ${mw!=null?`<div style="font-size:24px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px;">${S.teams[mw].name} の勝利</div>
-    <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:18px;">おめでとうございます！</div>`:`<div style="font-size:20px;font-weight:500;color:var(--color-text-primary);margin-bottom:18px;">試合終了</div>`}
-    ${S.format!=='round2'?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-      ${[0,1].map(i=>`<div class="card" style="padding:16px;border-color:${mw===i?COLORS[i]:'var(--color-border-tertiary)'};border-width:${mw===i?'2px':'0.5px'};">
-        <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:4px;">${S.teams[i].name}</div>
-        <div style="font-size:32px;font-weight:500;color:var(--color-text-primary);">${wins[i]}</div>
-        <div style="font-size:12px;color:var(--color-text-secondary);">セット勝利</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">${fl()} 試合終了</div>
+    ${S.fmt==='round2'?`
+    <div style="font-size:20px;font-weight:700;color:#111;margin-bottom:16px;">試合終了</div>
+    <div class="card" style="padding:14px;margin-bottom:16px;text-align:left;">
+      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px;">通算成績</div>
+      ${[0,1].map(i=>{const w=wins[i],d=drawCount,l=S.sets.length-w-d;return`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+          <div style="width:12px;height:12px;border-radius:50%;background:${C[i]};flex-shrink:0;"></div>
+          <div style="flex:1;">
+            <div style="font-size:15px;font-weight:600;color:#111;">${S.teams[i].name}</div>
+            <div style="font-size:13px;color:#6b7280;margin-top:2px;">合計 ${totals[i]}点</div>
+          </div>
+          <span style="font-size:17px;font-weight:700;color:#111;">${w}勝${d}分${l}敗</span>
+        </div>`;}).join('')}
+    </div>`:`
+    ${mw!=null?`<div style="font-size:26px;font-weight:700;color:#111;margin-bottom:6px;">🏆 ${S.teams[mw].name} の勝利</div>
+    <div style="font-size:14px;color:#6b7280;margin-bottom:18px;">おめでとうございます！</div>`:`<div style="font-size:20px;font-weight:700;color:#111;margin-bottom:18px;">試合終了</div>`}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      ${[0,1].map(i=>`<div class="card" style="padding:16px;border:${mw===i?`2.5px solid ${C[i]}`:'1px solid #e5e7eb'};">
+        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">${S.teams[i].name}</div>
+        <div style="font-size:36px;font-weight:700;color:#111;">${wins[i]}</div>
+        <div style="font-size:12px;color:#6b7280;">セット勝利</div>
       </div>`).join('')}
-    </div>`:``}
+    </div>`}
     ${histTbl(S.sets.length)}
-    <button class="btn btn-primary" id="btn-reset" style="width:100%;padding:14px;font-size:16px;margin-top:8px;background:#1D9E75;">最初から</button>
+    <button class="btn btn-red-o" id="btn-undo-match" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">↩ 最後の1投に戻す</button>
+    <button class="btn btn-green" id="btn-reset" style="width:100%;padding:14px;font-size:16px;">最初から</button>
   </div>`;
 }
 
-function updatePreview(){
+function rEarlyMatchOver(){
+  const cset=cs();
+  const sn=S.cur+1,sl=S.fmt==='round2'?`${sn}セット目`:`第${sn}セット`;
+  const wins=[0,0];S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});
+  const drawCount=S.sets.filter(s=>s.draw).length;
+  const totals=S.sets.reduce((a,s)=>{a[0]+=s.teams[0].sc;a[1]+=s.teams[1].sc;return a;},[0,0]);
+  let matchWin=null,needMolkout=false;
+  if(S.fmt!=='round2'){
+    if(wins[0]>wins[1])matchWin=0;
+    else if(wins[1]>wins[0])matchWin=1;
+    else if(totals[0]>totals[1])matchWin=0;
+    else if(totals[1]>totals[0])matchWin=1;
+    else needMolkout=true;
+  }
+  // モルックアウト結果が確定していれば反映
+  if(needMolkout&&S.molkoutWinner!=null)matchWin=S.molkoutWinner;
+  const cu=cset.hist.length>0;
+  return`<div style="padding:12px 0;">
+    <div style="text-align:center;padding:14px 0 12px;background:#FFF7ED;border-radius:12px;margin-bottom:16px;">
+      <div style="font-size:13px;color:#92400e;margin-bottom:6px;">⏹ 途中試合終了（${sl}終了時点）</div>
+      ${matchWin!=null?`<div style="font-size:24px;font-weight:700;color:#111;">🏆 ${S.teams[matchWin].name} の勝利</div>`
+       :needMolkout&&S.molkoutWinner==null?`<div style="font-size:18px;font-weight:700;color:#111;">勝利セット数・合計点が同点</div><div style="font-size:14px;color:#92400e;margin-top:4px;">モルックアウトで決定します</div>`
+       :`<div style="font-size:20px;font-weight:700;color:#111;">試合終了</div>`}
+    </div>
+    ${S.fmt==='round2'?`
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px;">通算成績</div>
+      ${[0,1].map(i=>{const w=wins[i],d=drawCount,l=S.sets.length-w-d;return`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+          <div style="width:12px;height:12px;border-radius:50%;background:${C[i]};flex-shrink:0;"></div>
+          <div style="flex:1;">
+            <div style="font-size:15px;font-weight:600;color:#111;">${S.teams[i].name}</div>
+            <div style="font-size:13px;color:#6b7280;margin-top:2px;">合計 ${totals[i]}点</div>
+          </div>
+          <span style="font-size:17px;font-weight:700;color:#111;">${w}勝${d}分${l}敗</span>
+        </div>`;}).join('')}
+    </div>`:`
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px;">勝敗・合計点</div>
+      ${[0,1].map(i=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+        <div style="width:12px;height:12px;border-radius:50%;background:${C[i]};flex-shrink:0;"></div>
+        <div style="flex:1;">
+          <div style="font-size:15px;font-weight:600;color:#111;">${S.teams[i].name}</div>
+          <div style="font-size:13px;color:#6b7280;margin-top:2px;">${wins[i]}勝　合計${totals[i]}点</div>
+        </div>
+        ${matchWin===i?`<span style="font-size:13px;background:${LB[i]};color:${LT[i]};padding:3px 10px;border-radius:99px;border:1px solid ${LBR[i]};">勝利</span>`:''}
+      </div>`).join('')}
+    </div>`}
+    ${histTbl(S.sets.length)}
+    ${needMolkout&&S.molkoutWinner==null?`<button class="btn btn-orange" id="btn-go-molkout" style="width:100%;padding:14px;font-size:15px;margin-bottom:10px;">🎯 モルックアウトへ進む</button>`:''}
+    <button class="btn btn-red-o" id="btn-undo-early" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;" ${cu?'':'disabled'}>↩ 最後の1投に戻す</button>
+    <button class="btn btn-green" id="btn-reset" style="width:100%;padding:14px;font-size:16px;">最初から</button>
+  </div>`;
+}
+
+function rMolkout(){
+  const mw=S.molkoutWinner;
+  return`<div style="padding:12px 0;">
+    <div style="text-align:center;padding:14px 0 12px;">
+      <div style="font-size:16px;font-weight:700;color:#111;margin-bottom:4px;">モルックアウト</div>
+      <div style="font-size:14px;color:#6b7280;">代表者1名ずつ2投ずつ</div>
+    </div>
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px;">勝利チームを選択してください</div>
+      ${[0,1].map(i=>`<div style="margin-bottom:10px;">
+        <button class="molkout-btn" data-id="${i}" style="width:100%;padding:16px;border:2.5px solid ${mw===i?C[i]:'#d1d5db'};background:${mw===i?LB[i]:'#fff'};border-radius:10px;cursor:pointer;font-family:inherit;">
+          <div style="display:flex;align-items:center;gap:12px;justify-content:center;">
+            <div style="width:14px;height:14px;border-radius:50%;background:${C[i]};"></div>
+            <span style="font-size:17px;font-weight:600;color:#111;">${S.teams[i].name}</span>
+            ${mw===i?`<span style="font-size:12px;background:${C[i]};color:#fff;padding:3px 9px;border-radius:99px;">選択中 ✓</span>`:''}
+          </div>
+        </button>
+      </div>`).join('')}
+    </div>
+    <button class="btn btn-green" id="btn-molkout-confirm" style="width:100%;padding:14px;font-size:16px;" ${mw!=null?'':'disabled'}>この結果で確定 →</button>
+  </div>`;
+}
+
+function updPrev(){
   const pv=document.getElementById('preview');if(!pv)return;
-  if(!S.inputPts){pv.textContent='';return;}
-  if(S.inputPts==='miss'){pv.textContent='ミス（0点）記録';return;}
-  const pts=parseInt(S.inputPts),multi=S.inputMulti==='multi',res=S.inputAimed;
-  const cset=cs(),ct=cset.currentTeamId,td=cset.teams[ct],ns=td.score+pts;
-  const sym=res==='circle'?(multi?' ［□囲み］':' ［○囲み］'):' ［×］';
-  if(ns>50)pv.textContent=`${td.score}+${pts}=${ns} → 25点にリセット${sym}`;
-  else if(ns===50)pv.textContent=`${td.score}+${pts}=50点！セット勝利${sym}`;
-  else pv.textContent=`${td.score}+${pts}=${ns}点${sym}`;
+  if(!S.iP){pv.textContent='';return;}
+  if(S.iP==='miss'){pv.textContent='ミス（0点）記録';return;}
+  const pts=parseInt(S.iP),multi=S.iM==='multi',res=S.iA;
+  const cset=cs(),ct=cset.ctid,td=cset.teams[ct],ns=td.sc+pts;
+  const sym=res==='circle'?(multi?' ［複数本・囲み］':' ［単品・囲み］'):' ［×］';
+  if(ns>50)pv.textContent=`${td.sc}+${pts}=${ns} → 25点にリセット${sym}`;
+  else if(ns===50)pv.textContent=`${td.sc}+${pts}=50点！セット勝利${sym}`;
+  else pv.textContent=`${td.sc}+${pts}=${ns}点${sym}`;
 }
 
 function bindDrag(){
   [0,1].forEach(ti=>{
     const list=document.getElementById(`order-list-${ti}`);if(!list)return;
-    let dragSrc=null;
-    list.querySelectorAll('.drag-item').forEach(item=>{
-      item.setAttribute('draggable','true');
-      item.addEventListener('dragstart',e=>{dragSrc=item;item.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
-      item.addEventListener('dragend',()=>{item.classList.remove('dragging');list.querySelectorAll('.drag-item').forEach(i=>i.classList.remove('over'));dragSrc=null;});
-      item.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';list.querySelectorAll('.drag-item').forEach(i=>i.classList.remove('over'));item.classList.add('over');});
+    let src=null;
+    list.querySelectorAll('.order-item').forEach(item=>{
+      item.addEventListener('dragstart',e=>{src=item;item.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
+      item.addEventListener('dragend',()=>{item.classList.remove('dragging');list.querySelectorAll('.order-item').forEach(i=>i.classList.remove('over'));src=null;});
+      item.addEventListener('dragover',e=>{e.preventDefault();list.querySelectorAll('.order-item').forEach(i=>i.classList.remove('over'));item.classList.add('over');});
       item.addEventListener('dragleave',()=>item.classList.remove('over'));
       item.addEventListener('drop',e=>{
-        e.preventDefault();item.classList.remove('over');if(!dragSrc||dragSrc===item)return;
-        const all=Array.from(list.querySelectorAll('.drag-item'));
-        const from=all.indexOf(dragSrc),to=all.indexOf(item);if(from<0||to<0)return;
+        e.preventDefault();item.classList.remove('over');if(!src||src===item)return;
+        const all=Array.from(list.querySelectorAll('.order-item'));
+        const from=all.indexOf(src),to=all.indexOf(item);if(from<0||to<0)return;
         const base=S.pOrders[ti].length>0?[...S.pOrders[ti]]:S.teams[ti].members.slice();
-        base.splice(to,0,base.splice(from,1)[0]);S.pOrders[ti]=base;dragSrc=null;render();
+        base.splice(to,0,base.splice(from,1)[0]);S.pOrders[ti]=base;src=null;render();
       });
     });
   });
@@ -539,59 +591,97 @@ function bindDrag(){
 
 function bind(){
   const app=document.getElementById('app');
-  app.querySelectorAll('input[name="fmt"]').forEach(el=>{el.addEventListener('change',e=>{S.format=e.target.value;render();});});
+  app.querySelectorAll('input[name="fmt"]').forEach(el=>{el.addEventListener('change',e=>{S.fmt=e.target.value;render();});});
+  app.querySelectorAll('.move-up').forEach(btn=>{btn.addEventListener('click',()=>{
+    const ti=parseInt(btn.dataset.team),idx=parseInt(btn.dataset.idx);
+    const base=S.pOrders[ti].length>0?[...S.pOrders[ti]]:S.teams[ti].members.slice();
+    if(idx<=0)return;[base[idx-1],base[idx]]=[base[idx],base[idx-1]];S.pOrders[ti]=base;render();
+  });});
+  app.querySelectorAll('.move-dn').forEach(btn=>{btn.addEventListener('click',()=>{
+    const ti=parseInt(btn.dataset.team),idx=parseInt(btn.dataset.idx);
+    const base=S.pOrders[ti].length>0?[...S.pOrders[ti]]:S.teams[ti].members.slice();
+    if(idx>=base.length-1)return;[base[idx+1],base[idx]]=[base[idx],base[idx+1]];S.pOrders[ti]=base;render();
+  });});
   const bn=document.getElementById('btn-next');
   if(bn)bn.onclick=()=>{
     [0,1].forEach(i=>{const n=document.getElementById(`tn${i}`),m=document.getElementById(`tm${i}`);if(n)S.teams[i].name=n.value||`チーム${i+1}`;if(m)S.teams[i].members=m.value.split(/[,、]/).map(s=>s.trim()).filter(Boolean);});
-    S.pFirst=S.firstId;S.pIdx=0;S.pOrders=[S.teams[0].members.slice(),S.teams[1].members.slice()];S.phase='firstChoice';render();
+    S.pFirst=S.fid;S.pIdx=0;S.pOrders=[S.teams[0].members.slice(),S.teams[1].members.slice()];S.phase='firstChoice';render();
   };
   const bbs=document.getElementById('btn-bk-setup');if(bbs)bbs.onclick=()=>{S.phase='setup';render();};
   const bbf=document.getElementById('btn-bk-first');if(bbf)bbf.onclick=()=>{S.phase='firstChoice';render();};
-  app.querySelectorAll('.fc-btn').forEach(el=>{el.addEventListener('click',()=>{S.pFirst=parseInt(el.dataset.id);S.pOrders=getInitialOrders(S.pIdx!=null?S.pIdx:S.sets.length,S.pFirst);render();});});
+  app.querySelectorAll('.fc-btn').forEach(el=>{el.addEventListener('click',()=>{S.pFirst=parseInt(el.dataset.id);S.pOrders=gIO(S.pIdx!=null?S.pIdx:S.sets.length,S.pFirst);render();});});
   const bgo=document.getElementById('btn-go-order');if(bgo)bgo.onclick=()=>{S.phase='orderSetup';render();};
+  const bbots=document.getElementById('btn-bk-order-to-setover');if(bbots)bbots.onclick=()=>{S.phase='setOver';render();};
   const bst=document.getElementById('btn-start');
   if(bst)bst.onclick=()=>{
-    const fid=S.pFirst!=null?S.pFirst:S.firstId;if(S.sets.length===0)S.firstId=fid;
+    const fid=S.pFirst!=null?S.pFirst:S.fid;if(S.sets.length===0)S.fid=fid;
     const si=S.pIdx!=null?S.pIdx:S.sets.length;
     S.sets.push(mkSet(si,fid,[...S.pOrders]));
-    S.cur=si;S.pFirst=null;S.pIdx=null;S.pOrders=[[],[]];S.showHist=false;S.inputPts='';S.inputMulti='single';S.inputAimed='cross';S.phase='game';render();
+    S.cur=si;S.pFirst=null;S.pIdx=null;S.pOrders=[[],[]];S.showHist=false;S.iP='';S.iM='single';S.iA='cross';S.endPending=false;S.tieExtend=false;S.phase='game';render();
+  };
+  const bee=document.getElementById('btn-early-end');
+  if(bee)bee.onclick=()=>{
+    const cset=cs();
+    if(isTurnEnd(cset)){processEarlyEnd();}
+    else{S.endPending=true;render();}
   };
   const br=document.getElementById('btn-reset');if(br)br.onclick=doReset;
-  const bu=document.getElementById('btn-undo');if(bu)bu.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.currentTeamId=p.currentTeamId;cset.winnerId=p.winnerId;S.inputPts='';S.inputMulti='single';S.inputAimed='cross';render();};
-  const bbo=document.getElementById('btn-bk-order');if(bbo)bbo.onclick=()=>{S.sets.pop();S.pIdx=S.sets.length;S.pFirst=needsFirstChoice(S.pIdx)?S.firstId:autoFirst(S.pIdx);S.pOrders=getInitialOrders(S.pIdx,S.pFirst);S.phase=needsFirstChoice(S.pIdx)?'firstChoice':'orderSetup';render();};
-  const bue=document.getElementById('btn-undo-end');if(bue)bue.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.currentTeamId=p.currentTeamId;cset.winnerId=null;S.inputPts='';S.inputMulti='single';S.inputAimed='cross';S.phase='game';render();};
+  const bu=document.getElementById('btn-undo');
+  if(bu)bu.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=p.wid;S.iP='';S.iM='single';S.iA='cross';S.endPending=false;S.tieExtend=false;render();};
+  const bbo=document.getElementById('btn-bk-order');if(bbo)bbo.onclick=()=>{S.sets.pop();S.pIdx=S.sets.length;S.pFirst=nfc(S.pIdx)?S.fid:aF(S.pIdx);S.pOrders=gIO(S.pIdx,S.pFirst);S.phase=nfc(S.pIdx)?'firstChoice':'orderSetup';render();};
+  const bue=document.getElementById('btn-undo-end');if(bue)bue.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=null;S.iP='';S.iM='single';S.iA='cross';S.phase='game';render();};
+  const bue2=document.getElementById('btn-undo-early');
+  if(bue2)bue2.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=null;if(cset.draw!==undefined)cset.draw=false;S.iP='';S.iM='single';S.iA='cross';S.endPending=false;S.tieExtend=false;S.phase='game';render();};
+  const bum=document.getElementById('btn-undo-match');if(bum)bum.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=null;S.iP='';S.iM='single';S.iA='cross';S.phase='game';render();};
   const bh=document.getElementById('btn-hist');if(bh)bh.onclick=()=>{S.showHist=!S.showHist;render();};
-  // スコアシートボタン（ゲーム中）
-  const bss=document.getElementById('btn-scoresheet');if(bss)bss.onclick=()=>{S.prevPhase='game';S.phase='scoresheet';render();};
-  // スコアシートボタン（セット終了画面）
-  const bsso=document.getElementById('btn-scoresheet-setover');if(bsso)bsso.onclick=()=>{S.prevPhase='setOver';S.phase='scoresheet';render();};
-  // スコアシートから戻る
-  const bbg=document.getElementById('btn-back-game');if(bbg)bbg.onclick=()=>{S.phase=S.prevPhase||'game';render();};
+  const bss=document.getElementById('btn-scoresheet');if(bss)bss.onclick=()=>{S.ssIdx=S.cur;S.prev='game';S.phase='scoresheet';render();};
+  const bsso=document.getElementById('btn-ss-setover');if(bsso)bsso.onclick=()=>{S.ssIdx=S.cur;S.prev='setOver';S.phase='scoresheet';render();};
+  const bbg=document.getElementById('btn-back-ss');if(bbg)bbg.onclick=()=>{S.phase=S.prev||'game';render();};
+  const bsp=document.getElementById('btn-ss-prev');if(bsp)bsp.onclick=()=>{if(S.ssIdx>0){S.ssIdx--;render();}};
+  const bsn=document.getElementById('btn-ss-next');if(bsn)bsn.onclick=()=>{if(S.ssIdx<S.sets.length-1){S.ssIdx++;render();}};
   const ps=document.getElementById('sel-pts'),ms=document.getElementById('sel-multi'),as=document.getElementById('sel-aimed');
-  if(ps){ps.addEventListener('change',()=>{S.inputPts=ps.value;S.inputAimed=ps.value==='miss'?'cross':'circle';render();});}
-  if(ms)ms.addEventListener('change',()=>{S.inputMulti=ms.value;render();});
-  if(as)as.addEventListener('change',()=>{S.inputAimed=as.value;render();});
-  updatePreview();
+  if(ps){ps.addEventListener('change',()=>{S.iP=ps.value;S.iA=ps.value==='miss'?'cross':'circle';render();});}
+  if(ms)ms.addEventListener('change',()=>{S.iM=ms.value;render();});
+  if(as)as.addEventListener('change',()=>{S.iA=as.value;render();});
+  updPrev();
   const bc=document.getElementById('btn-confirm');
   if(bc)bc.onclick=()=>{
-    if(!S.inputPts){alert('得点を選択してください');return;}
-    const cset=cs(),ct=cset.currentTeamId,td=cset.teams[ct];
-    cset.hist.push({teams:JSON.parse(JSON.stringify(cset.teams)),currentTeamId:cset.currentTeamId,winnerId:cset.winnerId});
-    const isMiss=S.inputPts==='miss';let pts=0,raw=0,over=false;
-    const multi=S.inputMulti==='multi',result=isMiss?'cross':S.inputAimed;
-    if(!isMiss){pts=parseInt(S.inputPts);raw=pts;const ns=td.score+pts;if(ns>50){over=true;td.score=RESET;}else td.score=ns;}
-    const mn=getMbr(td,ct);td.mi++;
-    td.throws.push({miss:isMiss,pts,raw,over,multi,result,member:mn,cumul:td.score});
-    if(isMiss)td.misses++;else td.misses=0;if(td.misses>=MAXM)td.eliminated=true;
-    S.inputPts='';S.inputMulti='single';S.inputAimed='cross';
-    const active=cset.teams.filter(t=>!t.eliminated);
-    if(!over&&!isMiss&&td.score===MAX){cset.winnerId=ct;S.phase='setOver';render();return;}
-    if(active.length===1){active[0].score=MAX;cset.winnerId=active[0].id;S.phase='setOver';render();return;}
-    if(active.length===0){cset.winnerId=null;S.phase='setOver';render();return;}
-    let next=1-ct;if(cset.teams[next].eliminated)next=ct;cset.currentTeamId=next;render();
+    if(!S.iP){alert('得点を選択してください');return;}
+    const cset=cs(),ct=cset.ctid,td=cset.teams[ct];
+    cset.hist.push({teams:JSON.parse(JSON.stringify(cset.teams)),ctid:cset.ctid,wid:cset.wid});
+    const isMiss=S.iP==='miss';let pts=0,raw=0,over=false;
+    const multi=S.iM==='multi',result=isMiss?'cross':S.iA;
+    if(!isMiss){pts=parseInt(S.iP);raw=pts;const ns=td.sc+pts;if(ns>50){over=true;td.sc=RST;}else td.sc=ns;}
+    const mn=gmb(td,ct);td.mi++;
+    td.throws.push({miss:isMiss,pts,raw,over,multi,result,member:mn,cumul:td.sc});
+    if(isMiss)td.ms++;else td.ms=0;if(td.ms>=MM)td.el=true;
+    S.iP='';S.iM='single';S.iA='cross';
+    const active=cset.teams.filter(t=>!t.el);
+    if(!over&&!isMiss&&td.sc===MAX){cset.wid=ct;S.endPending=false;S.tieExtend=false;S.phase='setOver';render();return;}
+    if(active.length===1){active[0].sc=MAX;cset.wid=active[0].id;S.endPending=false;S.tieExtend=false;S.phase='setOver';render();return;}
+    if(active.length===0){cset.wid=null;S.endPending=false;S.tieExtend=false;S.phase='setOver';render();return;}
+    let next=1-ct;if(cset.teams[next].el)next=ct;cset.ctid=next;
+    const justFinishedTurn=isTurnEnd(cset);
+    if(justFinishedTurn){
+      const sc0=cset.teams[0].sc,sc1=cset.teams[1].sc;
+      if(S.endPending){
+        if(S.fmt!=='round2'&&sc0===sc1){S.endPending=false;S.tieExtend=true;render();return;}
+        processEarlyEnd();return;
+      }
+      if(S.tieExtend){
+        if(sc0!==sc1){processEarlyEnd();return;}
+        // まだ同点 → バナー継続
+      }
+    }
+    render();
   };
-  const bns=document.getElementById('btn-next-set');if(bns)bns.onclick=()=>{goNextSet(parseInt(bns.dataset.next));};
+  const bns=document.getElementById('btn-next-set');if(bns)bns.onclick=()=>{goNext(parseInt(bns.dataset.next));};
   const bmo=document.getElementById('btn-match-over');if(bmo)bmo.onclick=()=>{S.phase='matchOver';render();};
+  app.querySelectorAll('.molkout-btn').forEach(el=>{el.addEventListener('click',()=>{S.molkoutWinner=parseInt(el.dataset.id);render();});});
+  const bgm=document.getElementById('btn-go-molkout');if(bgm)bgm.onclick=()=>{S.molkoutWinner=null;S.phase='molkout';render();};
+  const bmc=document.getElementById('btn-molkout-confirm');if(bmc)bmc.onclick=()=>{if(S.molkoutWinner==null)return;S.phase='earlyMatchOver';render();};
 }
 render();
 </script>
+</body>
+</html>
