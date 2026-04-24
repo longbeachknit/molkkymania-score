@@ -253,6 +253,103 @@ async function checkAdminPw(pw){
 
 
 
+
+// ===== GitHub Pages からリアルタイム対戦データ取得 =====
+const GITHUB_DATA_BASE='https://longbeachknit.github.io/molkkymania-deta';
+const CACHE_TTL=60000; // 1分キャッシュ
+const _jsonCache={};
+
+async function fetchMatchesJson(eventCode){
+  const url=GITHUB_DATA_BASE+'/'+eventCode+'.json';
+  const now=Date.now();
+  if(_jsonCache[eventCode]&&(now-_jsonCache[eventCode].ts)<CACHE_TTL){
+    return _jsonCache[eventCode].data;
+  }
+  try{
+    const res=await fetch(url+'?t='+now,{cache:'no-store'});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    _jsonCache[eventCode]={ts:now,data};
+    return data;
+  }catch(e){
+    console.warn('GitHub JSON取得失敗:',e.message);
+    return null;
+  }
+}
+
+
+async function fetchSettingsJson(eventCode){
+  const url=GITHUB_DATA_BASE+'/'+eventCode+'_settings.json';
+  const now=Date.now();
+  const cacheKey='settings_'+eventCode;
+  if(_jsonCache[cacheKey]&&(now-_jsonCache[cacheKey].ts)<CACHE_TTL){
+    return _jsonCache[cacheKey].data;
+  }
+  try{
+    const res=await fetch(url+'?t='+now,{cache:'no-store'});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    _jsonCache[cacheKey]={ts:now,data};
+    return data;
+  }catch(e){
+    console.warn('settings.json取得失敗:',e.message);
+    return null;
+  }
+}
+
+async function syncSettingsFromGitHub(eventCode){
+  const data=await fetchSettingsJson(eventCode);
+  if(!data)return false;
+  // 大会設定を上書き（対象大会のみ）
+  const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
+  if(tour){
+    if(data.eventName!==undefined)tour.eventName=data.eventName;
+    if(data.priority!==undefined)tour.priority=data.priority;
+    if(data.matchRules!==undefined)tour.matchRules=data.matchRules;
+    if(data.tourneyRules!==undefined)tour.tourneyRules=data.tourneyRules;
+    if(data.roundRules!==undefined)tour.roundRules=data.roundRules;
+    if(data.teams!==undefined)tour.teams=data.teams;
+    saveActiveTour(tour);
+  } else {
+    // 大会が存在しない場合は新規作成してアクティブにセット
+    const venueCode=data.venueCode||'';
+    const newTour=makeTournament({
+      venueCode,eventCode,
+      eventName:data.eventName||'',
+      gasUrl:data.gasUrl||'',
+      priority:data.priority||'tournament',
+      matchRules:data.matchRules||[],
+      tourneyRules:data.tourneyRules||[],
+      roundRules:data.roundRules||[],
+      teams:data.teams||[],
+      matches:[]
+    });
+    if(!AD.tournaments)AD.tournaments=[];
+    AD.tournaments.push(newTour);
+    AD.activeTourId=newTour.id;
+    saveAdmin(AD);
+  }
+  return true;
+}
+
+// 対戦カードと設定を同時取得
+async function syncAllFromGitHub(eventCode){
+  await Promise.all([
+    syncMatchesFromGitHub(eventCode),
+    syncSettingsFromGitHub(eventCode)
+  ]);
+}
+
+async function syncMatchesFromGitHub(eventCode){
+  const data=await fetchMatchesJson(eventCode);
+  if(!data||!data.matches)return false;
+  const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
+  if(!tour)return false;
+  tour.matches=data.matches;
+  saveActiveTour(tour);
+  return true;
+}
+
 // ===== 組み合わせID取得（GASから） =====
 function parseCombinedId(id){
   // 例: 01_0602_02_002_01_073005
@@ -394,6 +491,7 @@ function loadAdmin(){
         d.activeTourId=d.activeTourId||'tour_default';
       }
       if(!d.ruleTemplates)d.ruleTemplates=[];
+      if(!d.githubPat)d.githubPat='';
       return d;
     }
   }catch(e){}
@@ -401,7 +499,8 @@ function loadAdmin(){
     venues:[{code:'01',name:'川崎'},{code:'02',name:'大阪'}],
     tournaments:[],
     activeTourId:null,
-    ruleTemplates:[]
+    ruleTemplates:[],
+    githubPat:''
   };
 }
 function saveAdmin(data){
@@ -1133,6 +1232,13 @@ function rAdminTop(){
       <div style="font-size:18px;font-weight:700;color:#111;">管理者設定</div>
     </div>
 
+    <div class="card" style="padding:14px;margin-bottom:12px;background:#FFF7ED;">
+      <div style="font-size:14px;font-weight:600;color:#92400e;margin-bottom:6px;">🔑 GitHub Token（設定配信用）</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">設定をGitHubに配信するために必要です。このデバイスにのみ保存されます。</div>
+      <input type="password" id="admin-github-pat" value="${ad.githubPat||''}" placeholder="ghp_xxxxxxxxxxxxxxxx" style="font-size:13px;"/>
+      <button class="btn btn-green btn-xs" id="btn-save-pat" style="width:100%;padding:8px;margin-top:8px;">保存</button>
+    </div>
+
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
         <div style="flex:1;font-size:14px;font-weight:600;color:#111;">場所の管理</div>
@@ -1212,6 +1318,12 @@ function rAdminTourEdit(){
           <input type="text" id="te-gasurl" value="${tour.gasUrl||''}" placeholder="https://script.google.com/macros/s/.../exec （必須）"/></div>
       </div>
       <button class="btn btn-green" id="btn-te-save-basic" style="width:100%;padding:11px;font-size:14px;margin-top:12px;">基本情報を保存</button>
+    </div>
+
+    <div class="card" style="padding:14px;margin-bottom:12px;background:#EEF2FF;">
+      <div style="font-size:14px;font-weight:600;color:#3730a3;margin-bottom:6px;">📡 設定を全端末に配信</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">試合形式・ラウンド・参加チームなどの設定をGitHubに配信します。参加者が試合IDを入力した瞬間に自動で反映されます。</div>
+      <button class="btn btn-blue" id="btn-publish-settings" style="width:100%;padding:11px;font-size:14px;">📡 設定を配信する</button>
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
@@ -1437,6 +1549,68 @@ function showLoadRuleTemplateModal(){
   });
 }
 
+
+// ===== 設定をGitHub Pagesに配信 =====
+async function publishSettings(tour){
+  if(!tour||!tour.eventCode){
+    alert('大会コードが設定されていません。基本情報を先に保存してください。');
+    return;
+  }
+  if(!AD.githubPat||!AD.githubPat.startsWith('ghp_')){
+    alert('GitHub Personal Access Tokenが設定されていません。\n管理者設定画面のトップで設定してください。');
+    return;
+  }
+  const payload={
+    venueCode: tour.venueCode||'',
+    eventCode: tour.eventCode,
+    eventName: tour.eventName||'',
+    gasUrl: tour.gasUrl||'',
+    priority: tour.priority||'tournament',
+    matchRules: tour.matchRules||[],
+    tourneyRules: tour.tourneyRules||[],
+    roundRules: tour.roundRules||[],
+    teams: tour.teams||[],
+    publishedAt: new Date().toISOString()
+  };
+  const fileName=tour.eventCode+'_settings.json';
+  const jsonBody=JSON.stringify(payload,null,2);
+  const apiUrl='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/'+fileName;
+
+  const btn=document.getElementById('btn-publish-settings');
+  if(btn){btn.disabled=true;btn.textContent='配信中...';}
+
+  try{
+    // 既存ファイルのSHAを取得
+    let sha=null;
+    try{
+      const getRes=await fetch(apiUrl,{headers:{'Authorization':'token '+AD.githubPat}});
+      if(getRes.ok){const d=await getRes.json();sha=d.sha;}
+    }catch(e){}
+
+    // アップロード
+    const body={
+      message:'Update '+fileName,
+      content:btoa(unescape(encodeURIComponent(jsonBody)))
+    };
+    if(sha)body.sha=sha;
+    const res=await fetch(apiUrl,{
+      method:'PUT',
+      headers:{'Authorization':'token '+AD.githubPat,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if(res.ok){
+      alert('✅ 配信完了！\n参加者が次回アクセス時に自動で設定が反映されます。');
+    } else {
+      const err=await res.json();
+      alert('❌ 配信失敗: '+(err.message||res.status));
+    }
+  }catch(e){
+    alert('❌ エラー: '+e.message);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='📡 設定を配信する';}
+  }
+}
+
 function showVenueModal(idx){
   if(!AD.venues)AD.venues=[];
   const v=idx!=null?{...AD.venues[idx]}:{code:'',name:''};
@@ -1626,10 +1800,11 @@ function rCourtSearch(){
 
   const tourMatchRules=tourSrc.matchRules||[];
   return`<div style="padding:8px 0 4px;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
       <button class="btn btn-gray btn-sm" id="btn-bk-court-search">← 戻る</button>
       <div style="font-size:18px;font-weight:700;color:#111;">対戦コートを検索</div>
     </div>
+    ${(()=>{const atour=activeTour();if(!atour)return'';const cache=_jsonCache[atour.eventCode];const upd=cache&&cache.data&&cache.data.updatedAt?new Date(cache.data.updatedAt).toLocaleTimeString('ja-JP'):'未取得';return`<div style="font-size:12px;color:#9ca3af;margin-bottom:10px;text-align:right;">最終更新: ${upd} <button class="btn btn-gray btn-xs" id="btn-cs-refresh" style="padding:3px 8px;font-size:11px;">🔄 更新</button></div>`;})()} 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:grid;gap:10px;">
         <div>
@@ -2013,6 +2188,12 @@ function bind(){
   const bbtoured=document.getElementById('btn-bk-tour-edit');if(bbtoured)bbtoured.onclick=()=>{S._editingTourId=undefined;render();};
 
   // 大会一覧ハンドラ
+  const bspat=document.getElementById('btn-save-pat');
+  if(bspat)bspat.onclick=()=>{
+    const pat=(document.getElementById('admin-github-pat')||{value:''}).value.trim();
+    AD.githubPat=pat;saveAdmin(AD);
+    alert('✅ Tokenを保存しました');
+  };
   const bav=document.getElementById('btn-add-venue');if(bav)bav.onclick=()=>showVenueModal(null);
   document.querySelectorAll('.admin-edit-venue').forEach(btn=>btn.addEventListener('click',()=>showVenueModal(parseInt(btn.dataset.idx))));
   document.querySelectorAll('.admin-del-venue').forEach(btn=>btn.addEventListener('click',()=>{
@@ -2032,6 +2213,11 @@ function bind(){
   }));
 
   // 大会編集ハンドラ
+  const bps=document.getElementById('btn-publish-settings');
+  if(bps)bps.onclick=()=>{
+    const tour=AD.tournaments.find(t=>t.id===S._editingTourId);
+    if(tour)publishSettings(tour);
+  };
   const bteBasic=document.getElementById('btn-te-save-basic');
   if(bteBasic)bteBasic.onclick=()=>{
     const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
@@ -2090,8 +2276,26 @@ function bind(){
   const bgmi=document.getElementById('btn-go-matchid');if(bgmi)bgmi.onclick=()=>{S._matchIdInput='';S._matchIdError='';S.phase='matchId';render();};
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
   const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{S.phase='matchId';render();};
-  const bgcs=document.getElementById('btn-go-court-search');if(bgcs)bgcs.onclick=()=>{S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;S.phase='courtSearch';render();};
+  const bgcs=document.getElementById('btn-go-court-search');if(bgcs)bgcs.onclick=async()=>{
+    S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;S.phase='courtSearch';render();
+    // アクティブ大会のeventCodeでGitHubから最新データ取得
+    const atour=activeTour();
+    if(atour&&atour.eventCode){
+      await syncAllFromGitHub(atour.eventCode);
+      render();
+    }
+  };
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
+  const bcsRef=document.getElementById('btn-cs-refresh');
+  if(bcsRef)bcsRef.onclick=async()=>{
+    const atour=activeTour();
+    if(!atour||!atour.eventCode)return;
+    // キャッシュを無効化して強制更新
+    delete _jsonCache[atour.eventCode];
+    bcsRef.textContent='取得中...';bcsRef.disabled=true;
+    await syncAllFromGitHub(atour.eventCode);
+    render();
+  };
   const bcss=document.getElementById('btn-cs-search');
   if(bcss)bcss.onclick=()=>{
     const teamNo=(document.getElementById('cs-team-no')||{value:''}).value.trim();
@@ -2120,23 +2324,31 @@ function bind(){
 
   // 試合ID入力・検索
   const bmiGo=document.getElementById('btn-matchid-go');
-  if(bmiGo)bmiGo.onclick=()=>{
+  if(bmiGo)bmiGo.onclick=async()=>{
     const inp=document.getElementById('matchid-input');
     const id=inp?inp.value.trim():'';
     if(!id){S._matchIdError='試合IDを入力してください';render();return;}
+    const parts=id.split('_');
+    if(parts.length<4){S._matchIdError='試合IDの形式が正しくありません（例: 01_0602_02_002）';S._matchIdInput=id;render();return;}
+    // GitHub から最新の対戦データを取得
+    S._matchIdError='';S._matchIdInput=id;
+    const eventCode=parts[1];
+    const btn=document.getElementById('btn-matchid-go');
+    if(btn){btn.disabled=true;btn.textContent='取得中...';}
+    await syncAllFromGitHub(eventCode);
+    if(btn){btn.disabled=false;btn.textContent='この試合IDで開始 →';}
     const result=resolveMatchId(id);
-    if(!result){S._matchIdError='試合IDの形式が正しくありません（例: 01_0602_02_002）';S._matchIdInput=id;render();return;}
+    if(!result){S._matchIdError='試合IDの形式が正しくありません（例: 01_0602_02_002）';render();return;}
     S._matchIdInput=id;S._matchIdError='';S.matchIdData=result;S.phase='matchConfirm';render();
   };
 
   // QRコードスキャン（カメラ起動）
   const bqr=document.getElementById('btn-qr-scan');
-  if(bqr)bqr.onclick=()=>{
-    // input[type=url]でカメラ起動（モバイルではQRリーダーアプリに渡すことが多いため、
-    // ここでは簡易的にpromptで手入力と同等にする。
-    // 本格的なQR読み取りにはjsQRライブラリが必要）
+  if(bqr)bqr.onclick=async()=>{
     const val=prompt('QRコードの内容（試合ID）を貼り付けてください:');
     if(val&&val.trim()){
+      const qrParts=val.trim().split('_');
+      if(qrParts.length>=2)await syncAllFromGitHub(qrParts[1]);
       const result=resolveMatchId(val.trim());
       if(!result){S._matchIdError='試合IDの形式が正しくありません';S._matchIdInput=val.trim();render();return;}
       S._matchIdInput=val.trim();S._matchIdError='';S.matchIdData=result;S.phase='matchConfirm';render();
