@@ -332,19 +332,22 @@ async function syncSettingsFromGitHub(eventCode){
   return true;
 }
 
-// 対戦カードと設定を同時取得
+// 設定→対戦カードの順で取得（設定で大会を先に作成してからmatchesを反映）
 async function syncAllFromGitHub(eventCode){
-  await Promise.all([
-    syncMatchesFromGitHub(eventCode),
-    syncSettingsFromGitHub(eventCode)
-  ]);
+  // 1) 先に設定を取得して大会を作成/更新
+  await syncSettingsFromGitHub(eventCode);
+  // 2) 大会が存在する状態でmatchesを取得
+  await syncMatchesFromGitHub(eventCode);
 }
 
 async function syncMatchesFromGitHub(eventCode){
   const data=await fetchMatchesJson(eventCode);
   if(!data||!data.matches)return false;
   const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
-  if(!tour)return false;
+  if(!tour){
+    console.warn('syncMatchesFromGitHub: 大会が見つかりません eventCode='+eventCode);
+    return false;
+  }
   tour.matches=data.matches;
   saveActiveTour(tour);
   return true;
