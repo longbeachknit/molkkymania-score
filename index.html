@@ -89,6 +89,26 @@ function stopTimer(){
 
 const fl=()=>S.fmt==='best2'?'2先':S.fmt==='best3'?'3先':'表裏';
 const nfc=(i)=>(S.fmt==='best2')?(i===0||i===2):(S.fmt==='best3')?(i===0||i===4):i===0;
+// ===== 戻るボタン用グローバル関数 =====
+function goBackFromFirst(){
+  var si=S.pIdx!=null?S.pIdx:S.sets.length;
+  S.pIdx=null;S.pFirst=null;S.pOrders=[[],[]];S.pExclude=[[],[]];
+  S.phase=si===0?'matchConfirm':'setOver';
+  render();
+}
+function goBackFromOrder(){
+  var si=S.pIdx!=null?S.pIdx:S.sets.length;
+  var fb=S._orderFromBack;
+  var hasNfc=(S.fmt==='best2')?(si===0||si===2):(S.fmt==='best3')?(si===0||si===4):(si===0);
+  S.pIdx=null;S.pFirst=null;S.pOrders=[[],[]];S.pExclude=[[],[]];S._orderFromBack=false;
+  if(fb){S.phase='setOver';}
+  else if(hasNfc){S.phase='firstChoice';}
+  else if(si===0){S.phase='matchConfirm';}
+  else{S.phase='setOver';}
+  render();
+}
+
+
 const isFin=(i)=>(S.fmt==='best2'&&i===2)||(S.fmt==='best3'&&i===4);
 function aF(ni){
   const f=S.fid;
@@ -255,8 +275,8 @@ async function checkAdminPw(pw){
 
 
 // ===== GitHub Pages からリアルタイム対戦データ取得 =====
-const GITHUB_DATA_BASE='https://longbeachknit.github.io/molkkymania-deta';
-const CACHE_TTL=60000; // 1分キャッシュ
+const GITHUB_DATA_BASE='https://raw.githubusercontent.com/longbeachknit/molkkymania-deta/main';
+const CACHE_TTL=10000; // 10秒キャッシュ
 const _jsonCache={};
 
 async function fetchMatchesJson(eventCode){
@@ -757,7 +777,7 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
 }
 
 function doReset(){
-  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'cross',prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['','']};render();
+  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'cross',prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false};render();
 }
 function goNext(ni){
   S.tlTieExtend=false;
@@ -836,7 +856,7 @@ function rFirst(){
       </button>
     </div>`).join('')}
     <div style="display:flex;gap:8px;margin-top:12px;">
-      ${si===0?`<button class="btn btn-gray" id="btn-bk-setup" style="flex:1;">← 戻る</button>`:si>0?`<button class="btn btn-gray" id="btn-bk-first-to-setover" style="flex:1;">← 戻る</button>`:''}
+      <button class="btn btn-gray" onclick="goBackFromFirst()" style="flex:1;">← 戻る</button>
       <button class="btn btn-green" id="btn-go-order" style="flex:2;padding:14px;font-size:16px;">投げ順を設定 →</button>
     </div>
   </div>`;
@@ -885,7 +905,7 @@ function rOrder(){
       <button class="btn btn-yellow btn-sm" id="btn-add-member-1" style="padding:10px;font-size:13px;">＋ メンバー追加<br><span style="font-size:11px;color:#92400e;">${S.teams[1].name}</span></button>
     </div>
     <div style="display:flex;gap:8px;margin-top:4px;">
-      ${isSecondPlus&&!nfc(si)?`<button class="btn btn-gray" id="btn-bk-order-to-setover" style="flex:1;">← 戻る</button>`:isSecondPlus&&nfc(si)?`<button class="btn btn-gray" id="btn-bk-first" style="flex:1;">← 戻る</button>`:`<button class="btn btn-gray" id="btn-bk-first" style="flex:1;">← 戻る</button>`}
+      <button class="btn btn-gray" onclick="goBackFromOrder()" style="flex:1;">← 戻る</button>
       <button class="btn btn-green" id="btn-start" style="flex:2;padding:14px;font-size:16px;">ゲーム開始 ▶</button>
     </div>
   </div>`;
@@ -1067,7 +1087,7 @@ function rEditThrow(){
   if(!th){return '<div style="padding:20px;text-align:center;color:#9ca3af;">投擲データ取得エラー</div>';}
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-      <button class="btn btn-gray btn-sm" id="btn-bk-edit">← キャンセル</button>
+      <button class="btn btn-gray btn-sm" id="btn-bk-edit">← 戻る</button>
       <div style="flex:1;"><div style="font-size:12px;color:#6b7280;">${S.teams[ti].name} / ${thIdx+1}投目</div><div style="font-size:16px;font-weight:700;color:#111;">投擲の修正</div></div>
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
@@ -2145,14 +2165,34 @@ function bind(){
   const bn=document.getElementById('btn-next');
   if(bn)bn.onclick=()=>{
     [0,1].forEach(i=>{const n=document.getElementById(`tn${i}`),m=document.getElementById(`tm${i}`);if(n)S.teams[i].name=n.value||`チーム${i+1}`;if(m)S.teams[i].members=m.value.split(/[,、]/).map(s=>s.trim()).filter(Boolean);});
-    S.pFirst=S.fid;S.pIdx=0;const _gn=gIO(0,S.fid);S.pOrders=_gn.orders;S.pExclude=_gn.excludes;S.phase='firstChoice';render();
+    S.pFirst=S.fid;S.pIdx=0;const _gn=gIO(0,S.fid);S.pOrders=_gn.orders;S.pExclude=_gn.excludes;S._orderFromBack=false;S.phase='firstChoice';render();
   };
-  const bbs=document.getElementById('btn-bk-setup');if(bbs)bbs.onclick=()=>{S.phase='setup';render();};
-  const bbfso=document.getElementById('btn-bk-first-to-setover');if(bbfso)bbfso.onclick=()=>{S.phase='setOver';render();};
-  const bbf=document.getElementById('btn-bk-first');if(bbf)bbf.onclick=()=>{S.phase='firstChoice';render();};
+  // firstChoice キャンセル：si=0ならsetup、それ以外はsetOver
+  (function(){
+    const _bfc=document.getElementById('btn-bk-first-cancel');
+    if(_bfc)_bfc.onclick=function(){
+      const si=S.pIdx!=null?S.pIdx:S.sets.length;
+      const fromGame=S._cameFromGame;
+      S.pIdx=null;S.pFirst=null;S.pOrders=[[],[]];S.pExclude=[[],[]];
+      S._cameFromGame=false;
+      if(fromGame||si>0){S.phase='setOver';}
+      else{S.phase='setup';}
+      render();
+    };
+    const _boc=document.getElementById('btn-bk-order-cancel');
+    if(_boc)_boc.onclick=function(){
+      const si=S.pIdx!=null?S.pIdx:S.sets.length;
+      const fromGame=S._cameFromGame;
+      S.pIdx=null;S.pFirst=null;S.pOrders=[[],[]];S.pExclude=[[],[]];
+      S._orderFromBack=false;S._cameFromGame=false;
+      // gameから来た or セット1以上 → 必ずsetOver
+      if(fromGame||si>0){S.phase='setOver';}
+      else{S.phase='setup';}
+      render();
+    };
+  })();
   app.querySelectorAll('.fc-btn').forEach(el=>{el.addEventListener('click',()=>{S.pFirst=parseInt(el.dataset.id);const _g=gIO(S.pIdx!=null?S.pIdx:S.sets.length,S.pFirst);S.pOrders=_g.orders;S.pExclude=_g.excludes;render();});});
   const bgo=document.getElementById('btn-go-order');if(bgo)bgo.onclick=()=>{S.phase='orderSetup';render();};
-  const bbots=document.getElementById('btn-bk-order-to-setover');if(bbots)bbots.onclick=()=>{S.phase='setOver';render();};
   const bam0=document.getElementById('btn-add-member-0');if(bam0)bam0.onclick=()=>showAddMemberModal(0);
   const bam1=document.getElementById('btn-add-member-1');if(bam1)bam1.onclick=()=>showAddMemberModal(1);
   const bst=document.getElementById('btn-start');
@@ -2172,7 +2212,7 @@ function bind(){
     const fid=S.pFirst!=null?S.pFirst:S.fid;if(S.sets.length===0)S.fid=fid;
     const si=S.pIdx!=null?S.pIdx:S.sets.length;
     S.sets.push(mkSet(si,fid,[...S.pOrders],[...S.pExclude.map(a=>[...a])]));
-    S.cur=si;S.pFirst=null;S.pIdx=null;S.pOrders=[[],[]];S.pExclude=[[],[]];S.showHist=false;S.iP='';S.iM='single';S.iA='cross';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.lastThrowSec=null;startTimer();S.phase='game';render();
+    S.cur=si;S.pFirst=null;S.pIdx=null;S.pOrders=[[],[]];S.pExclude=[[],[]];S._orderFromBack=false;S._cameFromGame=false;S.showHist=false;S.iP='';S.iM='single';S.iA='cross';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.lastThrowSec=null;startTimer();S.phase='game';render();
   };
   const bee=document.getElementById('btn-early-end');
   if(bee)bee.onclick=()=>{const cset=cs();if(isTurnEnd(cset)){processEarlyEnd();}else{S.endPending=true;render();}};
@@ -2387,7 +2427,17 @@ function bind(){
     S.phase='firstChoice';render();
   };
   const bu=document.getElementById('btn-undo');if(bu)bu.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=p.wid;S.iP='';S.iM='single';S.iA='cross';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;render();};
-  const bbo=document.getElementById('btn-bk-order');if(bbo)bbo.onclick=()=>{S.sets.pop();S.pIdx=S.sets.length;S.pFirst=nfc(S.pIdx)?S.fid:aF(S.pIdx);const _gb=gIO(S.pIdx,S.pFirst);S.pOrders=_gb.orders;S.pExclude=_gb.excludes;S.phase=nfc(S.pIdx)?'firstChoice':'orderSetup';render();};
+  const bbo=document.getElementById('btn-bk-order');if(bbo)bbo.onclick=()=>{
+    const curIdx=S.cur;
+    S.sets.pop();
+    S.cur=S.sets.length-1; // ★ pop後の最後のセットにcurを更新
+    S.pIdx=curIdx;
+    S.pFirst=nfc(S.pIdx)?S.fid:aF(S.pIdx);
+    const _gb=gIO(S.pIdx,S.pFirst);
+    S.pOrders=_gb.orders;S.pExclude=_gb.excludes;
+    S._orderFromBack=true;
+    S.phase='orderSetup';render();
+  };
   const bue=document.getElementById('btn-undo-end');if(bue)bue.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=null;S.iP='';S.iM='single';S.iA='cross';S.tlTieExtend=false;S.earlyEnd=false;S.phase='game';render();};
   const bue2=document.getElementById('btn-undo-early');if(bue2)bue2.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=null;if(cset.draw!==undefined)cset.draw=false;S.iP='';S.iM='single';S.iA='cross';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.phase='game';render();};
   const bbksm=document.getElementById('btn-bk-to-setover-match');if(bbksm)bbksm.onclick=()=>{S.phase='setOver';render();};
