@@ -93,7 +93,13 @@ const nfc=(i)=>(S.fmt==='best2')?(i===0||i===2):(S.fmt==='best3')?(i===0||i===4)
 function goBackFromFirst(){
   var si=S.pIdx!=null?S.pIdx:S.sets.length;
   S.pIdx=null;S.pFirst=null;S.pOrders=[[],[]];S.pExclude=[[],[]];
-  S.phase=si===0?'matchConfirm':'setOver';
+  if(si===0){
+    // matchConfirmに戻る：退避していたデータを復元
+    if(S._savedMatchIdData)S.matchIdData=JSON.parse(JSON.stringify(S._savedMatchIdData));
+    S.phase='matchConfirm';
+  } else {
+    S.phase='setOver';
+  }
   render();
 }
 function goBackFromOrder(){
@@ -101,10 +107,22 @@ function goBackFromOrder(){
   var fb=S._orderFromBack;
   var hasNfc=(S.fmt==='best2')?(si===0||si===2):(S.fmt==='best3')?(si===0||si===4):(si===0);
   S.pIdx=null;S.pFirst=null;S.pOrders=[[],[]];S.pExclude=[[],[]];S._orderFromBack=false;
-  if(fb){S.phase='setOver';}
-  else if(hasNfc){S.phase='firstChoice';}
-  else if(si===0){S.phase='matchConfirm';}
-  else{S.phase='setOver';}
+  if(fb){
+    // game戻りの場合は常にsetOver
+    S.phase='setOver';
+  } else if(hasNfc){
+    // 先攻選択が必要なセット → firstChoiceへ（pIdxを復元）
+    S.pIdx=si;
+    S.pFirst=S.fid;
+    var _g=gIO(si,S.fid);S.pOrders=_g.orders;S.pExclude=_g.excludes;
+    S.phase='firstChoice';
+  } else if(si===0){
+    // 第1セット・自動入れ替えの場合 → matchConfirmへ
+    if(S._savedMatchIdData)S.matchIdData=JSON.parse(JSON.stringify(S._savedMatchIdData));
+    S.phase='matchConfirm';
+  } else {
+    S.phase='setOver';
+  }
   render();
 }
 
@@ -207,18 +225,25 @@ function processTurnLimitSetEnd(){
 
 function processEarlyEnd(){
   const cset=cs();
-  // 失格チームのscを正しく設定してから比較
   const e0=cset.teams[0].el,e1=cset.teams[1].el;
   if(e0&&!e1){cset.teams[0].sc=0;cset.teams[1].sc=MAX;cset.wid=1;}
   else if(e1&&!e0){cset.teams[1].sc=0;cset.teams[0].sc=MAX;cset.wid=0;}
   else if(e0&&e1){cset.teams[0].sc=0;cset.teams[1].sc=0;cset.wid=null;}
   else{
     const sc0=cset.teams[0].sc,sc1=cset.teams[1].sc;
-    if(S.fmt==='round2'){cset.wid=sc0>sc1?0:sc1>sc0?1:null;cset.draw=(sc0===sc1);}
-    else{cset.wid=sc0>sc1?0:sc1>sc0?1:null;}
+    if(S.fmt==='round2'){
+      // 表裏：同点は引き分けでセット終了
+      cset.wid=sc0>sc1?0:sc1>sc0?1:null;cset.draw=(sc0===sc1);
+    } else {
+      // 2先・3先：同点ならもう1ターン延長
+      if(sc0===sc1){
+        S.endPending=false;S.tieExtend=true;render();return;
+      }
+      cset.wid=sc0>sc1?0:sc1>sc0?1:null;
+    }
   }
   S.endPending=false;S.tieExtend=false;
-  S.earlyEnd=true; // setOver経由でearlyMatchOverへ
+  S.earlyEnd=true;
   S.phase='setOver';render();
 }
 
@@ -777,7 +802,7 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
 }
 
 function doReset(){
-  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'cross',prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false};render();
+  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'cross',prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
 }
 function goNext(ni){
   S.tlTieExtend=false;
@@ -2420,6 +2445,7 @@ function bind(){
       d.teamA?d.teamA.id:'',
       d.teamB?d.teamB.id:''
     ];
+    S._savedMatchIdData=JSON.parse(JSON.stringify(d)); // matchConfirmに戻るため退避
     S.matchIdData=null;
     // 先攻後攻選択へ直行
     S.pFirst=S.fid;S.pIdx=0;
