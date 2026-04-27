@@ -793,31 +793,16 @@ async function submitResult(){
     });
   });
 
-  // ===== GASに送信（cors mode・レスポンス確認あり）=====
-  const sendFetch=async(payload)=>{
-    const body=new URLSearchParams({data:JSON.stringify(payload)});
-    const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
-    const json=await res.json();
-    if(json.status!=='ok')throw new Error(json.message||'送信エラー');
-    return json;
-  };
-
-  const CHUNK=50;
-
-  // 1) チーム結果・投擲データを並列送信
-  const sends=[sendFetch({type:'team',rows:teamRows})];
-  for(let i=0;i<personalRows.length;i+=CHUNK){
-    sends.push(sendFetch({type:'personal',rows:personalRows.slice(i,i+CHUNK)}));
-  }
-  await Promise.all(sends);
-
-  // 2) 投擲完了後に個人集計行を送信
-  const summarySends=[];
-  for(let i=0;i<summaryRows.length;i+=CHUNK){
-    summarySends.push(sendFetch({type:'personal',rows:summaryRows.slice(i,i+CHUNK)}));
-  }
-  if(summarySends.length>0)await Promise.all(summarySends);
-
+  // ===== GASに1回のPOSTで全データ送信（高速化：コールドスタート1回のみ）=====
+  const body=new URLSearchParams({data:JSON.stringify({
+    type:'all',
+    teamRows,
+    personalRows,
+    summaryRows
+  })});
+  const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
+  const json=await res.json();
+  if(json.status!=='ok')throw new Error(json.message||'送信エラー');
   return {teamRows,personalRows,summaryRows};
 }
 
