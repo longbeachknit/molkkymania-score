@@ -631,7 +631,7 @@ function sendRowViaImage(params){
   });
 }
 
-async function submitResult(){
+function buildSubmitData(){
   // 試合IDとチームNo（試合開始時に保存済み）
   const matchId=S._matchId||'';
   const teamNos=S._teamNos||['',''];
@@ -793,37 +793,52 @@ async function submitResult(){
     });
   });
 
-  // ===== GASに1回のPOSTで全データ送信（高速化：コールドスタート1回のみ）=====
-  const body=new URLSearchParams({data:JSON.stringify({
-    type:'all',
-    teamRows,
-    personalRows,
-    summaryRows
-  })});
-  const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
-  const json=await res.json();
-  if(json.status!=='ok')throw new Error(json.message||'送信エラー');
   return {teamRows,personalRows,summaryRows};
 }
 
 async function handleSubmitAndReset(){
   const btn=document.getElementById('btn-submit-reset');
   if(btn){btn.disabled=true;btn.textContent='送信中...';}
-  let result=null;
-  let errMsg=null;
+
+  // 送信データを事前に構築（画面リセット前に取得）
+  let teamRows=[],personalRows=[],summaryRows=[];
   try{
-    result=await submitResult();
+    const d=buildSubmitData();
+    teamRows=d.teamRows;personalRows=d.personalRows;summaryRows=d.summaryRows;
   }catch(e){
-    console.error(e);
-    errMsg=e.message||'送信に失敗しました';
-  }
-  // 送信確認モーダル表示
-  if(result){
-    showSubmitConfirm(result.teamRows,result.personalRows,()=>doReset());
-  } else {
-    // エラー時：再送信ボタンのみ表示
     if(btn){btn.disabled=false;btn.textContent='⚠️ 失敗 - もう一度送信する';btn.style.background='#E24B4A';}
+    return;
   }
+
+  // ① 即座に送信確認画面を表示（ユーザーは待たない）
+  showSubmitConfirm(teamRows,personalRows,()=>doReset());
+
+  // ② バックグラウンドでGASに送信（画面遷移と並行）
+  sendToGasBackground(teamRows,personalRows,summaryRows);
+}
+// バックグラウンド送信（トースト通知付き）
+async function sendToGasBackground(teamRows,personalRows,summaryRows){
+  try{
+    const body=new URLSearchParams({data:JSON.stringify({
+      type:'all',teamRows,personalRows,summaryRows
+    })});
+    const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
+    const json=await res.json();
+    if(json.status!=='ok')throw new Error(json.message||'送信エラー');
+    showToast('✅ スプレッドシートに記録されました','#1D9E75');
+  }catch(e){
+    console.error('バックグラウンド送信失敗:',e);
+    showToast('⚠️ 送信失敗：'+e.message+'　スプレッドシートを確認してください','#E24B4A',8000);
+  }
+}
+
+// 画面下部に浮かび上がるトースト通知
+function showToast(msg,bg,ms=3500){
+  const t=document.createElement('div');
+  t.style.cssText=`position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${bg};color:#fff;padding:10px 20px;border-radius:24px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.2);pointer-events:none;`;
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),ms);
 }
 
 function showSubmitConfirm(teamRows,personalRows,onClose){
@@ -841,11 +856,11 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
   overlay.innerHTML=`<div style="background:#fff;border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto;">
     <div style="text-align:center;margin-bottom:14px;">
       <div style="font-size:28px;">✅</div>
-      <div style="font-size:17px;font-weight:700;color:#111;margin-top:4px;">結果を送信しました</div>
-      <div style="font-size:12px;color:#6b7280;margin-top:2px;">個人データ ${personalRows.length}行を含む</div>
+      <div style="font-size:17px;font-weight:700;color:#111;margin-top:4px;">記録完了！</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px;">データをバックグラウンドで送信中…画面下部に通知が出ます</div>
     </div>
     ${teamHtml}
-    <button id="confirm-close" class="btn btn-green" style="width:100%;padding:14px;font-size:16px;margin-top:8px;">最初から</button>
+    <button id="confirm-close" class="btn btn-green" style="width:100%;padding:14px;font-size:16px;margin-top:8px;">次の試合へ</button>
   </div>`;
   document.body.appendChild(overlay);
   document.getElementById('confirm-close').onclick=()=>{
