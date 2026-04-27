@@ -1,5 +1,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -696,17 +697,14 @@ async function submitResult(){
     // ターンごとに先攻→後攻の順
     const fti=s.ftid; // 先攻チームID
     const sti=1-fti;
-    // 各チームの投擲インデックスを管理
-    const throwCounts=[0,0]; // チームごとの個人投擲回数カウンタ
     const perThrowCounts={}; // メンバーごとのセット内投擲回数
     const maxLen=Math.max(s.teams[0].throws.length,s.teams[1].throws.length);
-    let turn=0;
+    // ターン数：先攻・後攻が1回ずつ投げたら1ターン（1,1,2,2,3,3...）
     for(let i=0;i<maxLen;i++){
-      // 先攻→後攻の順で処理
+      const turnNum=i+1; // i番目のラウンド = ターン数
       [fti,sti].forEach(ti=>{
         const th=s.teams[ti].throws[i];
         if(!th)return;
-        turn++;
         const member=th.member||'';
         if(!perThrowCounts[ti+'-'+member])perThrowCounts[ti+'-'+member]=0;
         perThrowCounts[ti+'-'+member]++;
@@ -717,13 +715,14 @@ async function submitResult(){
           s.ftid===ti?'先攻':'後攻',         // C: 先攻後攻
           teamNos[ti],                      // D: チームNo
           S.teams[ti].name,                 // E: チーム名
-          turn,                             // F: ターン数
-          perThrowCounts[ti+'-'+member],    // G: 個人投擲回数（セット内）
-          th.time!=null?th.time:'',         // H: 投擲時間
-          th.pts,                           // I: 得点
-          th.cumul,                         // J: 合計点
-          th.multi?'複数':'単品',            // K: 単品or複数
-          aimStr                            // L: 狙い通りか
+          member,                           // F: 投擲者個人名
+          turnNum,                          // G: ターン数
+          perThrowCounts[ti+'-'+member],    // H: 個人投擲回数（セット内）
+          th.time!=null?th.time:'',         // I: 投擲時間
+          th.pts,                           // J: 得点
+          th.cumul,                         // K: 合計点
+          th.multi?'複数':'単品',            // L: 単品or複数
+          aimStr                            // M: 狙い通りか
         ]);
       });
     }
