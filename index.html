@@ -1,6 +1,5 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -210,7 +209,7 @@ function recompute(cset){
   }
 }
 
-function processTurnLimitSetEnd(){
+function processTurnLimitSetEnd(isExtended){
   const cset=cs();
   const e0=cset.teams[0].el,e1=cset.teams[1].el;
   if(e0&&!e1){cset.teams[0].sc=0;cset.teams[1].sc=MAX;cset.wid=1;}
@@ -221,6 +220,7 @@ function processTurnLimitSetEnd(){
     if(S.fmt==='round2'){cset.wid=sc0>sc1?0:sc1>sc0?1:null;cset.draw=(sc0===sc1);}
     else{cset.wid=sc0>sc1?0:sc1>sc0?1:null;}
   }
+  cset.endType=isExtended?'tlExtend':'tl'; // 呼び出し元から明示的に渡す
   S.tlTieExtend=false;S.phase='setOver';render();
 }
 
@@ -243,6 +243,7 @@ function processEarlyEnd(){
       cset.wid=sc0>sc1?0:sc1>sc0?1:null;
     }
   }
+  cset.endType='early'; // 強制終了
   S.endPending=false;S.tieExtend=false;
   S.earlyEnd=true;
   S.phase='setOver';render();
@@ -681,17 +682,41 @@ async function submitResult(){
       setScores[2],     // K: 3セット目点数
       setScores[3],     // L: 4セット目点数
       setScores[4],     // M: 5セット目点数
-      firstSets,        // N: 先攻セット数
-      secondSets,       // O: 後攻セット数
-      firstWin,         // P: 先攻セット勝利数
-      secondWin,        // Q: 後攻セット勝利数
-      firstLoss,        // R: 先攻セット敗北数
-      secondLoss        // S: 後攻セット敗北数
+      ...[0,1,2,3,4].map(si=>{
+        const s=S.sets[si];
+        if(!s)return'';
+        // 強制終了は空欄
+        if(s.endType==='early')return'';
+        // 勝利チームのみ記入
+        if(s.wid!==ti)return'';
+        // ターン制限終了（点数勝負）
+        if(s.endType==='tl')return 12;
+        if(s.endType==='tlExtend')return 13;
+        // 通常終了：勝利チームのthrowsからcumul===50になったインデックスを探す
+        const throws=s.teams[ti].throws;
+        const idx=throws.findIndex(th=>th.cumul>=50);
+        if(idx<0)return'';
+        // ターン数 = Math.ceil((idx+1)/1)（先攻後攻で1ターン）
+        // throwsは先攻・後攻交互に進むので、ターン数はfloor(index/1)+1ではなく
+        // 相手チームのthrowsと合わせて「何ターン目か」を算出
+        const fti=s.ftid;
+        const myIdx=idx; // 自チームのthrows内インデックス
+        // 自チームがmyIdx番目を投げた時点でのターン数
+        const turnNum=myIdx+1; // 1始まり
+        return turnNum;
+      }), // N〜R: 1〜5セット目上がりターン数
+      firstSets,        // S: 先攻セット数
+      secondSets,       // T: 後攻セット数
+      firstWin,         // U: 先攻セット勝利数
+      secondWin,        // V: 後攻セット勝利数
+      firstLoss,        // W: 先攻セット敗北数
+      secondLoss        // X: 後攻セット敗北数
     ];
   });
 
   // ===== 個人結果データ（投擲ごとに1行）=====
   const personalRows=[];
+  const summaryRows=[]; // 個人集計行（投擲データ送信後に別送信）
   S.sets.forEach((s,si)=>{
     // 両チームの投擲を時系列（ターン）順に並べる
     // ターンごとに先攻→後攻の順
@@ -728,6 +753,46 @@ async function submitResult(){
     }
   });
 
+  // ===== 個人別集計行を追加（各投擲データの後に1人1行）=====
+  [0,1].forEach(ti=>{
+    // このチームに出場した全メンバーを収集
+    const memberStats={};
+    S.sets.forEach((s,si)=>{
+      const isFirst=s.ftid===ti;
+      s.teams[ti].throws.forEach(th=>{
+        const m=th.member||'';
+        if(!memberStats[m])memberStats[m]={
+          sets:new Set(),firstSets:new Set(),secondSets:new Set(),
+          firstWinSets:new Set(),secondWinSets:new Set()
+        };
+        const ms=memberStats[m];
+        ms.sets.add(si);
+        if(isFirst)ms.firstSets.add(si);
+        else ms.secondSets.add(si);
+        if(isFirst&&s.wid===ti)ms.firstWinSets.add(si);
+        if(!isFirst&&s.wid===ti)ms.secondWinSets.add(si);
+      });
+    });
+    Object.entries(memberStats).forEach(([member,ms])=>{
+      const row=new Array(19).fill(''); // A〜S列（19列）
+      row[0]=matchId;           // A: 試合ID
+      row[3]=teamNos[ti];       // D: チームNo
+      row[4]=S.teams[ti].name;  // E: チーム名
+      row[5]=member;            // F: 出場者名
+      row[13]=ms.sets.size;                // N: 出場セット数
+      row[14]=ms.firstSets.size;           // O: 先攻セット出場数
+      row[15]=ms.secondSets.size;          // P: 後攻セット出場数
+      row[16]=ms.firstWinSets.size;        // Q: 先攻セット勝利数
+      row[17]=ms.secondWinSets.size;       // R: 後攻セット勝利数
+      const setTotalPts=[...ms.sets].reduce((sum,si)=>{
+        const s=S.sets[si];
+        return sum+(s?s.teams[ti].sc:0);
+      },0);
+      row[18]=setTotalPts;                 // S: 出場セット合計点
+      summaryRows.push(row); // ← personalRowsではなくsummaryRowsへ
+    });
+  });
+
   // ===== GASに送信（cors mode・レスポンス確認あり）=====
   const sendFetch=async(payload)=>{
     const body=new URLSearchParams({data:JSON.stringify(payload)});
@@ -737,19 +802,23 @@ async function submitResult(){
     return json;
   };
 
-  // 個人データは50行ずつ分割
   const CHUNK=50;
-  const personalChunks=[];
-  for(let i=0;i<personalRows.length;i+=CHUNK){
-    personalChunks.push(personalRows.slice(i,i+CHUNK));
-  }
 
+  // 1) チーム結果・投擲データを並列送信
   const sends=[sendFetch({type:'team',rows:teamRows})];
-  personalChunks.forEach(chunk=>{
-    sends.push(sendFetch({type:'personal',rows:chunk}));
-  });
+  for(let i=0;i<personalRows.length;i+=CHUNK){
+    sends.push(sendFetch({type:'personal',rows:personalRows.slice(i,i+CHUNK)}));
+  }
   await Promise.all(sends);
-  return {teamRows,personalRows};
+
+  // 2) 投擲完了後に個人集計行を送信
+  const summarySends=[];
+  for(let i=0;i<summaryRows.length;i+=CHUNK){
+    summarySends.push(sendFetch({type:'personal',rows:summaryRows.slice(i,i+CHUNK)}));
+  }
+  if(summarySends.length>0)await Promise.all(summarySends);
+
+  return {teamRows,personalRows,summaryRows};
 }
 
 async function handleSubmitAndReset(){
@@ -2531,8 +2600,8 @@ function bind(){
     if(isMiss)td.ms++;else td.ms=0;if(td.ms>=MM)td.el=true;
     S.iP='';S.iM='single';S.iA='cross';
     const active=cset.teams.filter(t=>!t.el);
-    if(!over&&!isMiss&&td.sc===MAX){cset.wid=ct;S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.phase='setOver';render();return;}
-    if(active.length===1){active[0].sc=MAX;cset.wid=active[0].id;cset.teams.forEach(t=>{if(t.el)t.sc=0;});S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.phase='setOver';render();return;}
+    if(!over&&!isMiss&&td.sc===MAX){cset.wid=ct;cset.endType='normal';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.phase='setOver';render();return;}
+    if(active.length===1){active[0].sc=MAX;cset.wid=active[0].id;cset.endType='normal';cset.teams.forEach(t=>{if(t.el)t.sc=0;});S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.phase='setOver';render();return;}
     if(active.length===0){cset.wid=null;S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.phase='setOver';render();return;}
     let next=1-ct;if(cset.teams[next].el)next=ct;cset.ctid=next;
     startTimer();
@@ -2544,9 +2613,9 @@ function bind(){
       if(S.turnLimit&&doneT>=TURN_LIMIT){
         if(!S.tlTieExtend){
           if(S.fmt!=='round2'&&sc0===sc1){S.tlTieExtend=true;render();return;}
-          processTurnLimitSetEnd();return;
+          processTurnLimitSetEnd(false);return; // 通常終了（12T）
         } else {
-          if(sc0!==sc1){processTurnLimitSetEnd();return;}
+          if(sc0!==sc1){processTurnLimitSetEnd(true);return;} // 延長終了（13T）
           render();return;
         }
       }
