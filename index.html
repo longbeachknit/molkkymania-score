@@ -303,7 +303,7 @@ async function checkAdminPw(pw){
 
 // ===== GitHub Pages からリアルタイム対戦データ取得 =====
 const GITHUB_DATA_BASE='https://raw.githubusercontent.com/longbeachknit/molkkymania-deta/main';
-const CACHE_TTL=10000; // 10秒キャッシュ
+const CACHE_TTL=0; // キャッシュなし（常に最新を取得）
 const _jsonCache={};
 
 async function fetchMatchesJson(eventCode){
@@ -389,15 +389,16 @@ async function syncAllFromGitHub(eventCode){
 
 async function syncMatchesFromGitHub(eventCode){
   const data=await fetchMatchesJson(eventCode);
-  if(!data||!data.matches)return false;
   const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
-  if(!tour){
-    console.warn('syncMatchesFromGitHub: 大会が見つかりません eventCode='+eventCode);
-    return false;
+  if(!tour)return false;
+  // 取得成功時のみ上書き、失敗時は古いデータもクリア
+  if(!data||!data.matches){
+    tour.matches=[]; // 古い組み合わせを残さない
+  } else {
+    tour.matches=data.matches;
   }
-  tour.matches=data.matches;
   saveActiveTour(tour);
-  return true;
+  return !!(data&&data.matches);
 }
 
 // ===== 組み合わせID取得（GASから） =====
