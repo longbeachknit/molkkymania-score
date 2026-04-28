@@ -754,7 +754,7 @@ async function submitResult(){
           '',                               // Q: 空欄（集計行のみ）
           '',                               // R: 空欄（集計行のみ）
           '',                               // S: 空欄（集計行のみ）
-          th.multi?1:0,                     // T: 単品1/複数0
+          th.multi?0:1,                     // T: 単品1/複数0
           aimStr==='T'?1:aimStr==='F'?0:'', // U: 狙いどおり1/0
           s.ftid===ti?1:0                   // V: 先攻1/後攻0
         ]);
