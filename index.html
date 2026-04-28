@@ -313,7 +313,7 @@ async function fetchMatchesJson(eventCode){
     return _jsonCache[eventCode].data;
   }
   try{
-    const res=await fetch(url+'?t='+now,{cache:'no-store'});
+    const res=await fetch(url+'?t='+now,{cache:'no-store',headers:{'Pragma':'no-cache','Cache-Control':'no-cache, no-store, must-revalidate'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     _jsonCache[eventCode]={ts:now,data};
@@ -333,7 +333,7 @@ async function fetchSettingsJson(eventCode){
     return _jsonCache[cacheKey].data;
   }
   try{
-    const res=await fetch(url+'?t='+now,{cache:'no-store'});
+    const res=await fetch(url+'?t='+now,{cache:'no-store',headers:{'Pragma':'no-cache','Cache-Control':'no-cache, no-store, must-revalidate'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     _jsonCache[cacheKey]={ts:now,data};
@@ -432,7 +432,7 @@ async function fetchCombinedIds(){
       if(btn){btn.disabled=false;btn.textContent='🔄 組み合わせ取得';}
       return;
     }
-    const res=await fetch(fetchUrl+'?action=getCombinedIds',{mode:'cors'});
+    const res=await fetch(fetchUrl+'?action=getCombinedIds&t='+Date.now(),{mode:'cors',cache:'no-store'});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const json=await res.json();
     const ids=(json.ids||[]).filter(v=>v&&v.trim());
@@ -442,11 +442,11 @@ async function fetchCombinedIds(){
     const parsed=ids.map(id=>parseCombinedId(id)).filter(v=>v);
     if(!parsed.length){alert('有効な組み合わせIDが見つかりませんでした。');return;}
     
-    const mode=confirm(parsed.length+'件の組み合わせIDを取得しました。\n\nOK → 既存の対戦カードを上書き\nキャンセル → 既存データに追加');
     const newMatches=parsed.map(p=>({matchId:p.matchId,combinedId:p.combinedId,tourneyCode:p.tourneyCode,teamA:p.teamA,teamB:p.teamB}));
     const targetTour=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):activeTour();
     if(targetTour){
-      if(mode)targetTour.matches=newMatches;else targetTour.matches=[...(targetTour.matches||[]),...newMatches];
+      // 常に完全上書き（古い組み合わせを残さない）
+      targetTour.matches=newMatches;
       saveActiveTour(targetTour);
     }
     render();
