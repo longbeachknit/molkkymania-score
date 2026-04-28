@@ -1,4 +1,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><!DOCTYPE html>
+
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
@@ -744,8 +746,17 @@ async function submitResult(){
           th.time!=null?th.time:'',         // I: 投擲時間
           th.pts,                           // J: 得点
           th.cumul,                         // K: 合計点
-          th.multi?'複数':'単品',            // L: 単品or複数
-          aimStr                            // M: 狙い通りか
+          '',                               // L: 空欄
+          '',                               // M: 空欄
+          '',                               // N: 空欄（集計行のみ）
+          '',                               // O: 空欄（集計行のみ）
+          '',                               // P: 空欄（集計行のみ）
+          '',                               // Q: 空欄（集計行のみ）
+          '',                               // R: 空欄（集計行のみ）
+          '',                               // S: 空欄（集計行のみ）
+          th.multi?1:0,                     // T: 単品1/複数0
+          aimStr==='T'?1:aimStr==='F'?0:'', // U: 狙いどおり1/0
+          s.ftid===ti?1:0                   // V: 先攻1/後攻0
         ]);
       });
     }
@@ -772,7 +783,7 @@ async function submitResult(){
       });
     });
     Object.entries(memberStats).forEach(([member,ms])=>{
-      const row=new Array(19).fill(''); // A〜S列（19列）
+      const row=new Array(22).fill(''); // A〜V列（22列、T/U/V列は空欄）
       row[0]=matchId;           // A: 試合ID
       row[3]=teamNos[ti];       // D: チームNo
       row[4]=S.teams[ti].name;  // E: チーム名
