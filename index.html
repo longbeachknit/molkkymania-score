@@ -302,20 +302,25 @@ async function checkAdminPw(pw){
 
 
 // ===== GitHub Pages からリアルタイム対戦データ取得 =====
-const GITHUB_DATA_BASE='https://raw.githubusercontent.com/longbeachknit/molkkymania-deta/main';
-const CACHE_TTL=0; // キャッシュなし（常に最新を取得）
+const GITHUB_DATA_BASE='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents';
+const CACHE_TTL=20000; // 20秒キャッシュ
 const _jsonCache={};
 
 async function fetchMatchesJson(eventCode){
-  const url=GITHUB_DATA_BASE+'/'+eventCode+'.json';
   const now=Date.now();
   if(_jsonCache[eventCode]&&(now-_jsonCache[eventCode].ts)<CACHE_TTL){
     return _jsonCache[eventCode].data;
   }
   try{
-    const res=await fetch(url+'?t='+now,{cache:'no-store',headers:{'Pragma':'no-cache','Cache-Control':'no-cache, no-store, must-revalidate'}});
+    const url=GITHUB_DATA_BASE+'/'+eventCode+'.json';
+    const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
-    const data=await res.json();
+    const apiData=await res.json();
+    const b64=apiData.content.replace(/\s/g,'');
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const data=JSON.parse(new TextDecoder('utf-8').decode(bytes));
     _jsonCache[eventCode]={ts:now,data};
     return data;
   }catch(e){
@@ -326,16 +331,21 @@ async function fetchMatchesJson(eventCode){
 
 
 async function fetchSettingsJson(eventCode){
-  const url=GITHUB_DATA_BASE+'/'+eventCode+'_settings.json';
   const now=Date.now();
   const cacheKey='settings_'+eventCode;
   if(_jsonCache[cacheKey]&&(now-_jsonCache[cacheKey].ts)<CACHE_TTL){
     return _jsonCache[cacheKey].data;
   }
   try{
-    const res=await fetch(url+'?t='+now,{cache:'no-store',headers:{'Pragma':'no-cache','Cache-Control':'no-cache, no-store, must-revalidate'}});
+    const url=GITHUB_DATA_BASE+'/'+eventCode+'_settings.json';
+    const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
-    const data=await res.json();
+    const apiData=await res.json();
+    const b64=apiData.content.replace(/\s/g,'');
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const data=JSON.parse(new TextDecoder('utf-8').decode(bytes));
     _jsonCache[cacheKey]={ts:now,data};
     return data;
   }catch(e){
@@ -343,6 +353,7 @@ async function fetchSettingsJson(eventCode){
     return null;
   }
 }
+
 
 async function syncSettingsFromGitHub(eventCode){
   const data=await fetchSettingsJson(eventCode);
@@ -392,9 +403,8 @@ async function syncMatchesFromGitHub(eventCode){
   const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
   if(!tour)return false;
   // 取得成功時のみ上書き、失敗時は古いデータもクリア
-  if(!data||!data.matches){
-    tour.matches=[]; // 古い組み合わせを残さない
-  } else {
+  if(data&&data.matches){
+    // 新しいデータが取得できた時のみ上書き（失敗時は古いデータを保持）
     tour.matches=data.matches;
   }
   saveActiveTour(tour);
