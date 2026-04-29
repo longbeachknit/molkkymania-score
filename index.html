@@ -2515,8 +2515,8 @@ function bind(){
     // 試合IDとチームNoを保持（送信用）
     S._matchId=d.matchId||'';
     S._teamNos=[
-      d.teamA?d.teamA.id:'',
-      d.teamB?d.teamB.id:''
+      d.teamA?String(d.teamA.id).padStart(3,'0'):'',
+      d.teamB?String(d.teamB.id).padStart(3,'0'):''
     ];
     S._savedMatchIdData=JSON.parse(JSON.stringify(d)); // matchConfirmに戻るため退避
     S.matchIdData=null;
