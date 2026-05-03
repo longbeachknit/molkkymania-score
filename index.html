@@ -619,7 +619,7 @@ function resolveMatchId(id){
 
 const GAS_URL='https://script.google.com/macros/s/AKfycbwpNH-Z0i-vTVSltUxRCjAQN5v3auD-j5JZWES8NHtiMGr3GrlMd-uzLQmxOheW35zaow/exec';
 const _viewCache={}; // 成績閲覧用キャッシュ
-let _viewState={tab:'team',eventCode:'',selectedTeam:null,selectedPerson:null,events:[],teams:[],persons:[],eventStat:null,loading:false,error:'',searchTeam:'',searchPerson:'',personMode:'event',cumulData:null,cumulLoading:false};
+let _viewState={tab:'event',eventCode:'',selectedTeam:null,selectedPerson:null,events:[],teams:[],persons:[],eventStat:null,loading:false,error:'',searchTeam:'',searchPerson:'',personMode:'event',cumulData:null,cumulLoading:false,rankMetric:'',rankType:'team',rankData:[],rankPersonMode:'event'};
 
 async function fetchViewData(action,params={}){
   const cacheKey=action+JSON.stringify(params);
@@ -960,6 +960,8 @@ function render(){
   else if(p==='matchConfirm')app.innerHTML=rMatchConfirm();
   else if(p==='courtSearch')app.innerHTML=rCourtSearch();
   else if(p==='viewPortal')app.innerHTML=rViewPortal();
+  else if(p==='viewTeamRanking')app.innerHTML=rViewRanking('team');
+  else if(p==='viewPersonRanking')app.innerHTML=rViewRanking('person');
   else if(p==='viewTeamList')app.innerHTML=rViewTeamList();
   else if(p==='viewTeamDetail')app.innerHTML=rViewTeamDetail();
   else if(p==='viewPersonList')app.innerHTML=rViewPersonList();
@@ -1668,8 +1670,8 @@ function rViewPortal(){
         </div>
         <div class="card" style="padding:14px;margin-bottom:12px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">先攻・後攻</div>
-          ${sr('先攻セット勝率',s.firstWinRate+'%','','#3b82f6',100)}
-          ${sr('後攻セット勝率',s.secondWinRate+'%','','#3b82f6',100)}
+          ${sr('先攻セット勝率',s.firstWinRate+'%','','#3b82f6',100,`${s.firstWinSets??'?'}勝 / ${s.firstSets??'?'}セット`)}
+          ${sr('後攻セット勝率',s.secondWinRate+'%','','#3b82f6',100,`${s.secondWinSets??'?'}勝 / ${s.secondSets??'?'}セット`)}
         </div>
         <div class="card" style="padding:14px;margin-bottom:12px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
@@ -1688,7 +1690,7 @@ function rViewPortal(){
     const filtered=vs.teams.filter(t=>!q||t.teamName.toLowerCase().includes(q)||t.teamNo.includes(q));
     if(!filtered.length){listHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">チームが見つかりません</div>';}
     else{
-      listHtml=filtered.map((t,i)=>`
+      listHtml='<button class="btn" id="btn-team-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((t,i)=>`
         <div class="card" style="padding:12px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;" data-vteam="${vs.teams.indexOf(t)}">
           <div>
             <div style="font-size:14px;font-weight:700;">${t.teamName}</div>
@@ -1702,7 +1704,7 @@ function rViewPortal(){
     const filtered=vs.persons.filter(p=>!q||p.name.toLowerCase().includes(q)||p.teamName.toLowerCase().includes(q));
     if(!filtered.length){listHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">選手が見つかりません</div>';}
     else{
-      listHtml=filtered.map((p,i)=>`
+      listHtml='<button class="btn" id="btn-person-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((p,i)=>`
         <div class="card" style="padding:12px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;" data-vperson="${vs.persons.indexOf(p)}">
           <div>
             <div style="font-size:14px;font-weight:700;">${p.name}</div>
@@ -1750,7 +1752,8 @@ function rViewTeamDetail(){
     return n>0&&n<=1?Math.round(n*1000)/10:Math.round(n*10)/10;
   };
 
-  const sr=(label,val,rank,color,barMax)=>{
+  // sub: 例 '2勝 / 3試合' のような補足テキスト（省略可）
+  const sr=(label,val,rank,color,barMax,sub)=>{
     const r=parseInt(rank)||0;
     const rb=r>0?`<span style="display:inline-block;background:${r===1?'#f59e0b':r<=3?'#94a3b8':'#e5e7eb'};color:${r<=3?'#fff':'#374151'};border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;">${r}位</span>`:'';
     const num=parseFloat(val)||0;
@@ -1760,6 +1763,7 @@ function rViewTeamDetail(){
         <div style="font-size:13px;color:#374151;">${label}</div>
         <div style="font-size:14px;font-weight:700;">${val??'-'}${rb}</div>
       </div>
+      ${sub?`<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:2px;">${sub}</div>`:''}
       <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#3b82f6;width:${w}%;height:6px;border-radius:4px;"></div></div>
     </div>`;
   };
@@ -1782,19 +1786,19 @@ function rViewTeamDetail(){
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">勝敗</div>
-      ${sr('試合勝率',mwr+'%',t.rankMatchWin,'#3b82f6',100)}
-      ${sr('セット勝率',swr+'%',t.rankSetWin,'#3b82f6',100)}
+      ${sr('試合勝率',mwr+'%',t.rankMatchWin,'#3b82f6',100,`${t.winMatches??'?'}勝 / ${t.totalMatches??'?'}試合`)}
+      ${sr('セット勝率',swr+'%',t.rankSetWin,'#3b82f6',100,`${(t.firstWinSets??0)+(t.secondWinSets??0)}勝 / ${t.totalSets??'?'}セット`)}
       <div style="padding:6px 0;font-size:13px;color:#6b7280;">${t.winMatches??'-'}勝 / ${t.loseMatches??'-'}敗 / ${t.totalMatches??'-'}試合</div>
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">先攻・後攻</div>
-      ${sr('先攻セット勝率',fwr+'%',t.rankFirstWin,'#3b82f6',100)}
-      ${sr('後攻セット勝率',swr2+'%',t.rankSecondWin,'#3b82f6',100)}
+      ${sr('先攻セット勝率',fwr+'%',t.rankFirstWin,'#3b82f6',100,`${t.firstWinSets??'?'}勝 / ${t.firstSets??'?'}セット`)}
+      ${sr('後攻セット勝率',swr2+'%',t.rankSecondWin,'#3b82f6',100,`${t.secondWinSets??'?'}勝 / ${t.secondSets??'?'}セット`)}
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-      ${sr('QH率',qhr+'%',t.rankQh,'#3b82f6',100)}
-      ${sr('フォルト率',fr+'%',t.rankF,'#3b82f6',100)}
+      ${sr('QH率',qhr+'%',t.rankQh,'#3b82f6',100,(parseInt(t.totalThrows)||0)>0?`${t.totalAim??'?'}投 / ${t.totalThrows??'?'}投`:'')}
+      ${sr('フォルト率',fr+'%',t.rankF,'#3b82f6',100,(parseInt(t.totalThrows)||0)>0?`${t.totalFault??'?'}投 / ${t.totalThrows??'?'}投`:'')}
       ${sr('上がりターン平均',t.agariAvg,t.rankAgari,'#3b82f6',12)}
       ${sr('セット点数平均',t.setPtsAvg,t.rankSetPts,'#3b82f6',50)}
       ${sr('平均ブレーク本数',t.breakAvg,t.rankBreak,'#3b82f6',12)}
@@ -1832,7 +1836,7 @@ function rViewPersonDetail(){
   // 表示するデータを切り替え
   const d=mode==='cumul'&&cd?cd:p;
 
-  const sr=(label,val,rank,color,barMax)=>{
+  const sr=(label,val,rank,color,barMax,sub)=>{
     const r=parseInt(rank)||0;
     const rb=r>0?`<span style="display:inline-block;background:${r===1?'#f59e0b':r<=3?'#94a3b8':'#e5e7eb'};color:${r<=3?'#fff':'#374151'};border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;">${r}位</span>`:'';
     const num=parseFloat(val)||0;
@@ -1842,6 +1846,7 @@ function rViewPersonDetail(){
         <div style="font-size:13px;color:#374151;">${label}</div>
         <div style="font-size:14px;font-weight:700;">${val??'-'}${rb}</div>
       </div>
+      ${sub?`<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:2px;">${sub}</div>`:''}
       <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#3b82f6;width:${w}%;height:6px;border-radius:4px;"></div></div>
     </div>`;
   };
@@ -1878,19 +1883,19 @@ function rViewPersonDetail(){
     </div>`:''}
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">勝敗</div>
-      ${sr('試合勝率',mwr+'%',d.rankMatchWin,'#3b82f6',100)}
-      ${sr('セット勝率',swr+'%',d.rankSetWin,'#3b82f6',100)}
-      <div style="padding:6px 0;font-size:13px;color:#6b7280;">${d.winMatches}勝 / ${d.loseMatches}敗 / ${d.totalMatches}試合</div>
+      ${sr('試合勝率',mwr+'%',d.rankMatchWin,'#3b82f6',100,`${d.winMatches??'?'}勝 / ${d.totalMatches??'?'}試合`)}
+      ${sr('セット勝率',swr+'%',d.rankSetWin,'#3b82f6',100,`${d.setWin??'?'}勝 / ${d.totalSets??'?'}セット`)}
+      <div style="padding:6px 0;font-size:13px;color:#6b7280;">${d.winMatches??'-'}勝 / ${d.loseMatches??'-'}敗 / ${d.totalMatches??'-'}試合</div>
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">先攻・後攻</div>
-      ${sr('先攻セット勝率',fwr+'%',d.rankFirstWin,'#3b82f6',100)}
-      ${sr('後攻セット勝率',swr2+'%',d.rankSecondWin,'#3b82f6',100)}
+      ${sr('先攻セット勝率',fwr+'%',d.rankFirstWin,'#3b82f6',100,`${d.firstWinSets??'?'}勝 / ${d.firstSets??'?'}セット`)}
+      ${sr('後攻セット勝率',swr2+'%',d.rankSecondWin,'#3b82f6',100,`${d.secondWinSets??'?'}勝 / ${d.secondSets??'?'}セット`)}
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-      ${sr('QH率',qhr+'%',d.rankQh,'#3b82f6',100)}
-      ${sr('フォルト率',fr+'%',d.rankF,'#3b82f6',100)}
+      ${sr('QH率',qhr+'%',d.rankQh,'#3b82f6',100,(parseInt(d.totalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.totalThrows??'?'}投`:'')}
+      ${sr('フォルト率',fr+'%',d.rankF,'#3b82f6',100,(parseInt(d.totalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.totalThrows??'?'}投`:'')}
       ${sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#3b82f6',12)}
       ${sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#3b82f6',12)}
       ${sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#3b82f6',12)}
@@ -1905,6 +1910,93 @@ function rViewPersonDetail(){
     </div>`:''}
   </div>`;
 }
+
+
+// ===== ランキング画面 =====
+const TEAM_METRICS=[
+  {key:'matchWinRate', label:'試合勝率',     unit:'%', asc:false},
+  {key:'setWinRate',   label:'セット勝率',   unit:'%', asc:false},
+  {key:'firstWinRate', label:'先攻セット勝率',unit:'%', asc:false},
+  {key:'secondWinRate',label:'後攻セット勝率',unit:'%', asc:false},
+  {key:'qhRate',       label:'QH率',        unit:'%', asc:false},
+  {key:'fRate',        label:'フォルト率',   unit:'%', asc:true},
+  {key:'agariAvg',     label:'上がりターン平均',unit:'', asc:true},
+  {key:'setPtsAvg',    label:'セット点数平均',unit:'', asc:false},
+  {key:'breakAvg',     label:'平均ブレーク本数',unit:'', asc:false},
+  {key:'throwPtsAvg',  label:'平均投擲得点', unit:'', asc:false},
+  {key:'throwTimeAvg', label:'平均投擲時間(秒)',unit:'', asc:true},
+];
+const PERSON_METRICS=[
+  {key:'matchWinRate', label:'試合勝率',     unit:'%', asc:false},
+  {key:'setWinRate',   label:'セット勝率',   unit:'%', asc:false},
+  {key:'firstWinRate', label:'先攻セット勝率',unit:'%', asc:false},
+  {key:'secondWinRate',label:'後攻セット勝率',unit:'%', asc:false},
+  {key:'qhRate',       label:'QH率',        unit:'%', asc:false},
+  {key:'fRate',        label:'フォルト率',   unit:'%', asc:true},
+  {key:'breakAvg',     label:'平均ブレーク本数',unit:'', asc:false},
+  {key:'throwPtsAvg',  label:'平均投擲得点', unit:'', asc:false},
+  {key:'s1Avg',        label:'後攻1投目平均', unit:'', asc:false},
+  {key:'throwTimeAvg', label:'平均投擲時間(秒)',unit:'', asc:true},
+];
+
+function rViewRanking(type){
+  const vs=_viewState;
+  const metrics=type==='team'?TEAM_METRICS:PERSON_METRICS;
+  const selMetric=vs.rankMetric||'';
+  const m=metrics.find(x=>x.key===selMetric)||metrics[0];
+  const rankPersonMode=vs.rankPersonMode||'event';
+
+  // モード切り替えタブ（個人のみ）
+  const modeTabs=type==='person'?`
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button class="btn ${rankPersonMode==='event'?'btn-blue':'btn-gray'} btn-sm" id="vrpm-event" style="flex:1;">大会ごと</button>
+      <button class="btn ${rankPersonMode==='cumul'?'btn-blue':'btn-gray'} btn-sm" id="vrpm-cumul" style="flex:1;">通算</button>
+    </div>`:'';
+
+  let bodyHtml='';
+  if(vs.loading){
+    bodyHtml='<div style="text-align:center;padding:48px;color:#6b7280;"><div style="font-size:24px;">⏳</div><div>読み込み中...</div></div>';
+  } else if(vs.rankData.length){
+    bodyHtml=vs.rankData.map((d,i)=>{
+      const val=parseFloat(d.value)||0;
+      const r=parseInt(d.rank)||i+1;
+      const label=type==='team'?d.teamName:d.name;
+      const sub=type==='team'?`No.${d.teamNo}`:(rankPersonMode==='cumul'?'通算':d.teamName||'');
+      const color=r===1?'#f59e0b':r===2?'#94a3b8':r===3?'#b45309':'#6b7280';
+      const dataAttr=type==='team'?`data-rank-team="${i}"`:rankPersonMode==='cumul'?`data-rank-cumul="${d.name}"`:`data-rank-person="${i}"`;
+      return`<div class="card" style="padding:10px 14px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:10px;" ${dataAttr}>
+        <div style="font-size:18px;font-weight:800;color:${color};min-width:28px;">${r}</div>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:700;">${label}</div>
+          <div style="font-size:12px;color:#9ca3af;">${sub}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="font-size:16px;font-weight:700;">${val}${m.unit}</div>
+          <div style="color:#9ca3af;">›</div>
+        </div>
+      </div>`;
+    }).join('');
+  } else if(!vs.loading){
+    bodyHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">指標を選択してください</div>';
+  }
+
+  const metricBtns=metrics.map(mx=>`<button class="btn ${selMetric&&mx.key===selMetric?'btn-blue':'btn-gray'} btn-xs" data-metric="${mx.key}" style="margin:3px;padding:5px 10px;font-size:12px;">${mx.label}</button>`).join('');
+
+  return`<div style="padding:8px 0 4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+      <button class="btn btn-gray btn-sm" id="btn-bk-ranking">← 戻る</button>
+      <div style="font-size:16px;font-weight:700;">🏅 ${type==='team'?'チーム':'個人'}ランキング</div>
+    </div>
+    ${modeTabs}
+    <div class="card" style="padding:12px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#6b7280;margin-bottom:8px;">指標を選択（タップで読み込み）</div>
+      <div style="display:flex;flex-wrap:wrap;">${metricBtns}</div>
+    </div>
+    ${vs.rankMetric?`<div style="font-size:14px;font-weight:600;color:#374151;margin-bottom:8px;">【${m.label}】ランキング</div>`:''}
+    ${bodyHtml}
+  </div>`;
+}
+
 
 function rViewTeamList(){return rViewPortal();}
 function rViewPersonList(){return rViewPortal();}
@@ -2734,6 +2826,101 @@ function bind(){
 
   const bbkvd=document.getElementById('btn-bk-view-detail');
   if(bbkvd)bbkvd.onclick=()=>{_viewState.selectedTeam=null;_viewState.selectedPerson=null;_viewState.personMode='event';_viewState.cumulData=null;S.phase='viewPortal';render();};
+
+  // ランキングボタン（画面に飛ぶだけ、データは指標選択時に取得）
+  const btnTR=document.getElementById('btn-team-ranking');
+  if(btnTR)btnTR.onclick=()=>{
+    _viewState.rankType='team';_viewState.rankMetric='';
+    _viewState.rankData=[];S.phase='viewTeamRanking';render();
+  };
+  const btnPR=document.getElementById('btn-person-ranking');
+  if(btnPR)btnPR.onclick=()=>{
+    _viewState.rankType='person';_viewState.rankMetric='';
+    _viewState.rankData=[];_viewState.rankPersonMode='event';
+    S.phase='viewPersonRanking';render();
+  };
+
+  // ランキング戻るボタン
+  const btnBR=document.getElementById('btn-bk-ranking');
+  if(btnBR)btnBR.onclick=()=>{S.phase='viewPortal';render();};
+
+  // 個人ランキングモード切り替え（大会ごと/通算）
+  const vrpmE=document.getElementById('vrpm-event');
+  if(vrpmE)vrpmE.onclick=()=>{
+    _viewState.rankPersonMode='event';_viewState.rankMetric='';_viewState.rankData=[];render();
+  };
+  const vrpmC=document.getElementById('vrpm-cumul');
+  if(vrpmC)vrpmC.onclick=()=>{
+    _viewState.rankPersonMode='cumul';_viewState.rankMetric='';_viewState.rankData=[];render();
+  };
+
+  // ランキング→チーム詳細
+  document.querySelectorAll('[data-rank-team]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const idx=parseInt(btn.dataset.rankTeam);
+      const tm=_viewState.rankData[idx];
+      if(!tm)return;
+      const cacheKey='getTeamDetail'+JSON.stringify({eventCode:_viewState.eventCode,teamNo:tm.teamNo});
+      delete _viewCache[cacheKey];
+      _viewState.loading=true;S.phase='viewTeamDetail';render();
+      const d=await fetchViewData('getTeamDetail',{eventCode:_viewState.eventCode,teamNo:tm.teamNo});
+      _viewState.selectedTeam=d&&d.team?d.team:tm;
+      _viewState.loading=false;render();
+    });
+  });
+
+  // ランキング→個人詳細（大会ごと）
+  document.querySelectorAll('[data-rank-person]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const idx=parseInt(btn.dataset.rankPerson);
+      const p=_viewState.rankData[idx];
+      if(!p)return;
+      const cacheKey='getPersonDetail'+JSON.stringify({eventCode:_viewState.eventCode,name:p.name});
+      delete _viewCache[cacheKey];
+      _viewState.loading=true;S.phase='viewPersonDetail';render();
+      const d=await fetchViewData('getPersonDetail',{eventCode:_viewState.eventCode,name:p.name});
+      _viewState.selectedPerson=d&&d.person?d.person:p;
+      _viewState.loading=false;_viewState.cumulData=null;_viewState.personMode='event';
+      render();
+    });
+  });
+
+  // ランキング→個人詳細（通算）
+  document.querySelectorAll('[data-rank-cumul]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const name=btn.dataset.rankCumul;
+      _viewState.loading=true;S.phase='viewPersonDetail';render();
+      const cd=await fetchViewData('getCumulative',{name});
+      const cumulPerson=cd&&cd.persons&&cd.persons[0]?cd.persons[0]:null;
+      _viewState.selectedPerson=cumulPerson||{name};
+      _viewState.cumulData=cumulPerson;
+      _viewState.personMode='cumul';
+      _viewState.loading=false;render();
+    });
+  });
+
+  // 指標ボタン：タップ時にその指標だけ取得
+  document.querySelectorAll('[data-metric]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const metric=btn.dataset.metric;
+      _viewState.rankMetric=metric;
+      _viewState.rankData=[];_viewState.loading=true;render();
+      const type=_viewState.rankType;
+      const mode=_viewState.rankPersonMode||'event';
+      let d=null;
+      if(type==='team'){
+        d=await fetchViewData('getTeamRanking',{eventCode:_viewState.eventCode,metric});
+        _viewState.rankData=d&&d.teams?d.teams:[];
+      } else if(mode==='cumul'){
+        d=await fetchViewData('getCumulativeRanking',{metric});
+        _viewState.rankData=d&&d.persons?d.persons:[];
+      } else {
+        d=await fetchViewData('getPersonRanking',{eventCode:_viewState.eventCode,metric});
+        _viewState.rankData=d&&d.persons?d.persons:[];
+      }
+      _viewState.loading=false;render();
+    });
+  });
 
   // 通算/大会ごと切り替え
   const vpmEvent=document.getElementById('vpm-event');
