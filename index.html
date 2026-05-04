@@ -2132,6 +2132,7 @@ function showLoadRuleTemplateModal(){
 
 
 // ===== 設定をGitHub Pagesに配信 =====
+
 async function publishSettings(tour){
   if(!tour||!tour.eventCode){
     alert('大会コードが設定されていません。基本情報を先に保存してください。');
@@ -3104,12 +3105,14 @@ function bind(){
     tour.matches.splice(parseInt(btn.dataset.idx),1);saveActiveTour(tour);render();
   }));
 
-  const bgmi=document.getElementById('btn-go-matchid');if(bgmi)bgmi.onclick=()=>{S._matchIdInput='';S._matchIdError='';S.phase='matchId';render();};
+  const bgmi=document.getElementById('btn-go-matchid');if(bgmi)bgmi.onclick=async()=>{
+    S._matchIdInput='';S._matchIdError='';S.phase='matchId';render();
+    render();
+  };
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
   const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{S.phase='matchId';render();};
   const bgcs=document.getElementById('btn-go-court-search');if(bgcs)bgcs.onclick=async()=>{
     S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;S.phase='courtSearch';render();
-    // アクティブ大会のeventCodeでGitHubから最新データ取得
     const atour=activeTour();
     if(atour&&atour.eventCode){
       await syncAllFromGitHub(atour.eventCode);
@@ -3128,11 +3131,16 @@ function bind(){
     render();
   };
   const bcss=document.getElementById('btn-cs-search');
-  if(bcss)bcss.onclick=()=>{
+  if(bcss)bcss.onclick=async()=>{
     const teamNo=(document.getElementById('cs-team-no')||{value:''}).value.trim();
     const matchCode=(document.getElementById('cs-match-code')||{value:''}).value.trim();
     if(!teamNo&&!matchCode){alert('チームNoまたは試合区分を選択・入力してください');return;}
     S._courtSearchQuery={teamNo,matchCode};
+    // GitHubから最新データを取得してから検索（試合ID検索と同じ方式）
+    const atour=activeTour();
+    if(atour&&atour.eventCode){
+      await syncAllFromGitHub(atour.eventCode);
+    }
     const searchSrc=(activeTour()||{matches:[]}).matches||[];
     const results=searchSrc.filter(m=>{
       // matchId は試合ID（4パーツ: 場所_大会_試合区分_コート）
