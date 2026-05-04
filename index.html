@@ -3097,6 +3097,29 @@ function bind(){
     if(confirm('この大会を削除しますか？')){AD.tournaments=AD.tournaments.filter(t=>t.id!==btn.dataset.id);saveAdmin(AD);render();}
   }));
 
+  // 配信停止ボタン
+  const bsb=document.getElementById('btn-stop-broadcast');
+  if(bsb)bsb.onclick=async()=>{
+    if(confirm('配信を停止しますか？\n参加者は試合開始やコート検索ができなくなります。')){
+      const ok=await publishActiveEvent('');
+      if(ok){AD.activeEventCode='';saveAdmin(AD);render();alert('✅ 配信を停止しました');}
+      else alert('❌ 停止に失敗しました。GitHub Tokenを確認してください。');
+    }
+  };
+
+  // 配信中にするボタン
+  document.querySelectorAll('.admin-set-active').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const code=btn.dataset.code;
+      if(!code){alert('大会コードが設定されていません');return;}
+      if(confirm(`大会コード「${code}」を配信中にしますか？\n参加者が試合開始・コート検索できるようになります。`)){
+        const ok=await publishActiveEvent(code);
+        if(ok){AD.activeEventCode=code;saveAdmin(AD);render();alert('✅ 配信を開始しました');}
+        else alert('❌ 配信に失敗しました。GitHub Tokenを確認してください。');
+      }
+    });
+  });
+
   // 大会編集ハンドラ
   const bps=document.getElementById('btn-publish-settings');
   if(bps)bps.onclick=()=>{
