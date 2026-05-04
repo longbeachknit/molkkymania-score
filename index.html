@@ -1428,6 +1428,30 @@ function rAdminTop(){
         </div>`).join('')}
     </div>
 
+    <div class="card" style="padding:14px;margin-bottom:12px;background:#f0f9ff;">
+      <div style="font-size:14px;font-weight:600;color:#0369a1;margin-bottom:8px;">🖨️ QRコード一括印刷</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">コートごとにQRコードをまとめて印刷できます</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:12px;color:#374151;margin-bottom:3px;">場所ID</div>
+          <input type="text" id="qr-venue-id" placeholder="例: 01" style="font-size:14px;"/>
+        </div>
+        <div>
+          <div style="font-size:12px;color:#374151;margin-bottom:3px;">大会ID</div>
+          <input type="text" id="qr-event-id" placeholder="例: 0602" style="font-size:14px;"/>
+        </div>
+        <div>
+          <div style="font-size:12px;color:#374151;margin-bottom:3px;">コート数</div>
+          <input type="number" id="qr-court-count" value="16" min="1" max="100" style="font-size:14px;"/>
+        </div>
+        <div>
+          <div style="font-size:12px;color:#374151;margin-bottom:3px;">1コートあたり試合数</div>
+          <input type="number" id="qr-match-count" value="7" min="1" max="20" style="font-size:14px;"/>
+        </div>
+      </div>
+      <button class="btn btn-blue" id="btn-qr-print" style="width:100%;padding:10px;">🖨️ 印刷プレビューを開く</button>
+    </div>
+
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
         <div style="flex:1;font-size:14px;font-weight:600;color:#111;">大会の管理</div>
@@ -2047,6 +2071,93 @@ function getEventName(eventCode){
     tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode||t.eventCode===parts[parts.length-1]);
   }
   return tour?tour.eventName:eventCode;
+}
+
+// ===== QR一括印刷 =====
+function generateQRPrintPage(venueId, eventId, courtCount, matchCount){
+  const matchLabels=['第1試合','第2試合','第3試合','第4試合','第5試合','第6試合','第7試合',
+    '第8試合','第9試合','第10試合','第11試合','第12試合','第13試合','第14試合','第15試合',
+    '第16試合','第17試合','第18試合','第19試合','第20試合'];
+
+  // コートごとのHTMLを生成
+  let pagesHtml='';
+  for(let c=1;c<=courtCount;c++){
+    const courtStr=String(c).padStart(3,'0');
+    let itemsHtml='';
+    for(let m=1;m<=matchCount;m++){
+      const matchStr=String(m).padStart(2,'0');
+      const qrText=`${venueId}_${eventId}_${matchStr}_${courtStr}`;
+      itemsHtml+=`<div class="qr-item">
+        <div class="qr-code" id="qr-${c}-${m}" data-text="${qrText}"></div>
+        <div class="qr-label">${matchLabels[m-1]||('第'+m+'試合')}</div>
+        <div class="qr-id">${qrText}</div>
+      </div>`;
+    }
+    pagesHtml+=`<div class="page-break">
+      <div class="page-header">
+        <h1>コート ${courtStr}</h1>
+        <div class="page-sub">${venueId}_${eventId} &nbsp;|&nbsp; ${matchCount}試合</div>
+      </div>
+      <div class="qr-grid">${itemsHtml}</div>
+    </div>`;
+  }
+
+  const html=`<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>QRコード印刷 - ${venueId}_${eventId}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, sans-serif; background: #fff; }
+  .no-print { padding: 16px; background: #f0f9ff; border-bottom: 1px solid #bae6fd; }
+  .no-print button { padding: 10px 24px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; margin-right: 10px; }
+  .no-print button.close { background: #6b7280; }
+  .page-break { padding: 20px; min-height: 100vh; }
+  .page-header { margin-bottom: 16px; border-bottom: 2px solid #111; padding-bottom: 8px; }
+  .page-header h1 { font-size: 24px; font-weight: 800; }
+  .page-sub { font-size: 13px; color: #6b7280; margin-top: 2px; }
+  .qr-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .qr-item { display: flex; flex-direction: column; align-items: center; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .qr-code { margin-bottom: 8px; }
+  .qr-code img { display: block; }
+  .qr-label { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .qr-id { font-size: 10px; color: #9ca3af; font-family: monospace; }
+  @media print {
+    .no-print { display: none !important; }
+    .page-break { page-break-after: always; padding: 15px; min-height: auto; }
+    .page-break:last-child { page-break-after: avoid; }
+    .qr-grid { grid-template-columns: repeat(2, 1fr); gap: 15px; }
+    .qr-item { padding: 8px; }
+    .qr-label { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="no-print">
+  <button onclick="window.print()">🖨️ 印刷する</button>
+  <button class="close" onclick="window.close()">閉じる</button>
+  <span style="font-size:13px;color:#374151;">${venueId}_${eventId} &nbsp;|&nbsp; ${courtCount}コート × ${matchCount}試合 = ${courtCount*matchCount}個のQRコード</span>
+</div>
+${pagesHtml}
+<script>
+  // QRコードを一括生成
+  document.querySelectorAll('.qr-code[data-text]').forEach(el=>{
+    new QRCode(el, {
+      text: el.dataset.text,
+      width: 160,
+      height: 160,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  });
+<\/script>
+</body>
+</html>`;
+
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
 }
 
 // ===== ルールテンプレート =====
@@ -3082,6 +3193,17 @@ function bind(){
   }
 
   const bav=document.getElementById('btn-add-venue');if(bav)bav.onclick=()=>showVenueModal(null);
+
+  // QR一括印刷
+  const bqrp=document.getElementById('btn-qr-print');
+  if(bqrp)bqrp.onclick=()=>{
+    const venueId=(document.getElementById('qr-venue-id')||{value:''}).value.trim();
+    const eventId=(document.getElementById('qr-event-id')||{value:''}).value.trim();
+    const courtCount=parseInt((document.getElementById('qr-court-count')||{value:'16'}).value)||16;
+    const matchCount=parseInt((document.getElementById('qr-match-count')||{value:'7'}).value)||7;
+    if(!venueId||!eventId){alert('場所IDと大会IDを入力してください');return;}
+    generateQRPrintPage(venueId,eventId,courtCount,matchCount);
+  };
   document.querySelectorAll('.admin-edit-venue').forEach(btn=>btn.addEventListener('click',()=>showVenueModal(parseInt(btn.dataset.idx))));
   document.querySelectorAll('.admin-del-venue').forEach(btn=>btn.addEventListener('click',()=>{
     if(confirm('この場所を削除しますか？')){AD.venues.splice(parseInt(btn.dataset.idx),1);saveAdmin(AD);render();}
@@ -3490,3 +3612,4 @@ render();
 </div>
 </body>
 </html>
+
