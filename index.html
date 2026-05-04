@@ -1431,6 +1431,10 @@ function rAdminTop(){
         <div style="flex:1;font-size:14px;font-weight:600;color:#111;">大会の管理</div>
         <button class="btn btn-green btn-xs" id="btn-add-tournament" style="padding:4px 10px;">＋ 大会を追加</button>
       </div>
+      ${ad.activeEventCode?`<div style="margin-bottom:10px;padding:8px;background:#FEF3C7;border-radius:8px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:13px;color:#92400E;">📡 配信中: <strong>${ad.activeEventCode}</strong></div>
+        <button class="btn btn-red-o btn-xs" id="btn-stop-broadcast" style="padding:3px 10px;">⏹ 停止</button>
+      </div>`:''}
       ${(ad.tournaments||[]).length===0?'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>':
         (ad.tournaments||[]).map((t,i)=>{
           const venue=(ad.venues||[]).find(v=>v.code===t.venueCode);
@@ -1447,6 +1451,9 @@ function rAdminTop(){
               <button class="btn btn-blue btn-xs admin-select-tour" data-id="${t.id}" style="padding:3px 8px;">選択</button>
               <button class="btn btn-gray btn-xs admin-edit-tour" data-id="${t.id}" style="padding:3px 8px;">編集</button>
               <button class="btn btn-red-o btn-xs admin-del-tour" data-id="${t.id}" style="padding:3px 8px;">削除</button>
+              ${ad.activeEventCode===t.eventCode?
+                '<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:99px;">📡 配信中</span>':
+                `<button class="btn btn-gray btn-xs admin-set-active" data-code="${t.eventCode}" style="padding:3px 8px;">📡 配信中にする</button>`}
             </div>
           </div>`;
         }).join('')}
@@ -2132,6 +2139,52 @@ function showLoadRuleTemplateModal(){
 
 
 // ===== 設定をGitHub Pagesに配信 =====
+
+// ===== 配信中大会の管理 =====
+async function publishActiveEvent(eventCode){
+  if(!AD.githubPat||!AD.githubPat.startsWith('ghp_')){
+    alert('GitHub Personal Access Tokenが設定されていません。');
+    return false;
+  }
+  const jsonBody=JSON.stringify({activeEventCode:eventCode},null,2);
+  const apiUrl='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/active.json';
+  try{
+    let sha=null;
+    const getRes=await fetch(apiUrl,{headers:{'Authorization':'token '+AD.githubPat},cache:'no-store'});
+    if(getRes.ok){const d=await getRes.json();sha=d.sha;}
+    const body={
+      message: eventCode?'Set active event: '+eventCode:'Stop broadcast',
+      content: btoa(unescape(encodeURIComponent(jsonBody)))
+    };
+    if(sha)body.sha=sha;
+    const res=await fetch(apiUrl,{
+      method:'PUT',
+      headers:{'Authorization':'token '+AD.githubPat,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    return res.ok;
+  }catch(e){
+    console.error('active.json配信エラー:',e);
+    return false;
+  }
+}
+
+async function fetchActiveEvent(){
+  try{
+    const url='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/active.json';
+    const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
+    if(!res.ok)return null;
+    const apiData=await res.json();
+    const b64=apiData.content.replace(/\s/g,'');
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+  }catch(e){
+    console.warn('active.json取得失敗:',e);
+    return null;
+  }
+}
 
 async function publishSettings(tour){
   if(!tour||!tour.eventCode){
@@ -3106,18 +3159,27 @@ function bind(){
   }));
 
   const bgmi=document.getElementById('btn-go-matchid');if(bgmi)bgmi.onclick=async()=>{
+    const activeData=await fetchActiveEvent();
+    if(!activeData||!activeData.activeEventCode){
+      alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+      return;
+    }
     S._matchIdInput='';S._matchIdError='';S.phase='matchId';render();
-    render();
   };
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
   const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{S.phase='matchId';render();};
   const bgcs=document.getElementById('btn-go-court-search');if(bgcs)bgcs.onclick=async()=>{
-    S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;S.phase='courtSearch';render();
-    const atour=activeTour();
-    if(atour&&atour.eventCode){
-      await syncAllFromGitHub(atour.eventCode);
-      render();
+    const activeData=await fetchActiveEvent();
+    if(!activeData||!activeData.activeEventCode){
+      alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+      return;
     }
+    // 配信中の大会コードでデータを同期
+    await syncAllFromGitHub(activeData.activeEventCode);
+    // ローカルのactiveTourも更新
+    const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===activeData.activeEventCode);
+    if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+    S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;S.phase='courtSearch';render();
   };
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
   const bcsRef=document.getElementById('btn-cs-refresh');
@@ -3136,10 +3198,13 @@ function bind(){
     const matchCode=(document.getElementById('cs-match-code')||{value:''}).value.trim();
     if(!teamNo&&!matchCode){alert('チームNoまたは試合区分を選択・入力してください');return;}
     S._courtSearchQuery={teamNo,matchCode};
-    // GitHubから最新データを取得してから検索（試合ID検索と同じ方式）
-    const atour=activeTour();
-    if(atour&&atour.eventCode){
-      await syncAllFromGitHub(atour.eventCode);
+    // GitHubから最新データを取得してから検索
+    const activeDataCs=await fetchActiveEvent().catch(()=>null);
+    if(activeDataCs&&activeDataCs.activeEventCode){
+      await syncAllFromGitHub(activeDataCs.activeEventCode);
+    } else {
+      const atour=activeTour();
+      if(atour&&atour.eventCode)await syncAllFromGitHub(atour.eventCode);
     }
     const searchSrc=(activeTour()||{matches:[]}).matches||[];
     const results=searchSrc.filter(m=>{
