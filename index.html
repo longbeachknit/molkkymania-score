@@ -3,6 +3,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Mölkky Mania OSS</title>
@@ -44,6 +45,7 @@ label.radio-card.selected{border-color:#1D9E75;background:#E1F5EE;}
 </head>
 <body>
 <div class="app" id="app"></div>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
 const C=['#1D9E75','#E24B4A'];
 const LB=['#E1F5EE','#FCEBEB'];
@@ -3272,13 +3274,45 @@ function bind(){
   // QRコードスキャン（カメラ起動）
   const bqr=document.getElementById('btn-qr-scan');
   if(bqr)bqr.onclick=async()=>{
-    const val=prompt('QRコードの内容（試合ID）を貼り付けてください:');
-    if(val&&val.trim()){
-      const qrParts=val.trim().split('_');
+    const container=document.getElementById('qr-reader-container');
+    if(!container)return;
+    container.style.display='flex';
+
+    let html5QrCode=null;
+    let scanning=true;
+
+    const stopScan=async()=>{
+      scanning=false;
+      if(html5QrCode){
+        try{await html5QrCode.stop();}catch(e){}
+        html5QrCode=null;
+      }
+      container.style.display='none';
+    };
+
+    const onScanSuccess=async(decodedText)=>{
+      if(!scanning)return;
+      await stopScan();
+      const val=decodedText.trim();
+      const qrParts=val.split('_');
       if(qrParts.length>=2)await syncAllFromGitHub(qrParts[1]);
-      const result=resolveMatchId(val.trim());
-      if(!result){S._matchIdError='試合IDの形式が正しくありません';S._matchIdInput=val.trim();render();return;}
-      S._matchIdInput=val.trim();S._matchIdError='';S.matchIdData=result;S.phase='matchConfirm';render();
+      const result=resolveMatchId(val);
+      if(!result){
+        S._matchIdError='QRコードの形式が正しくありません';
+        S._matchIdInput=val;render();return;
+      }
+      S._matchIdInput=val;S._matchIdError='';S.matchIdData=result;S.phase='matchConfirm';render();
+    };
+
+    document.getElementById('btn-qr-close').onclick=async()=>{ await stopScan(); };
+
+    try{
+      html5QrCode=new Html5Qrcode('qr-reader');
+      const config={fps:10,qrbox:{width:250,height:250}};
+      await html5QrCode.start({facingMode:'environment'},config,onScanSuccess);
+    }catch(err){
+      alert('カメラの起動に失敗しました。カメラへのアクセスを許可してください。');
+      container.style.display='none';
     }
   };
 
@@ -3435,5 +3469,24 @@ function bind(){
 }
 render();
 </script>
+  <div id="qr-reader-container" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;flex-direction:column;align-items:center;justify-content:center;">
+    <div style="width:90%;max-width:400px;background:#fff;padding:16px;border-radius:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-weight:700;font-size:16px;">QRコードをかざしてください</div>
+        <button id="btn-qr-close" class="btn btn-gray btn-sm">閉じる</button>
+      </div>
+      <div id="qr-reader" style="width:100%;"></div>
+    </div>
+  </div>
+<div id="qr-reader-container" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;flex-direction:column;align-items:center;justify-content:center;">
+  <div style="width:90%;max-width:400px;background:#fff;padding:16px;border-radius:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-weight:700;font-size:16px;">📷 QRコードをかざしてください</div>
+      <button id="btn-qr-close" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;font-size:13px;cursor:pointer;">閉じる</button>
+    </div>
+    <div id="qr-reader" style="width:100%;"></div>
+    <div id="qr-status" style="font-size:13px;color:#6b7280;text-align:center;margin-top:8px;"></div>
+  </div>
+</div>
 </body>
 </html>
