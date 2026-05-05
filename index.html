@@ -562,6 +562,7 @@ function loadAdmin(){
     venues:[{code:'01',name:'川崎'},{code:'02',name:'大阪'}],
     tournaments:[],
     activeTourId:null,
+    activeEventCode:'',
     ruleTemplates:[],
     githubPat:''
   };
@@ -1464,20 +1465,16 @@ function rAdminTop(){
       ${(ad.tournaments||[]).length===0?'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>':
         (ad.tournaments||[]).map((t,i)=>{
           const venue=(ad.venues||[]).find(v=>v.code===t.venueCode);
-          const isActive=ad.activeTourId===t.id;
           return`<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;">
             <div style="display:flex;align-items:center;gap:8px;">
               <div style="flex:1;">
-                <div style="font-size:14px;font-weight:600;color:#111;">${t.eventName||'（大会名未設定）'}
-                  ${isActive?'<span style="font-size:11px;background:#E1F5EE;color:#085041;padding:2px 6px;border-radius:99px;margin-left:6px;">使用中</span>':''}
-                </div>
+                <div style="font-size:14px;font-weight:600;color:#111;">${t.eventName||'（大会名未設定）'}</div>
                 <div style="font-size:12px;color:#6b7280;margin-top:2px;">${venue?venue.name:'場所未設定'} / コード: ${t.eventCode||'未設定'}</div>
                 <div style="font-size:12px;color:#9ca3af;">チーム${(t.teams||[]).length}件 / 対戦${(t.matches||[]).length}件</div>
               </div>
-              <button class="btn btn-blue btn-xs admin-select-tour" data-id="${t.id}" style="padding:3px 8px;">選択</button>
               <button class="btn btn-gray btn-xs admin-edit-tour" data-id="${t.id}" style="padding:3px 8px;">編集</button>
               <button class="btn btn-red-o btn-xs admin-del-tour" data-id="${t.id}" style="padding:3px 8px;">削除</button>
-              ${ad.activeEventCode===t.eventCode?
+              ${(ad.activeEventCode&&t.eventCode&&ad.activeEventCode===t.eventCode)?
                 '<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:99px;">📡 配信中</span>':
                 `<button class="btn btn-gray btn-xs admin-set-active" data-code="${t.eventCode}" style="padding:3px 8px;">📡 配信中にする</button>`}
             </div>
@@ -2404,11 +2401,11 @@ function showRoundRuleModal(idx){
     <div style="display:grid;gap:10px;">
       <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">試合区分コード</div>
         <select id="rr-match">${mOpts||`<option value="${r.matchCode}">${r.matchCode||'未設定'}</option>`}</select>
-        ${!AD.matchRules.length?`<div style="font-size:12px;color:#9ca3af;margin-top:4px;">※ 先に試合区分ルールを登録してください</div>`:''}
+        ${!(roundTour.matchRules||[]).length?`<div style="font-size:12px;color:#9ca3af;margin-top:4px;">※ 先に試合区分ルールを登録してください</div>`:''}
       </div>
       <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">トーナメント種類コード</div>
         <select id="rr-tourney">${tOpts||`<option value="${r.tourneyCode}">${r.tourneyCode||'未設定'}</option>`}</select>
-        ${!AD.tourneyRules.length?`<div style="font-size:12px;color:#9ca3af;margin-top:4px;">※ 先にトーナメント種類ルールを登録してください</div>`:''}
+        ${!(roundTour.tourneyRules||[]).length?`<div style="font-size:12px;color:#9ca3af;margin-top:4px;">※ 先にトーナメント種類ルールを登録してください</div>`:''}
       </div>
       <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">ラウンド名</div>
         <input type="text" id="rr-name" value="${r.round}" placeholder="例: 予選1回戦、決勝"/></div>
@@ -3211,9 +3208,6 @@ function bind(){
   const bat2=document.getElementById('btn-add-tournament');if(bat2)bat2.onclick=()=>{
     const t=makeTournament();AD.tournaments.push(t);saveAdmin(AD);S._editingTourId=t.id;render();
   };
-  document.querySelectorAll('.admin-select-tour').forEach(btn=>btn.addEventListener('click',()=>{
-    AD.activeTourId=btn.dataset.id;saveAdmin(AD);alert('大会を選択しました');render();
-  }));
   document.querySelectorAll('.admin-edit-tour').forEach(btn=>btn.addEventListener('click',()=>{
     S._editingTourId=btn.dataset.id;render();
   }));
@@ -3612,4 +3606,3 @@ render();
 </div>
 </body>
 </html>
-
