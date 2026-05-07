@@ -1152,8 +1152,8 @@ function rGame(){
             <span style="font-size:13px;font-weight:600;color:${ic?LT[i]:'#111'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${S.teams[i].name}</span>
             ${td.el?'<span style="font-size:11px;color:#b91c1c;background:#FEE2E2;padding:1px 6px;border-radius:99px;">失格</span>':ic?`<span style="font-size:11px;color:${LT[i]};background:${LB[i]};padding:1px 6px;border-radius:99px;border:1px solid ${LBR[i]};">投てき中</span>`:''}
           </div>
-          <div style="padding:8px 14px;text-align:center;border-bottom:1px solid #e5e7eb;">
-            <span style="font-size:64px;font-weight:700;line-height:1;color:#111;">${td.sc}</span>
+          <div style="padding:16px 14px;text-align:center;border-bottom:1px solid #e5e7eb;">
+            <span style="font-size:96px;font-weight:800;line-height:1;color:#111;">${td.sc}</span>
           </div>
           <div style="padding:8px 12px;display:flex;align-items:center;gap:6px;">
             <span style="font-size:12px;color:#6b7280;">連続ミス</span>
@@ -1182,7 +1182,7 @@ function rGame(){
           <div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-weight:600;">① 得点</div>
           <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
             ${[1,2,3,4,5,6].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#2563eb':'#e5e7eb'};background:${S.iP===String(n)?'#dbeafe':'#f9fafb'};color:${S.iP===String(n)?'#1d4ed8':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
-            <button class="btn-pts" data-pts="miss" style="font-size:16px;font-weight:800;border-radius:8px;border:2px solid ${S.iP==='miss'?'#dc2626':'#e5e7eb'};background:${S.iP==='miss'?'#fee2e2':'#f9fafb'};color:${S.iP==='miss'?'#dc2626':'#111'};cursor:pointer;grid-row:span 2;width:100%;">ミス<br><span style="font-size:20px;">0</span></button>
+            <button class="btn-pts" data-pts="miss" style="font-size:17px;font-weight:800;border-radius:8px;border:2px solid ${S.iP==='miss'?'#dc2626':'#e5e7eb'};background:${S.iP==='miss'?'#fee2e2':'#f9fafb'};color:${S.iP==='miss'?'#dc2626':'#111'};cursor:pointer;grid-row:span 2;width:100%;">ミス<br><span style="font-size:20px;">0</span></button>
             ${[7,8,9,10,11,12].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#2563eb':'#e5e7eb'};background:${S.iP===String(n)?'#dbeafe':'#f9fafb'};color:${S.iP===String(n)?'#1d4ed8':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
           </div>
         </div>
