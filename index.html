@@ -53,6 +53,36 @@ const LBR=['#9FE1CB','#F7C1C1'];
 const LT=['#085041','#A32D2D'];
 const MAX=50,RST=25,MM=3,TURN_LIMIT=12;
 
+// ===== sessionStorage 試合状態の保存・復元 =====
+const SS_KEY='molkky_match_state';
+const IN_GAME_PHASES=['matchConfirm','firstChoice','orderSetup','game','setOver'];
+
+function saveMatchState(){
+  if(!IN_GAME_PHASES.includes(S.phase))return;
+  try{
+    // throwStartTimeはDate.nowの値なので保存しない
+    const toSave={...S,throwStartTime:null};
+    sessionStorage.setItem(SS_KEY,JSON.stringify(toSave));
+  }catch(e){console.warn('sessionStorage保存失敗:',e);}
+}
+
+function loadMatchState(){
+  try{
+    const raw=sessionStorage.getItem(SS_KEY);
+    if(!raw)return null;
+    const saved=JSON.parse(raw);
+    // setsのSetオブジェクトを復元（JSON.parseでSetは配列になるため）
+    return saved;
+  }catch(e){
+    console.warn('sessionStorage読み込み失敗:',e);
+    return null;
+  }
+}
+
+function clearMatchState(){
+  try{sessionStorage.removeItem(SS_KEY);}catch(e){}
+}
+
 let S={
   phase:'setup',fmt:'best2',turnLimit:false,
   playerMin:2,playerMax:4,
@@ -571,6 +601,19 @@ function saveAdmin(data){
   try{localStorage.setItem(LS_KEY,JSON.stringify(data));}catch(e){}
 }
 let AD=loadAdmin();
+// 起動時に未完了の試合があれば復元を提案
+(function(){
+  const saved=loadMatchState();
+  if(saved&&IN_GAME_PHASES.includes(saved.phase)){
+    const resume=confirm('前回の試合が保存されています。\n続きから再開しますか？\n\n「キャンセル」を押すと新しく始めます。');
+    if(resume){
+      S=saved;
+      S.throwStartTime=null; // タイマーはリセット
+    } else {
+      clearMatchState();
+    }
+  }
+})();
 
 // 試合IDから設定を解決
 function resolveMatchId(id){
@@ -923,6 +966,7 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
 }
 
 function doReset(){
+  clearMatchState();
   S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'cross',prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
 }
 function goNext(ni){
@@ -970,6 +1014,7 @@ function render(){
   else if(p==='viewPersonList')app.innerHTML=rViewPersonList();
   else if(p==='viewPersonDetail')app.innerHTML=rViewPersonDetail();
   bind();
+  saveMatchState();
   if(p==='orderSetup')setTimeout(bindDrag,0);
 }
 
@@ -3356,8 +3401,11 @@ function bind(){
       const codeMatch=!matchCode||(mCode===matchCode.padStart(2,'0')||mCode===matchCode);
       return teamMatch&&codeMatch;
     });
-    // コート番号順にソート
+    // 試合区分ID降順（最新試合が上）→ 同じ試合区分内はコート番号順
     results.sort((a,b)=>{
+      const ma=parseInt((a.matchId.split('_')[2]||'0'));
+      const mb=parseInt((b.matchId.split('_')[2]||'0'));
+      if(mb!==ma)return mb-ma;
       const ca=parseInt((a.matchId.split('_')[3]||'0'));
       const cb=parseInt((b.matchId.split('_')[3]||'0'));
       return ca-cb;
@@ -3585,7 +3633,17 @@ function bind(){
 }
 render();
 </script>
-  <div id="qr-reader-container" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;flex-direction:column;align-items:center;justify-content:center;">
+  <script>
+// ページ離脱時の確認（試合中のみ）
+window.addEventListener('beforeunload',(e)=>{
+  if(typeof S!=='undefined'&&IN_GAME_PHASES.includes(S.phase)){
+    e.preventDefault();
+    e.returnValue='試合が進行中です。ページを離れると試合結果が失われる可能性があります。';
+    return e.returnValue;
+  }
+});
+</script>
+<div id="qr-reader-container" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;flex-direction:column;align-items:center;justify-content:center;">
     <div style="width:90%;max-width:400px;background:#fff;padding:16px;border-radius:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="font-weight:700;font-size:16px;">QRコードをかざしてください</div>
@@ -3594,6 +3652,16 @@ render();
       <div id="qr-reader" style="width:100%;"></div>
     </div>
   </div>
+<script>
+// ページ離脱時の確認（試合中のみ）
+window.addEventListener('beforeunload',(e)=>{
+  if(typeof S!=='undefined'&&IN_GAME_PHASES.includes(S.phase)){
+    e.preventDefault();
+    e.returnValue='試合が進行中です。ページを離れると試合結果が失われる可能性があります。';
+    return e.returnValue;
+  }
+});
+</script>
 <div id="qr-reader-container" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;flex-direction:column;align-items:center;justify-content:center;">
   <div style="width:90%;max-width:400px;background:#fff;padding:16px;border-radius:12px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
