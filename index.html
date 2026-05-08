@@ -2202,102 +2202,148 @@ ${pagesHtml}
 
 // ===== スコアシート画像保存 =====
 async function saveScoresheet(){
-  // 試合情報を取得
   const tour=activeTour()||{};
   const matchIdData=S.matchIdData||S._savedMatchIdData||{};
   const matchId=S._matchId||'';
-
-  // ラウンド・トーナメント名を取得
-  let matchRuleName='',tourneyRuleName='',roundRuleName='',fmtName='';
-  if(matchIdData.matchCode&&tour.matchRules){
-    const mr=tour.matchRules.find(r=>r.code===matchIdData.matchCode);
-    if(mr)matchRuleName=mr.name||mr.code||'';
-  }
-  if(matchIdData.tourneyCode&&tour.tourneyRules){
-    const tr=tour.tourneyRules.find(r=>r.code===matchIdData.tourneyCode);
-    if(tr)tourneyRuleName=tr.name||tr.code||'';
-  }
-  if(tour.roundRules&&tour.roundRules.length){
-    // 現在のラウンドを試合区分から推定
-    const rr=tour.roundRules.find(r=>r.matchCodes&&r.matchCodes.includes(matchIdData.matchCode))||tour.roundRules[0];
-    if(rr)roundRuleName=rr.name||'';
-  }
-  const fmtMap={best3:'3セットマッチ',round2:'2セット制',single:'1セット'};
-  fmtName=fmtMap[S.fmt]||S.fmt||'';
-
-  const eventName=tour.eventName||tour.eventCode||'';
+  const matchCode=matchIdData.matchCode||'';
+  const tourneyCode=matchIdData.tourneyCode||'';
   const courtCode=matchIdData.courtCode||matchId.split('_')[3]||'';
 
-  // 画像生成用のdivを作成
-  const container=document.createElement('div');
-  container.style.cssText='position:fixed;top:-99999px;left:0;background:#fff;padding:16px;font-family:-apple-system,sans-serif;min-width:600px;';
+  // 試合情報
+  const eventName=tour.eventName||tour.eventCode||'';
+  const mr=(tour.matchRules||[]).find(r=>r.code===matchCode);
+  const tr=(tour.tourneyRules||[]).find(r=>r.code===tourneyCode);
+  const rr=(tour.roundRules||[]).find(r=>r.matchCode===matchCode&&r.tourneyCode===tourneyCode)||(tour.roundRules||[])[0];
+  const matchRuleName=mr?mr.name||mr.code:'';
+  const tourneyRuleName=tr?tr.name||tr.code:'';
+  const roundRuleName=rr?rr.name||rr.code:'';
+  const fmtName=fl();
 
-  // ヘッダー情報
-  const headerHtml=`<div style="margin-bottom:12px;border-bottom:2px solid #111;padding-bottom:8px;">
-    <div style="font-size:18px;font-weight:800;color:#111;margin-bottom:4px;">📊 スコアシート</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:13px;color:#374151;">
-      ${eventName?`<span style="background:#f0f9ff;padding:2px 8px;border-radius:99px;border:1px solid #bae6fd;">🏆 ${eventName}</span>`:''}
-      ${matchRuleName?`<span style="background:#f0fdf4;padding:2px 8px;border-radius:99px;border:1px solid #bbf7d0;">⚔️ ${matchRuleName}</span>`:''}
-      ${tourneyRuleName?`<span style="background:#fdf4ff;padding:2px 8px;border-radius:99px;border:1px solid #e9d5ff;">🎯 ${tourneyRuleName}</span>`:''}
-      ${roundRuleName?`<span style="background:#fff7ed;padding:2px 8px;border-radius:99px;border:1px solid #fed7aa;">🔄 ${roundRuleName}</span>`:''}
-      ${fmtName?`<span style="background:#f8fafc;padding:2px 8px;border-radius:99px;border:1px solid #e2e8f0;">📋 ${fmtName}</span>`:''}
-      ${courtCode?`<span style="background:#f8fafc;padding:2px 8px;border-radius:99px;border:1px solid #e2e8f0;">🏟 コート${courtCode}</span>`:''}
-    </div>
-  </div>`;
+  const LB=['#DBEAFE','#FEE2E2'];
+  const LT=['#1D4ED8','#B91C1C'];
 
-  // 全セットのスコアシートを横並びに生成
-  const C=['#2563eb','#e24b4a'];
-  const setsHtml=S.sets.map((cset,si)=>{
-    const setLabel=S.fmt==='round2'?`${si+1}セット目`:`第${si+1}セット`;
-    const fti=cset.ftid,sti=1-fti;
-    const fTeam=S.teams[fti],sTeam=S.teams[sti];
-    const fTh=cset.teams[fti].throws,sTh=cset.teams[sti].throws;
-    const maxLen=Math.max(fTh.length,sTh.length);
+  // 各セットのHTMLを生成（buildSSと同じロジック）
+  function buildSetHtml(cset, si){
+    const fti=cset.ftid, sti=1-fti;
+    const fTeam=S.teams[fti], sTeam=S.teams[sti];
+    const fTh=cset.teams[fti].throws, sTh=cset.teams[sti].throws;
+    const maxT=Math.max(fTh.length,sTh.length);
+    const mbrs=[
+      (S.teams[fti].order||[]).length>0?S.teams[fti].order:S.teams[fti].members||[],
+      (S.teams[sti].order||[]).length>0?S.teams[sti].order:S.teams[sti].members||[]
+    ];
+    const nM=[Math.max(mbrs[0].length,1),Math.max(mbrs[1].length,1)];
+    const cF=nM[fti], cS=nM[sti];
 
-    // ターン行生成
+    // メンバーヘッダー
+    const mhdr=(ti)=>mbrs[ti].map(m=>`<th style="padding:2px 4px;border:1px solid #bbb;font-size:10px;background:#f8fafc;white-space:nowrap;max-width:60px;overflow:hidden;">${m}</th>`).join('');
+
+    // 得点表示
+    const prevC=[0,0];
+    function tDisp(th,ti){
+      if(!th)return'';
+      if(th.miss)return`<span style="color:#6b7280;">${prevC[ti]}</span>`;
+      if(th.over){prevC[ti]=th.cumul;return`<span style="color:#b45309;font-weight:600;">${th.cumul}</span>`;}
+      prevC[ti]=th.cumul;return`<span style="font-weight:600;">${th.cumul}</span>`;
+    }
+    function totDisp(th,ti){
+      if(!th)return'';
+      if(th.miss)return`<span style="color:#6b7280;">${prevC[ti]}</span>`;
+      if(th.over){prevC[ti]=th.cumul;return`<span style="color:#b45309;font-weight:600;">${th.cumul}</span>`;}
+      prevC[ti]=th.cumul;return`<span style="font-weight:600;">${th.cumul}</span>`;
+    }
+
     let rows='';
-    for(let t=0;t<maxLen;t++){
-      const f=fTh[t],s=sTh[t];
-      const fc=f?f.pts:'-',sc=s?s.pts:'-';
-      const fcum=f?f.cumul:'-',scum=s?s.cumul:'-';
-      const fMark=f?(f.result==='circle'?'○':f.result==='cross'?'×':'？'):'-';
-      const sMark=s?(s.result==='circle'?'○':s.result==='cross'?'×':'？'):'-';
+    for(let t=0;t<maxT;t++){
+      const thF=fTh[t],thS=sTh[t];
+      const mF=thF?t%nM[fti]:-1,mS=thS?t%nM[sti]:-1;
+      const cF2=mbrs[fti].map((_,mi)=>mi!==mF||!thF?
+        `<td style="padding:2px 4px;border:1px solid #bbb;"></td>`:
+        `<td style="padding:2px 4px;border:1px solid #bbb;font-size:12px;text-align:center;">${tDisp(thF,fti)}</td>`
+      ).join('');
+      const cS2=mbrs[sti].map((_,mi)=>mi!==mS||!thS?
+        `<td style="padding:2px 4px;border:1px solid #bbb;"></td>`:
+        `<td style="padding:2px 4px;border:1px solid #bbb;font-size:12px;text-align:center;">${tDisp(thS,sti)}</td>`
+      ).join('');
+      const totF=totDisp(thF,fti),totS=totDisp(thS,sti);
       rows+=`<tr>
-        <td style="text-align:center;padding:2px 4px;font-size:11px;color:#6b7280;border:1px solid #e5e7eb;">${t+1}</td>
-        <td style="text-align:center;padding:2px 4px;font-size:12px;border:1px solid #e5e7eb;background:${f&&f.pts===0?'#fee2e2':''};">${fc==='-'?'-':`${fc}(${fcum})`}</td>
-        <td style="text-align:center;padding:2px 4px;font-size:12px;color:${fMark==='○'?'#16a34a':fMark==='×'?'#dc2626':'#d97706'};border:1px solid #e5e7eb;">${fMark}</td>
-        <td style="text-align:center;padding:2px 4px;font-size:12px;border:1px solid #e5e7eb;background:${s&&s.pts===0?'#fee2e2':''};">${sc==='-'?'-':`${sc}(${scum})`}</td>
-        <td style="text-align:center;padding:2px 4px;font-size:12px;color:${sMark==='○'?'#16a34a':sMark==='×'?'#dc2626':'#d97706'};border:1px solid #e5e7eb;">${sMark}</td>
+        <td style="padding:2px 4px;border:1px solid #bbb;font-size:11px;color:#6b7280;text-align:center;">${t+1}</td>
+        ${cF2}<td style="padding:2px 4px;border:1px solid #bbb;border-right:2.5px solid #aaa;font-size:12px;font-weight:600;text-align:center;">${totF}</td>
+        ${cS2}<td style="padding:2px 4px;border:1px solid #bbb;font-size:12px;font-weight:600;text-align:center;">${totS}</td>
       </tr>`;
     }
 
-    const winner=cset.wid!=null?S.teams[cset.wid].name:'引き分け';
-    return`<div style="flex-shrink:0;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;min-width:180px;">
-      <div style="background:#f8fafc;padding:6px 10px;font-size:13px;font-weight:700;border-bottom:1px solid #e5e7eb;text-align:center;">${setLabel}</div>
-      <table style="border-collapse:collapse;width:100%;font-size:12px;">
+    // 失格行
+    const eF=cset.teams[fti].el,eS=cset.teams[sti].el;
+    if(eF||eS){
+      const fe=eF?`<span style="color:#E24B4A;font-weight:700;">0</span>`:`<span style="color:#1D9E75;font-weight:700;">50</span>`;
+      const se=eS?`<span style="color:#E24B4A;font-weight:700;">0</span>`:`<span style="color:#1D9E75;font-weight:700;">50</span>`;
+      rows+=`<tr style="background:#fff8f8;">
+        <td style="padding:2px 4px;border:1px solid #bbb;font-size:11px;color:#E24B4A;font-weight:700;text-align:center;">失</td>
+        ${mbrs[fti].map(()=>`<td style="padding:2px 4px;border:1px solid #bbb;background:#fff8f8;"></td>`).join('')}
+        <td style="padding:2px 4px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:#fff8f8;text-align:center;">${fe}</td>
+        ${mbrs[sti].map(()=>`<td style="padding:2px 4px;border:1px solid #bbb;background:#fff8f8;"></td>`).join('')}
+        <td style="padding:2px 4px;border:1px solid #bbb;background:#fff8f8;text-align:center;">${se}</td>
+      </tr>`;
+    }
+
+    if(!rows)rows=`<tr><td colspan="${1+cF+1+cS+1}" style="border:1px solid #bbb;padding:8px;font-size:12px;color:#9ca3af;text-align:center;">投擲なし</td></tr>`;
+
+    // 勝者表示
+    let resultHtml='';
+    if(cset.wid!=null){
+      const winner=S.teams[cset.wid];
+      const wc=LB[cset.wid];const tc=LT[cset.wid];
+      resultHtml=`<div style="padding:5px 8px;background:${wc};border-top:1px solid #bbb;text-align:center;font-size:12px;font-weight:700;color:${tc};">${winner.name} 勝利</div>`;
+    } else if(cset.draw){
+      resultHtml=`<div style="padding:5px 8px;background:#f8fafc;border-top:1px solid #bbb;text-align:center;font-size:12px;font-weight:700;color:#374151;">引き分け</div>`;
+    }
+
+    const sl=S.fmt==='round2'?`${si+1}セット目`:`第${si+1}セット`;
+    return`<div style="flex-shrink:0;border:1px solid #bbb;border-radius:6px;overflow:hidden;">
+      <div style="background:#f8fafc;padding:5px 10px;font-size:12px;font-weight:700;border-bottom:1px solid #bbb;text-align:center;">${sl}</div>
+      <table style="border-collapse:collapse;width:100%;">
         <thead>
           <tr>
-            <th style="padding:3px 4px;border:1px solid #e5e7eb;background:#f8fafc;font-size:11px;">T</th>
-            <th colspan="2" style="padding:3px 4px;border:1px solid #e5e7eb;background:${C[fti]}22;color:${C[fti]};font-size:11px;">${fTeam.name}</th>
-            <th colspan="2" style="padding:3px 4px;border:1px solid #e5e7eb;background:${C[sti]}22;color:${C[sti]};font-size:11px;">${sTeam.name}</th>
+            <th style="padding:3px 4px;border:1px solid #bbb;background:#f8fafc;"></th>
+            <th colspan="${cF}" style="padding:3px 4px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:${LB[fti]};color:${LT[fti]};font-size:12px;">${fTeam.name}</th>
+            <th style="padding:3px 4px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:${LB[fti]};color:${LT[fti]};font-size:11px;">計</th>
+            <th colspan="${cS}" style="padding:3px 4px;border:1px solid #bbb;background:${LB[sti]};color:${LT[sti]};font-size:12px;">${sTeam.name}</th>
+            <th style="padding:3px 4px;border:1px solid #bbb;background:${LB[sti]};color:${LT[sti]};font-size:11px;">計</th>
           </tr>
           <tr>
-            <th style="border:1px solid #e5e7eb;background:#f8fafc;"></th>
-            <th style="padding:2px;border:1px solid #e5e7eb;background:#f8fafc;font-size:10px;">得点(累計)</th>
-            <th style="padding:2px;border:1px solid #e5e7eb;background:#f8fafc;font-size:10px;">結果</th>
-            <th style="padding:2px;border:1px solid #e5e7eb;background:#f8fafc;font-size:10px;">得点(累計)</th>
-            <th style="padding:2px;border:1px solid #e5e7eb;background:#f8fafc;font-size:10px;">結果</th>
+            <th style="border:1px solid #bbb;background:#f8fafc;"></th>
+            ${mbrs[fti].map(m=>`<th style="padding:2px 4px;border:1px solid #bbb;font-size:10px;background:#f8fafc;white-space:nowrap;">${m}</th>`).join('')}
+            <th style="padding:2px 4px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:#f8fafc;font-size:10px;">計</th>
+            ${mbrs[sti].map(m=>`<th style="padding:2px 4px;border:1px solid #bbb;font-size:10px;background:#f8fafc;white-space:nowrap;">${m}</th>`).join('')}
+            <th style="padding:2px 4px;border:1px solid #bbb;background:#f8fafc;font-size:10px;">計</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      <div style="padding:6px 10px;background:${cset.wid!=null?C[cset.wid]+'22':'#f8fafc'};border-top:1px solid #e5e7eb;text-align:center;font-size:12px;font-weight:700;">
-        ${cset.wid!=null?`🏆 ${winner}`:'引き分け'}
-      </div>
+      ${resultHtml}
     </div>`;
-  }).join('');
+  }
 
-  container.innerHTML=`${headerHtml}<div style="display:flex;gap:12px;align-items:flex-start;overflow:visible;">${setsHtml}</div>`;
+  const setsHtml=S.sets.map((cset,si)=>buildSetHtml(cset,si)).join('');
+
+  const container=document.createElement('div');
+  container.style.cssText='position:fixed;top:-99999px;left:0;background:#fff;padding:16px;font-family:-apple-system,sans-serif;';
+
+  const infoBadge=(icon,text)=>text?`<span style="background:#f8fafc;padding:2px 8px;border-radius:99px;border:1px solid #e5e7eb;font-size:12px;">${icon} ${text}</span>`:'';
+  const headerHtml=`<div style="margin-bottom:12px;border-bottom:2px solid #111;padding-bottom:8px;">
+    <div style="font-size:16px;font-weight:800;color:#111;margin-bottom:6px;">スコアシート</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+      ${infoBadge('🏆',eventName)}
+      ${infoBadge('⚔️',matchRuleName)}
+      ${infoBadge('🎯',tourneyRuleName)}
+      ${infoBadge('🔄',roundRuleName)}
+      ${infoBadge('📋',fmtName)}
+      ${infoBadge('🏟',courtCode?'コート'+courtCode:'')}
+    </div>
+  </div>`;
+
+  container.innerHTML=`${headerHtml}<div style="display:flex;gap:10px;align-items:flex-start;">${setsHtml}</div>`;
   document.body.appendChild(container);
 
   try{
@@ -2307,26 +2353,19 @@ async function saveScoresheet(){
     ]);
     const date=new Date().toISOString().slice(0,10);
     const fileName=`scoresheet_${matchId||date}.png`;
-
-    // canvas.toBlob()で直接Blob取得（fetchを使わない）
     await new Promise((resolve,reject)=>{
       canvas.toBlob(async(blob)=>{
         if(!blob){reject(new Error('Blob生成失敗'));return;}
         try{
           const file=new File([blob],fileName,{type:'image/png'});
-          // iOS Safari: Web Share APIで写真に保存
           if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
             await navigator.share({files:[file],title:'スコアシート'});
             alert('✅ 保存しました');
           } else {
-            // PC・Android: ダウンロード
             const url=URL.createObjectURL(blob);
             const link=document.createElement('a');
-            link.href=url;
-            link.download=fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            link.href=url;link.download=fileName;
+            document.body.appendChild(link);link.click();document.body.removeChild(link);
             setTimeout(()=>URL.revokeObjectURL(url),5000);
             alert('✅ スコアシートを保存しました');
           }
@@ -2335,7 +2374,7 @@ async function saveScoresheet(){
       },'image/png');
     });
   }catch(e){
-    if(e.name==='AbortError')return; // ユーザーがキャンセル
+    if(e.name==='AbortError')return;
     alert('❌ 保存に失敗しました: '+e.message);
   }finally{
     document.body.removeChild(container);
