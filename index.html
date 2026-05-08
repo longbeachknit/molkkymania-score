@@ -1031,10 +1031,36 @@ function rSetup(){
       <button class="btn btn-gray btn-xs" id="btn-go-admin" style="font-size:12px;">⚙️ 管理者</button>
     </div>
     <div style="font-size:13px;color:#6b7280;margin-bottom:24px;">オンラインスコアリングシステム</div>
-    <button class="btn btn-blue" id="btn-go-matchid" style="width:100%;padding:16px;font-size:16px;margin-bottom:12px;">📋 試合IDで開始する</button>
-    <button class="btn btn-gray" id="btn-go-court-search" style="width:100%;padding:16px;font-size:16px;margin-bottom:12px;">🔍 対戦コートを検索</button>
-    <button class="btn btn-gray" id="btn-go-view-portal" style="width:100%;padding:16px;font-size:16px;background:#6366f1;color:#fff;border:none;margin-bottom:12px;">📊 成績を見る</button>
-    <button class="btn btn-gray" id="btn-go-score-search" style="width:100%;padding:16px;font-size:16px;background:#0891b2;color:#fff;border:none;">📋 スコアシートを検索</button>
+    <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">試合</div>
+    <button id="btn-go-matchid" style="width:100%;padding:14px 16px;font-size:15px;font-weight:700;margin-bottom:10px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;align-items:center;gap:10px;cursor:pointer;">
+      <span style="font-size:22px;">📋</span>
+      <div style="text-align:left;">
+        <div style="font-size:15px;font-weight:700;">試合IDで開始する</div>
+        <div style="font-size:11px;font-weight:400;opacity:0.8;">試合IDを入力して試合を開始</div>
+      </div>
+    </button>
+    <button id="btn-go-court-search" style="width:100%;padding:14px 16px;font-size:15px;font-weight:700;margin-bottom:20px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;align-items:center;gap:10px;cursor:pointer;">
+      <span style="font-size:22px;">🔍</span>
+      <div style="text-align:left;">
+        <div style="font-size:15px;font-weight:700;">対戦コートを検索</div>
+        <div style="font-size:11px;font-weight:400;opacity:0.8;">チームNoからコートを探す</div>
+      </div>
+    </button>
+    <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">成績・記録</div>
+    <button id="btn-go-view-portal" style="width:100%;padding:14px 16px;font-size:15px;font-weight:700;margin-bottom:10px;background:#4f46e5;color:#fff;border:none;border-radius:12px;display:flex;align-items:center;gap:10px;cursor:pointer;">
+      <span style="font-size:22px;">📊</span>
+      <div style="text-align:left;">
+        <div style="font-size:15px;font-weight:700;">成績を見る</div>
+        <div style="font-size:11px;font-weight:400;opacity:0.8;">チーム・個人の成績とランキング</div>
+      </div>
+    </button>
+    <button id="btn-go-score-search" style="width:100%;padding:14px 16px;font-size:15px;font-weight:700;background:#4f46e5;color:#fff;border:none;border-radius:12px;display:flex;align-items:center;gap:10px;cursor:pointer;">
+      <span style="font-size:22px;">📋</span>
+      <div style="text-align:left;">
+        <div style="font-size:15px;font-weight:700;">スコアシートを検索</div>
+        <div style="font-size:11px;font-weight:400;opacity:0.8;">過去の試合スコアを確認</div>
+      </div>
+    </button>
   </div>`;
 }
 
