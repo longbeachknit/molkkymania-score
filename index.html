@@ -46,7 +46,6 @@ label.radio-card.selected{border-color:#1D9E75;background:#E1F5EE;}
 </head>
 <body>
 <div class="app" id="app"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
 const C=['#1D9E75','#E24B4A'];
@@ -2236,7 +2235,7 @@ async function saveScoresheet(){
 
   // 画像生成用のdivを作成
   const container=document.createElement('div');
-  container.style.cssText='position:fixed;left:-9999px;top:0;background:#fff;padding:16px;font-family:-apple-system,sans-serif;min-width:600px;';
+  container.style.cssText='position:fixed;left:0;top:0;opacity:0;pointer-events:none;z-index:-1;background:#fff;padding:16px;font-family:-apple-system,sans-serif;min-width:600px;';
 
   // ヘッダー情報
   const headerHtml=`<div style="margin-bottom:12px;border-bottom:2px solid #111;padding-bottom:8px;">
@@ -2316,25 +2315,32 @@ async function saveScoresheet(){
     const date=new Date().toISOString().slice(0,10);
     const fileName=`scoresheet_${matchId||date}.png`;
 
-    // BlobをFileに変換
-    const dataUrl=canvas.toDataURL('image/png');
-    const res=await fetch(dataUrl);
-    const blob=await res.blob();
-    const file=new File([blob],fileName,{type:'image/png'});
-
-    // iOS Safari: Web Share API で「写真に保存」できる
-    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
-      await navigator.share({files:[file],title:'スコアシート'});
-      alert('✅ 保存しました');
-    } else {
-      // Android・PC: 直接ダウンロード
-      const link=document.createElement('a');
-      link.download=fileName;
-      link.href=URL.createObjectURL(blob);
-      link.click();
-      setTimeout(()=>URL.revokeObjectURL(link.href),5000);
-      alert('✅ スコアシートを保存しました');
-    }
+    // canvas.toBlob()で直接Blob取得（fetchを使わない）
+    await new Promise((resolve,reject)=>{
+      canvas.toBlob(async(blob)=>{
+        if(!blob){reject(new Error('Blob生成失敗'));return;}
+        try{
+          const file=new File([blob],fileName,{type:'image/png'});
+          // iOS Safari: Web Share APIで写真に保存
+          if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+            await navigator.share({files:[file],title:'スコアシート'});
+            alert('✅ 保存しました');
+          } else {
+            // PC・Android: ダウンロード
+            const url=URL.createObjectURL(blob);
+            const link=document.createElement('a');
+            link.href=url;
+            link.download=fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(()=>URL.revokeObjectURL(url),5000);
+            alert('✅ スコアシートを保存しました');
+          }
+          resolve();
+        }catch(e){reject(e);}
+      },'image/png');
+    });
   }catch(e){
     if(e.name==='AbortError')return; // ユーザーがキャンセル
     alert('❌ 保存に失敗しました: '+e.message);
