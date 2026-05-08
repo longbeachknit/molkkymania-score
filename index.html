@@ -666,6 +666,8 @@ function resolveMatchId(id){
 
 const GAS_URL='https://script.google.com/macros/s/AKfycbwpNH-Z0i-vTVSltUxRCjAQN5v3auD-j5JZWES8NHtiMGr3GrlMd-uzLQmxOheW35zaow/exec';
 const _viewCache={}; // 成績閲覧用キャッシュ
+let _scoreState={eventCode:'',teamNo:'',events:[],matchList:[],selectedMatch:null,scoreData:null,loading:false,error:''};
+
 let _viewState={tab:'event',eventCode:'',selectedTeam:null,selectedPerson:null,events:[],teams:[],persons:[],eventStat:null,loading:false,error:'',searchTeam:'',searchPerson:'',personMode:'event',cumulData:null,cumulLoading:false,rankMetric:'',rankType:'team',rankData:[],rankPersonMode:'event'};
 
 async function fetchViewData(action,params={}){
@@ -1007,6 +1009,9 @@ function render(){
   else if(p==='matchId')app.innerHTML=rMatchId();
   else if(p==='matchConfirm')app.innerHTML=rMatchConfirm();
   else if(p==='courtSearch')app.innerHTML=rCourtSearch();
+  else if(p==='scoreSearch')app.innerHTML=rScoreSearch();
+  else if(p==='scoreMatchList')app.innerHTML=rScoreMatchList();
+  else if(p==='scoreView')app.innerHTML=rScoreView();
   else if(p==='viewPortal')app.innerHTML=rViewPortal();
   else if(p==='viewTeamRanking')app.innerHTML=rViewRanking('team');
   else if(p==='viewPersonRanking')app.innerHTML=rViewRanking('person');
@@ -1028,7 +1033,8 @@ function rSetup(){
     <div style="font-size:13px;color:#6b7280;margin-bottom:24px;">オンラインスコアリングシステム</div>
     <button class="btn btn-blue" id="btn-go-matchid" style="width:100%;padding:16px;font-size:16px;margin-bottom:12px;">📋 試合IDで開始する</button>
     <button class="btn btn-gray" id="btn-go-court-search" style="width:100%;padding:16px;font-size:16px;margin-bottom:12px;">🔍 対戦コートを検索</button>
-    <button class="btn btn-gray" id="btn-go-view-portal" style="width:100%;padding:16px;font-size:16px;background:#6366f1;color:#fff;border:none;">📊 成績を見る</button>
+    <button class="btn btn-gray" id="btn-go-view-portal" style="width:100%;padding:16px;font-size:16px;background:#6366f1;color:#fff;border:none;margin-bottom:12px;">📊 成績を見る</button>
+    <button class="btn btn-gray" id="btn-go-score-search" style="width:100%;padding:16px;font-size:16px;background:#0891b2;color:#fff;border:none;">📋 スコアシートを検索</button>
   </div>`;
 }
 
@@ -2381,6 +2387,190 @@ async function saveScoresheet(){
   }
 }
 
+
+// ===== スコアシート検索 =====
+function rScoreSearch(){
+  const ss=_scoreState;
+  const evOpts=(ss.events||[]).map(e=>`<option value="${e}" ${ss.eventCode===e?'selected':''}>${getEventName(e)}</option>`).join('');
+  return`<div style="padding:8px 0 4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+      <button class="btn btn-gray btn-sm" id="btn-bk-score-search">← 戻る</button>
+      <div style="font-size:18px;font-weight:700;">📋 スコアシートを検索</div>
+    </div>
+    ${ss.loading?`<div style="text-align:center;padding:32px;color:#6b7280;"><div style="font-size:24px;">⏳</div><div>読み込み中...</div></div>`:`
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-weight:600;">大会を選択</div>
+      <select id="ss-event-select" style="font-size:14px;margin-bottom:12px;">
+        <option value="">-- 大会を選択 --</option>
+        ${evOpts}
+      </select>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-weight:600;">チームNo</div>
+      <input type="text" id="ss-team-no" value="${ss.teamNo}" placeholder="例: 073" style="font-size:14px;margin-bottom:12px;"/>
+      <button class="btn btn-blue" id="btn-ss-search" style="width:100%;padding:12px;font-size:15px;">🔍 試合一覧を検索</button>
+    </div>
+    ${ss.error?`<div style="color:#e24b4a;padding:12px;">${ss.error}</div>`:''}`}
+  </div>`;
+}
+
+function rScoreMatchList(){
+  const ss=_scoreState;
+  const matches=ss.matchList||[];
+  return`<div style="padding:8px 0 4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+      <button class="btn btn-gray btn-sm" id="btn-bk-score-list">← 戻る</button>
+      <div style="font-size:16px;font-weight:700;">試合一覧</div>
+    </div>
+    ${ss.loading?`<div style="text-align:center;padding:32px;color:#6b7280;"><div style="font-size:24px;">⏳</div><div>読み込み中...</div></div>`:
+    matches.length===0?`<div style="text-align:center;padding:32px;color:#9ca3af;">試合が見つかりませんでした</div>`:
+    matches.map((m,i)=>`
+      <div class="card" style="padding:12px;margin-bottom:8px;cursor:pointer;" data-match-idx="${i}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div style="font-size:13px;font-weight:700;color:#6366f1;">${m.matchLabel||m.matchId.split('_')[2]?'第'+parseInt(m.matchId.split('_')[2])+'試合':''} ${m.tourneyName||''}</div>
+          <span style="font-size:13px;font-weight:700;color:${m.result==='勝ち'?'#1D9E75':m.result==='負け'?'#E24B4A':'#9ca3af'};">${m.result}</span>
+        </div>
+        <div style="font-size:13px;color:#374151;">vs <strong>${m.opponentName||'相手不明'}</strong></div>
+        <div style="font-size:12px;color:#6b7280;margin-top:3px;">${m.totalSets}セット &nbsp;${m.winSets}勝${m.loseSets}敗 &nbsp;|&nbsp; コート${m.matchId.split('_')[3]||''}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function rScoreView(){
+  const ss=_scoreState;
+  if(ss.loading){
+    return`<div style="padding:8px 0 4px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+        <button class="btn btn-gray btn-sm" id="btn-bk-score-view">← 戻る</button>
+        <div style="font-size:16px;font-weight:700;">スコアシート</div>
+      </div>
+      <div style="text-align:center;padding:48px;color:#6b7280;"><div style="font-size:24px;">⏳</div><div>読み込み中...</div></div>
+    </div>`;
+  }
+  if(!ss.scoreData)return'<div style="padding:20px;">データなし</div>';
+
+  const {rows,teams,matchId}=ss.scoreData;
+  if(!rows||rows.length===0)return`<div style="padding:20px;color:#9ca3af;">投擲データがありません</div>`;
+
+  // セット数を特定
+  const setNos=[...new Set(rows.map(r=>r.setNo))].sort((a,b)=>a-b);
+
+  // チーム情報
+  const teamA=teams&&teams[0]?teams[0]:null;
+  const teamB=teams&&teams[1]?teams[1]:null;
+
+  // セットごとにスコアシートを生成
+  const setsHtml=setNos.map(setNo=>{
+    const setRows=rows.filter(r=>r.setNo==setNo);
+    // 先攻チームを特定
+    const firstRow=setRows.find(r=>r.first==1||r.first==='1');
+    const fTeamNo=firstRow?firstRow.teamNo:'';
+    const fTeam=teams?teams.find(t=>String(t.teamNo).padStart(3,'0')===String(fTeamNo).padStart(3,'0'))||teams[0]:null;
+    const sTeam=teams?teams.find(t=>t!==fTeam)||teams[1]:null;
+
+    // 先攻・後攻のメンバーリスト（登場順）
+    const getMbrs=(teamNo)=>{
+      const tRows=setRows.filter(r=>String(r.teamNo).padStart(3,'0')===String(teamNo).padStart(3,'0'));
+      const seen=new Set();const list=[];
+      tRows.forEach(r=>{if(!seen.has(r.name)){seen.add(r.name);list.push(r.name);}});
+      return list.length?list:[''];
+    };
+    const fNo=fTeam?fTeam.teamNo:'';
+    const sNo=sTeam?sTeam.teamNo:'';
+    const fMbrs=getMbrs(fNo);
+    const sMbrs=getMbrs(sNo);
+
+    // ターン数の最大値
+    const maxTurn=Math.max(...setRows.map(r=>Number(r.turnNum)||0));
+
+    // ターンごとの投擲データ
+    const fThrows={},sThrows={};
+    setRows.forEach(r=>{
+      const turn=Number(r.turnNum);
+      const key=String(r.teamNo).padStart(3,'0');
+      const isFTeam=key===String(fNo).padStart(3,'0');
+      const bucket=isFTeam?fThrows:sThrows;
+      if(!bucket[turn])bucket[turn]=[];
+      bucket[turn].push(r);
+    });
+
+    // 累計点追跡
+    const fCumul={},sCumul={};
+    const getLastCumul=(bucket,turn)=>{
+      for(let t=turn;t>=1;t--){if(bucket[t]&&bucket[t].length)return bucket[t][bucket[t].length-1].cumul;}
+      return 0;
+    };
+
+    let rows2='';
+    for(let t=1;t<=maxTurn;t++){
+      const fT=fThrows[t]||[];const sT=sThrows[t]||[];
+      // 名前で一致させて正しい列に配置
+      const dispTh=(th)=>{
+        if(!th)return`<td style="padding:2px 3px;border:1px solid #bbb;min-width:22px;"></td>`;
+        const sc=Number(th.pts);const aimed=th.aimed==1||th.aimed==='1';
+        const disp=aimed?`<svg width="18" height="18" viewBox="0 0 22 22" style="vertical-align:middle;"><circle cx="11" cy="11" r="10" fill="none" stroke="#111" stroke-width="1.5"/><text x="11" y="15.5" text-anchor="middle" font-size="10" font-family="-apple-system,sans-serif" fill="#111">${sc}</text></svg>`:(sc===0?`<span style="font-size:11px;font-weight:600;">—</span>`:`<span style="font-size:11px;font-weight:600;">${sc}</span>`);
+        return`<td style="padding:2px 3px;border:1px solid #bbb;text-align:center;">${disp}</td>`;
+      };
+      const fCols=fMbrs.map(m=>dispTh(fT.find(th=>th.name===m)));
+      const sCols=sMbrs.map(m=>dispTh(sT.find(th=>th.name===m)));
+      const fTot=fT.length?fT[fT.length-1].cumul:'';
+      const sTot=sT.length?sT[sT.length-1].cumul:'';
+      rows2+=`<tr>
+        <td style="padding:2px 3px;border:1px solid #bbb;font-size:11px;text-align:center;color:#6b7280;">${t}</td>
+        ${fCols.join('')}
+        <td style="padding:2px 3px;border:1px solid #bbb;border-right:2.5px solid #aaa;font-size:11px;font-weight:600;text-align:center;">${fTot}</td>
+        ${sCols.join('')}
+        <td style="padding:2px 3px;border:1px solid #bbb;font-size:11px;font-weight:600;text-align:center;">${sTot}</td>
+      </tr>`;
+    }
+
+    const mhdr=(mbrs)=>mbrs.map(m=>`<th style="padding:2px 2px;border:1px solid #bbb;font-size:10px;background:#f8fafc;min-width:18px;"><div style="display:flex;flex-direction:column;align-items:center;">${[...m].map(c=>`<span style="line-height:1.3;font-size:10px;">${c}</span>`).join('')}</div></th>`).join('');
+    const sl=`第${setNo}セット`;
+
+    // 勝者
+    const fPts=fTeam?Number(fTeam[`set${setNo}pts`]||0):0;
+    const sPts=sTeam?Number(sTeam[`set${setNo}pts`]||0):0;
+    const winner=fPts>sPts?fTeam:sPts>fPts?sTeam:null;
+    const resultHtml=winner?`<div style="padding:5px 8px;background:#f8fafc;border-top:1px solid #bbb;text-align:center;font-size:12px;font-weight:700;color:#111;">${winner.teamName} 勝利</div>`:`<div style="padding:5px 8px;background:#f8fafc;border-top:1px solid #bbb;text-align:center;font-size:12px;font-weight:700;color:#111;">引き分け</div>`;
+
+    return`<div style="margin-bottom:16px;border:1px solid #bbb;border-radius:6px;overflow:hidden;">
+      <div style="background:#f8fafc;padding:5px 10px;font-size:13px;font-weight:700;border-bottom:1px solid #bbb;text-align:center;">${sl}</div>
+      <div style="overflow-x:auto;">
+        <table style="border-collapse:collapse;width:100%;">
+          <thead>
+            <tr>
+              <th style="padding:3px;border:1px solid #bbb;background:#f8fafc;"></th>
+              <th colspan="${fMbrs.length}" style="padding:3px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:#f8fafc;font-size:12px;">${fTeam?fTeam.teamName:''}</th>
+              <th style="padding:3px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:#f8fafc;font-size:11px;">計</th>
+              <th colspan="${sMbrs.length}" style="padding:3px;border:1px solid #bbb;background:#f8fafc;font-size:12px;">${sTeam?sTeam.teamName:''}</th>
+              <th style="padding:3px;border:1px solid #bbb;background:#f8fafc;font-size:11px;">計</th>
+            </tr>
+            <tr>
+              <th style="border:1px solid #bbb;background:#f8fafc;"></th>
+              ${mhdr(fMbrs)}
+              <th style="padding:3px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:#f8fafc;font-size:10px;">計</th>
+              ${mhdr(sMbrs)}
+              <th style="padding:3px;border:1px solid #bbb;background:#f8fafc;font-size:10px;">計</th>
+            </tr>
+          </thead>
+          <tbody>${rows2}</tbody>
+        </table>
+      </div>
+      ${resultHtml}
+    </div>`;
+  }).join('');
+
+  const m=ss.selectedMatch;
+  return`<div style="padding:8px 0 4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-gray btn-sm" id="btn-bk-score-view">← 戻る</button>
+      <div style="font-size:16px;font-weight:700;">📋 スコアシート</div>
+    </div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:8px;">
+      ${m?m.teamName:''} &nbsp;|&nbsp; ${matchId}
+    </div>
+    ${setsHtml}
+  </div>`;
+}
+
 // ===== ルールテンプレート =====
 function showSaveRuleTemplateModal(){
   const overlay=document.createElement('div');
@@ -3414,6 +3604,63 @@ function bind(){
       if(vs2){vs2.focus();try{vs2.setSelectionRange(pos,pos);}catch(e){}}
     };
   }
+
+  // スコアシート検索
+  const bgss=document.getElementById('btn-go-score-search');
+  if(bgss)bgss.onclick=async()=>{
+    _scoreState.loading=true;_scoreState.error='';_scoreState.events=[];
+    S.phase='scoreSearch';render();
+    const evData=await fetchViewData('getEvents');
+    if(evData&&evData.events){
+      _scoreState.events=evData.events;
+      if(evData.events.length&&!_scoreState.eventCode)_scoreState.eventCode=evData.events[0];
+    }
+    _scoreState.loading=false;render();
+  };
+
+  const bbkss=document.getElementById('btn-bk-score-search');
+  if(bbkss)bbkss.onclick=()=>{S.phase='setup';render();};
+
+  const bbksl=document.getElementById('btn-bk-score-list');
+  if(bbksl)bbksl.onclick=()=>{S.phase='scoreSearch';render();};
+
+  const bbksv=document.getElementById('btn-bk-score-view');
+  if(bbksv)bbksv.onclick=()=>{S.phase='scoreMatchList';render();};
+
+  // 大会選択
+  const ssesel=document.getElementById('ss-event-select');
+  if(ssesel)ssesel.onchange=()=>{_scoreState.eventCode=ssesel.value;render();};
+
+  // 検索実行
+  const bsss=document.getElementById('btn-ss-search');
+  if(bsss)bsss.onclick=async()=>{
+    const teamNo=(document.getElementById('ss-team-no')||{value:''}).value.trim();
+    _scoreState.teamNo=teamNo;
+    _scoreState.loading=true;_scoreState.error='';
+    S.phase='scoreMatchList';render();
+    const d=await fetchViewData('getMatchList',{
+      eventCode:_scoreState.eventCode,
+      teamNo:teamNo
+    });
+    _scoreState.matchList=d&&d.matches?d.matches:[];
+    if(!_scoreState.matchList.length)_scoreState.error='該当する試合が見つかりませんでした';
+    _scoreState.loading=false;render();
+  };
+
+  // 試合選択→スコアシート表示
+  document.querySelectorAll('[data-match-idx]').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const idx=parseInt(btn.dataset.matchIdx);
+      const m=_scoreState.matchList[idx];
+      if(!m)return;
+      _scoreState.selectedMatch=m;
+      _scoreState.loading=true;_scoreState.scoreData=null;
+      S.phase='scoreView';render();
+      const d=await fetchViewData('getMatchScore',{matchId:m.matchId});
+      _scoreState.scoreData=d||null;
+      _scoreState.loading=false;render();
+    });
+  });
 
   const bav=document.getElementById('btn-add-venue');if(bav)bav.onclick=()=>showVenueModal(null);
 
