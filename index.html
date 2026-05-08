@@ -919,11 +919,6 @@ async function submitResult(){
 }
 
 async function handleSubmitAndReset(){
-  const bss=document.getElementById('btn-save-scoresheet');
-  if(bss)bss.onclick=()=>saveScoresheet();
-  const bsse=document.getElementById('btn-save-scoresheet-early');
-  if(bsse)bsse.onclick=()=>saveScoresheet();
-
   const btn=document.getElementById('btn-submit-reset');
   if(btn){btn.disabled=true;btn.textContent='送信中...';}
   let result=null;
@@ -2235,7 +2230,7 @@ async function saveScoresheet(){
 
   // 画像生成用のdivを作成
   const container=document.createElement('div');
-  container.style.cssText='position:fixed;left:0;top:0;opacity:0;pointer-events:none;z-index:-1;background:#fff;padding:16px;font-family:-apple-system,sans-serif;min-width:600px;';
+  container.style.cssText='position:fixed;top:-99999px;left:0;background:#fff;padding:16px;font-family:-apple-system,sans-serif;min-width:600px;';
 
   // ヘッダー情報
   const headerHtml=`<div style="margin-bottom:12px;border-bottom:2px solid #111;padding-bottom:8px;">
@@ -2306,12 +2301,10 @@ async function saveScoresheet(){
   document.body.appendChild(container);
 
   try{
-    const canvas=await html2canvas(container,{
-      backgroundColor:'#ffffff',
-      scale:2,
-      useCORS:true,
-      logging:false
-    });
+    const canvas=await Promise.race([
+      html2canvas(container,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false,width:container.scrollWidth,height:container.scrollHeight}),
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error('タイムアウト（10秒）')),10000))
+    ]);
     const date=new Date().toISOString().slice(0,10);
     const fileName=`scoresheet_${matchId||date}.png`;
 
@@ -3132,6 +3125,8 @@ function bind(){
   if(bee)bee.onclick=()=>{const cset=cs();if(isTurnEnd(cset)){processEarlyEnd();}else{S.endPending=true;render();}};
   const br=document.getElementById('btn-reset');if(br)br.onclick=doReset;
   const bsr=document.getElementById('btn-submit-reset');if(bsr)bsr.onclick=handleSubmitAndReset;
+  const bSS=document.getElementById('btn-save-scoresheet');if(bSS)bSS.onclick=()=>saveScoresheet();
+  const bSSe=document.getElementById('btn-save-scoresheet-early');if(bSSe)bSSe.onclick=()=>saveScoresheet();
 
   // 管理者・試合ID ハンドラ
   const bga=document.getElementById('btn-go-admin');if(bga)bga.onclick=async()=>{
