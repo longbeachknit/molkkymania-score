@@ -1266,7 +1266,8 @@ function buildSS(cset,editable,_setIdx){
   let rows='';
   for(let t=0;t<maxT;t++){
     const thF=cset.teams[fti].throws[t],thS=cset.teams[sti].throws[t];
-    const mF=thF?t%nM[fti]:-1,mS=thS?t%nM[sti]:-1;
+    const mF=thF?(mbrs[fti].indexOf(thF.member)>=0?mbrs[fti].indexOf(thF.member):t%nM[fti]):-1;
+    const mS=thS?(mbrs[sti].indexOf(thS.member)>=0?mbrs[sti].indexOf(thS.member):t%nM[sti]):-1;
     const cF2=mbrs[fti].map((_,mi)=>mi!==mF||!thF?`<td class="sc-cell" style="border:1px solid #bbb;"></td>`:`<td class="sc-cell ${editable?'editable':''}" style="border:1px solid #bbb;">${tDisp(thF,fti,t)}</td>`).join('');
     const cS2=mbrs[sti].map((_,mi)=>mi!==mS||!thS?`<td class="sc-cell" style="border:1px solid #bbb;"></td>`:`<td class="sc-cell ${editable?'editable':''}" style="border:1px solid #bbb;">${tDisp(thS,sti,t)}</td>`).join('');
     rows+=`<tr><td class="turn-col" style="border:1px solid #bbb;">${t+1}</td>${cF2}<td class="tot-cell" style="border:1px solid #bbb;border-right:2.5px solid #aaa;">${totDisp(thF,fti)}</td>${cS2}<td class="tot-cell" style="border:1px solid #bbb;">${totDisp(thS,sti)}</td></tr>`;
@@ -2261,8 +2262,8 @@ async function saveScoresheet(){
     const fTh=cset.teams[fti].throws, sTh=cset.teams[sti].throws;
     const maxT=Math.max(fTh.length,sTh.length);
     const mbrs=[
-      (S.teams[fti].order||[]).length>0?S.teams[fti].order:S.teams[fti].members||[],
-      (S.teams[sti].order||[]).length>0?S.teams[sti].order:S.teams[sti].members||[]
+      (cset.teams[fti].order||[]).length>0?cset.teams[fti].order:S.teams[fti].members||[],
+      (cset.teams[sti].order||[]).length>0?cset.teams[sti].order:S.teams[sti].members||[]
     ];
     const nM=[Math.max(mbrs[0].length,1),Math.max(mbrs[1].length,1)];
     const cF=nM[fti], cS=nM[sti];
@@ -2290,7 +2291,8 @@ async function saveScoresheet(){
     let rows='';
     for(let t=0;t<maxT;t++){
       const thF=fTh[t],thS=sTh[t];
-      const mF=thF?t%nM[fti]:-1,mS=thS?t%nM[sti]:-1;
+      const mF=thF?(mbrs[fti].indexOf(thF.member)>=0?mbrs[fti].indexOf(thF.member):t%nM[fti]):-1;
+      const mS=thS?(mbrs[sti].indexOf(thS.member)>=0?mbrs[sti].indexOf(thS.member):t%nM[sti]):-1;
       const cF2=mbrs[fti].map((_,mi)=>mi!==mF||!thF?
         `<td style="padding:2px 3px;border:1px solid #bbb;"></td>`:
         `<td style="padding:2px 3px;border:1px solid #bbb;font-size:11px;text-align:center;color:#111;">${tDisp(thF,fti)}</td>`
