@@ -96,7 +96,7 @@ let S={
   prev:null,ssIdx:0,
   endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,
   molkoutWinner:null,
-  editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,
+  editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,_ssSaveDest:null,
   throwStartTime:null,lastThrowSec:null
 };
 function fmtSec(sec){if(sec===null||sec===undefined)return'--';const m=Math.floor(sec/60),s=sec%60;return m>0?m+'分'+s+'秒':s+'秒';}
@@ -970,7 +970,7 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
 
 function doReset(){
   clearMatchState();
-  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:true,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
+  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:true,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,_ssSaveDest:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
 }
 function goNext(ni){
   S.tlTieExtend=false;
@@ -1000,6 +1000,7 @@ function render(){
   else if(p==='game')app.innerHTML=rGame();
   else if(p==='scoresheet')app.innerHTML=rSS();
   else if(p==='setOver')app.innerHTML=rSetOver();
+  else if(p==='ssSaveConfirm')app.innerHTML=rSSSaveConfirm();
   else if(p==='matchOver')app.innerHTML=rMatchOver();
   else if(p==='earlyMatchOver')app.innerHTML=rEarlyMatchOver();
   else if(p==='molkout')app.innerHTML=rMolkout();
@@ -1385,6 +1386,18 @@ function rSetOver(){
   </div>`;
 }
 
+function rSSSaveConfirm(){
+  const dest=S._ssSaveDest||'matchOver';
+  const lbl=dest==='earlyMatchOver'?'途中試合終了':'試合終了';
+  return`<div style="padding:24px 16px;max-width:400px;margin:0 auto;text-align:center;">
+    <div style="font-size:36px;margin-bottom:12px;">💾</div>
+    <div style="font-size:18px;font-weight:600;color:#111;margin-bottom:8px;">${lbl} — データのバックアップ</div>
+    <div style="font-size:14px;color:#6b7280;margin-bottom:24px;line-height:1.6;">試合データのバックアップとして<br>スコアシートを保存しますか？</div>
+    <button id="btn-ss-save-yes" class="btn btn-blue" style="width:100%;padding:14px;font-size:16px;margin-bottom:10px;">📸 保存する</button>
+    <button id="btn-ss-save-no" class="btn" style="width:100%;padding:14px;font-size:15px;color:#6b7280;">保存しないで結果へ進む</button>
+  </div>`;
+}
+
 function rMatchOver(){
   const wins=[0,0];S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});const mw=mW();
   const r2=S.fmt==='round2'?round2Stats():null;
@@ -1416,7 +1429,6 @@ function rMatchOver(){
     <button class="btn btn-yellow" id="btn-ss-match-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-match" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">← 戻る（セット終了画面）</button>
 
-    <button class="btn btn-blue" id="btn-save-scoresheet" style="width:100%;margin-bottom:10px;padding:12px;font-size:15px;">📸 スコアシートを写真に保存</button>
     <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信して最初から</button>
   </div>`;
 }
@@ -1467,7 +1479,6 @@ function rEarlyMatchOver(){
     ${needMolkout&&S.molkoutWinner==null?`<button class="btn btn-orange" id="btn-go-molkout" style="width:100%;padding:14px;font-size:15px;margin-bottom:10px;">🎯 モルックアウトへ進む</button>`:''}
     <button class="btn btn-yellow" id="btn-ss-early-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-early" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">← 戻る（セット終了画面）</button>
-    <button class="btn btn-blue" id="btn-save-scoresheet-early" style="width:100%;margin-bottom:10px;padding:12px;font-size:15px;">📸 スコアシートを写真に保存</button>
     <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信して最初から</button>
   </div>`;
 }
@@ -3409,8 +3420,15 @@ function bind(){
   if(bee)bee.onclick=()=>{const cset=cs();if(isTurnEnd(cset)){processEarlyEnd();}else{S.endPending=true;render();}};
   const br=document.getElementById('btn-reset');if(br)br.onclick=doReset;
   const bsr=document.getElementById('btn-submit-reset');if(bsr)bsr.onclick=handleSubmitAndReset;
-  const bSS=document.getElementById('btn-save-scoresheet');if(bSS)bSS.onclick=()=>saveScoresheet();
-  const bSSe=document.getElementById('btn-save-scoresheet-early');if(bSSe)bSSe.onclick=()=>saveScoresheet();
+  // ssSaveConfirm: 保存する/しない
+  const bSSyes=document.getElementById('btn-ss-save-yes');
+  if(bSSyes)bSSyes.onclick=async()=>{
+    bSSyes.disabled=true;bSSyes.textContent='保存中...';
+    await saveScoresheet();
+    S.phase=S._ssSaveDest||'matchOver';S._ssSaveDest=null;render();
+  };
+  const bSSno=document.getElementById('btn-ss-save-no');
+  if(bSSno)bSSno.onclick=()=>{S.phase=S._ssSaveDest||'matchOver';S._ssSaveDest=null;render();};
 
   // 管理者・試合ID ハンドラ
   const bga=document.getElementById('btn-go-admin');if(bga)bga.onclick=async()=>{
@@ -4135,13 +4153,14 @@ function bind(){
   const bns=document.getElementById('btn-next-set');
   if(bns)bns.onclick=()=>{S.tlTieExtend=false;S.earlyEnd=false;goNext(parseInt(bns.dataset.next));};
   const bemo=document.getElementById('btn-early-match-over');if(bemo)bemo.onclick=()=>{
-    S.earlyEnd=false;
-    if(unknownSets().length>0){S.ssIdx=0;S.afterEdit=null;S._ucFrom='earlyMatchOver';S.phase='unknownCheck';render();return;}
-    S.phase='earlyMatchOver';render();
+    S.earlyEnd=false;S._ssSaveDest='earlyMatchOver';
+    if(unknownSets().length>0){S.ssIdx=0;S.afterEdit=null;S._ucFrom='ssSaveConfirm';S.phase='unknownCheck';render();return;}
+    S.phase='ssSaveConfirm';render();
   };
   const bmo=document.getElementById('btn-match-over');if(bmo)bmo.onclick=()=>{
-    if(unknownSets().length>0){S.ssIdx=0;S.afterEdit=null;S._ucFrom='matchOver';S.phase='unknownCheck';render();return;}
-    S.phase='matchOver';render();
+    S._ssSaveDest='matchOver';
+    if(unknownSets().length>0){S.ssIdx=0;S.afterEdit=null;S._ucFrom='ssSaveConfirm';S.phase='unknownCheck';render();return;}
+    S.phase='ssSaveConfirm';render();
   };
   app.querySelectorAll('.molkout-btn').forEach(el=>{el.addEventListener('click',()=>{S.molkoutWinner=parseInt(el.dataset.id);render();});});
   const bgm=document.getElementById('btn-go-molkout');if(bgm)bgm.onclick=()=>{S.molkoutWinner=null;S.phase='molkout';render();};
