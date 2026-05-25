@@ -2261,10 +2261,22 @@ async function saveScoresheet(){
     const fTeam=S.teams[fti], sTeam=S.teams[sti];
     const fTh=cset.teams[fti].throws, sTh=cset.teams[sti].throws;
     const maxT=Math.max(fTh.length,sTh.length);
-    const mbrs=[
-      (cset.teams[fti].order||[]).length>0?cset.teams[fti].order:S.teams[fti].members||[],
-      (cset.teams[sti].order||[]).length>0?cset.teams[sti].order:S.teams[sti].members||[]
-    ];
+    // そのセットで実際に投げた人だけを列として表示（出場していない人は除外）
+    function actualMbrs(ti){
+      const thrown=[...new Set(cset.teams[ti].throws.map(th=>th.member).filter(Boolean))];
+      if(thrown.length>0){
+        // 投げ順(order)の並び順を維持しつつ、実際に投げた人だけ残す
+        const order=(cset.teams[ti].order||[]).length>0?cset.teams[ti].order:S.teams[ti].members||[];
+        const ordered=order.filter(m=>thrown.includes(m));
+        // orderに含まれていないが投げた人も末尾に追加
+        thrown.forEach(m=>{if(!ordered.includes(m))ordered.push(m);});
+        return ordered.length>0?ordered:thrown;
+      }
+      // 投擲がない場合はorderかmembersから1人
+      const order=(cset.teams[ti].order||[]).length>0?cset.teams[ti].order:S.teams[ti].members||[];
+      return order.length>0?[order[0]]:['投てき者'];
+    }
+    const mbrs=[actualMbrs(fti), actualMbrs(sti)];
     const nM=[Math.max(mbrs[0].length,1),Math.max(mbrs[1].length,1)];
     const cF=nM[fti], cS=nM[sti];
 
