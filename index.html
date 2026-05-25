@@ -2750,6 +2750,14 @@ async function fetchActiveEvent(){
   }
 }
 
+// GitHub取得失敗時はローカルのAD.activeEventCodeにフォールバック
+async function resolveActiveEventCode(){
+  const remote=await fetchActiveEvent();
+  if(remote&&remote.activeEventCode)return remote.activeEventCode;
+  // ネットワークエラー等の場合、ローカルに保存済みのコードを使用
+  return AD.activeEventCode||null;
+}
+
 async function publishSettings(tour){
   if(!tour||!tour.eventCode){
     alert('大会コードが設定されていません。基本情報を先に保存してください。');
@@ -2981,7 +2989,7 @@ function rCourtSearch(){
               <div style="font-size:11px;color:#9ca3af;margin-top:2px;">試合ID: ${r.matchId}</div>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;border-radius:8px;padding:10px;">
+          <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:10px;">
             <div style="flex:1;text-align:center;">
               <div style="font-size:14px;font-weight:700;color:#1D9E75;">${teamAName}</div>
               <div style="font-size:11px;color:#9ca3af;">No.${r.teamA}</div>
@@ -2992,6 +3000,7 @@ function rCourtSearch(){
               <div style="font-size:11px;color:#9ca3af;">No.${r.teamB}</div>
             </div>
           </div>
+          <button class="btn btn-green cs-start-btn" data-matchid="${r.matchId}" style="width:100%;padding:12px;font-size:15px;font-weight:700;">この試合を開始する →</button>
         </div>`;
       }).join('');
     }
@@ -3813,29 +3822,43 @@ function bind(){
   }));
 
   const bgmi=document.getElementById('btn-go-matchid');if(bgmi)bgmi.onclick=async()=>{
-    const activeData=await fetchActiveEvent();
-    if(!activeData||!activeData.activeEventCode){
+    const eventCode=await resolveActiveEventCode();
+    if(!eventCode){
       alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
       return;
     }
     S._matchIdInput='';S._matchIdError='';S.phase='matchId';render();
   };
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
-  const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{S.phase='matchId';render();};
+  const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{S.phase=S._matchConfirmFrom||'matchId';S._matchConfirmFrom=null;render();};
   const bgcs=document.getElementById('btn-go-court-search');if(bgcs)bgcs.onclick=async()=>{
-    const activeData=await fetchActiveEvent();
-    if(!activeData||!activeData.activeEventCode){
+    const eventCode=await resolveActiveEventCode();
+    if(!eventCode){
       alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
       return;
     }
-    // 配信中の大会コードでデータを同期
-    await syncAllFromGitHub(activeData.activeEventCode);
+    // 配信中の大会コードでデータを同期（失敗してもローカルデータで続行）
+    await syncAllFromGitHub(eventCode);
     // ローカルのactiveTourも更新
-    const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===activeData.activeEventCode);
+    const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
     S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;S.phase='courtSearch';render();
   };
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
+  document.querySelectorAll('.cs-start-btn').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const mid=btn.dataset.matchid;
+      if(!mid)return;
+      btn.disabled=true;btn.textContent='取得中...';
+      const parts=mid.split('_');
+      if(parts.length>=2)await syncAllFromGitHub(parts[1]);
+      const result=resolveMatchId(mid);
+      if(!result){alert('試合データの取得に失敗しました。もう一度お試しください。');btn.disabled=false;btn.textContent='この試合を開始する →';return;}
+      S.matchIdData=result;
+      S._matchConfirmFrom='courtSearch';
+      S.phase='matchConfirm';render();
+    });
+  });
   const bcsRef=document.getElementById('btn-cs-refresh');
   if(bcsRef)bcsRef.onclick=async()=>{
     const atour=activeTour();
