@@ -1524,7 +1524,7 @@ function rAdminTop(){
 
     <div class="card" style="padding:14px;margin-bottom:12px;background:#f0f9ff;">
       <div style="font-size:14px;font-weight:600;color:#0369a1;margin-bottom:8px;">🖨️ QRコード一括印刷</div>
-      <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">コートごとにQRコードをまとめて印刷できます</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">コートごとにQRコードをまとめて印刷できます（1枚に最大10個）</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
         <div>
           <div style="font-size:12px;color:#374151;margin-bottom:3px;">場所ID</div>
@@ -1542,6 +1542,11 @@ function rAdminTop(){
           <div style="font-size:12px;color:#374151;margin-bottom:3px;">1コートあたり試合数</div>
           <input type="number" id="qr-match-count" value="7" min="1" max="20" style="font-size:14px;"/>
         </div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;">試合区分ラベル（試合番号ごとに名前を設定）</div>
+        <div id="qr-match-labels-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
+        <div style="font-size:11px;color:#9ca3af;margin-top:4px;">※ 空欄の場合は「第N試合」が自動で使われます</div>
       </div>
       <button class="btn btn-blue" id="btn-qr-print" style="width:100%;padding:10px;">🖨️ 印刷プレビューを開く</button>
     </div>
@@ -2164,32 +2169,45 @@ function getEventName(eventCode){
 }
 
 // ===== QR一括印刷 =====
-function generateQRPrintPage(venueId, eventId, courtCount, matchCount){
-  const matchLabels=['第1試合','第2試合','第3試合','第4試合','第5試合','第6試合','第7試合',
-    '第8試合','第9試合','第10試合','第11試合','第12試合','第13試合','第14試合','第15試合',
-    '第16試合','第17試合','第18試合','第19試合','第20試合'];
+function generateQRPrintPage(venueId, eventId, courtCount, matchCount, customLabels){
+  // カスタムラベルが空なら「第N試合」をデフォルトにする
+  const getLabel=(m)=>{
+    const custom=(customLabels&&customLabels[m-1])||'';
+    return custom.trim()||('第'+m+'試合');
+  };
+
+  // 1ページあたり最大10個、超える場合はページを分割
+  const PER_PAGE=10;
 
   // コートごとのHTMLを生成
   let pagesHtml='';
   for(let c=1;c<=courtCount;c++){
     const courtStr=String(c).padStart(3,'0');
-    let itemsHtml='';
-    for(let m=1;m<=matchCount;m++){
-      const matchStr=String(m).padStart(2,'0');
-      const qrText=`${venueId}_${eventId}_${matchStr}_${courtStr}`;
-      itemsHtml+=`<div class="qr-item">
-        <div class="qr-code" id="qr-${c}-${m}" data-text="${qrText}"></div>
-        <div class="qr-label">${matchLabels[m-1]||('第'+m+'試合')}</div>
-        <div class="qr-id">${qrText}</div>
+    // 10個以内ならそのまま1ページ、超えるなら複数ページに分割
+    const totalMatches=matchCount;
+    const pageCount=Math.ceil(totalMatches/PER_PAGE);
+    for(let pg=0;pg<pageCount;pg++){
+      const startM=pg*PER_PAGE+1;
+      const endM=Math.min((pg+1)*PER_PAGE,totalMatches);
+      let itemsHtml='';
+      for(let m=startM;m<=endM;m++){
+        const matchStr=String(m).padStart(2,'0');
+        const qrText=`${venueId}_${eventId}_${matchStr}_${courtStr}`;
+        itemsHtml+=`<div class="qr-item">
+          <div class="qr-code" id="qr-${c}-${m}" data-text="${qrText}"></div>
+          <div class="qr-label">${getLabel(m)}</div>
+          <div class="qr-id">${qrText}</div>
+        </div>`;
+      }
+      const pageLabel=pageCount>1?` (${pg+1}/${pageCount})`:'' ;
+      pagesHtml+=`<div class="page-break">
+        <div class="page-header">
+          <h1>コート ${courtStr}${pageLabel}</h1>
+          <div class="page-sub">${venueId}_${eventId} &nbsp;|&nbsp; ${totalMatches}試合</div>
+        </div>
+        <div class="qr-grid">${itemsHtml}</div>
       </div>`;
     }
-    pagesHtml+=`<div class="page-break">
-      <div class="page-header">
-        <h1>コート ${courtStr}</h1>
-        <div class="page-sub">${venueId}_${eventId} &nbsp;|&nbsp; ${matchCount}試合</div>
-      </div>
-      <div class="qr-grid">${itemsHtml}</div>
-    </div>`;
   }
 
   const html=`<!DOCTYPE html>
@@ -2204,23 +2222,26 @@ function generateQRPrintPage(venueId, eventId, courtCount, matchCount){
   .no-print { padding: 16px; background: #f0f9ff; border-bottom: 1px solid #bae6fd; }
   .no-print button { padding: 10px 24px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; margin-right: 10px; }
   .no-print button.close { background: #6b7280; }
-  .page-break { padding: 20px; min-height: 100vh; }
-  .page-header { margin-bottom: 16px; border-bottom: 2px solid #111; padding-bottom: 8px; }
-  .page-header h1 { font-size: 24px; font-weight: 800; }
-  .page-sub { font-size: 13px; color: #6b7280; margin-top: 2px; }
-  .qr-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-  .qr-item { display: flex; flex-direction: column; align-items: center; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
-  .qr-code { margin-bottom: 8px; }
+  /* 10個を2列×5行に収める: A4縦(297mm)想定 */
+  .page-break { padding: 12px 16px; min-height: 100vh; }
+  .page-header { margin-bottom: 10px; border-bottom: 2px solid #111; padding-bottom: 6px; }
+  .page-header h1 { font-size: 22px; font-weight: 800; }
+  .page-sub { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .qr-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .qr-item { display: flex; flex-direction: column; align-items: center; padding: 8px 6px 6px; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .qr-code { margin-bottom: 4px; }
   .qr-code img { display: block; }
-  .qr-label { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .qr-label { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
   .qr-id { font-size: 10px; color: #9ca3af; font-family: monospace; }
   @media print {
     .no-print { display: none !important; }
-    .page-break { page-break-after: always; padding: 15px; min-height: auto; }
+    .page-break { page-break-after: always; padding: 8px 12px; min-height: auto; }
     .page-break:last-child { page-break-after: avoid; }
-    .qr-grid { grid-template-columns: repeat(2, 1fr); gap: 15px; }
-    .qr-item { padding: 8px; }
-    .qr-label { font-size: 14px; }
+    .page-header { margin-bottom: 8px; }
+    .qr-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .qr-item { padding: 6px 4px 4px; }
+    .qr-label { font-size: 13px; }
+    .qr-id { font-size: 9px; }
   }
 </style>
 </head>
@@ -2232,12 +2253,12 @@ function generateQRPrintPage(venueId, eventId, courtCount, matchCount){
 </div>
 ${pagesHtml}
 <script>
-  // QRコードを一括生成
+  // QRコードを一括生成（10個対応: 128×128px）
   document.querySelectorAll('.qr-code[data-text]').forEach(el=>{
     new QRCode(el, {
       text: el.dataset.text,
-      width: 160,
-      height: 160,
+      width: 128,
+      height: 128,
       correctLevel: QRCode.CorrectLevel.M
     });
   });
@@ -3745,8 +3766,35 @@ function bind(){
     const courtCount=parseInt((document.getElementById('qr-court-count')||{value:'16'}).value)||16;
     const matchCount=parseInt((document.getElementById('qr-match-count')||{value:'7'}).value)||7;
     if(!venueId||!eventId){alert('場所IDと大会IDを入力してください');return;}
-    generateQRPrintPage(venueId,eventId,courtCount,matchCount);
+    // カスタムラベルを収集
+    const customLabels=[];
+    for(let m=1;m<=matchCount;m++){
+      const el=document.getElementById('qr-label-'+m);
+      customLabels.push(el?el.value.trim():'');
+    }
+    generateQRPrintPage(venueId,eventId,courtCount,matchCount,customLabels);
   };
+  // 試合数変更時にラベル入力欄を動的生成
+  function updateQrLabelGrid(){
+    const grid=document.getElementById('qr-match-labels-grid');
+    if(!grid)return;
+    const matchCount=parseInt((document.getElementById('qr-match-count')||{value:'7'}).value)||7;
+    // 既存の入力値を保存
+    const saved={};
+    grid.querySelectorAll('input[data-m]').forEach(el=>{saved[el.dataset.m]=el.value;});
+    grid.innerHTML='';
+    for(let m=1;m<=matchCount;m++){
+      const div=document.createElement('div');
+      div.style.cssText='display:flex;align-items:center;gap:4px;';
+      div.innerHTML=`<span style="font-size:11px;color:#6b7280;white-space:nowrap;min-width:20px;">${m}:</span><input type="text" id="qr-label-${m}" data-m="${m}" placeholder="第${m}試合" style="font-size:12px;padding:5px 7px;flex:1;"/>`;
+      grid.appendChild(div);
+      const inp=div.querySelector('input');
+      if(saved[String(m)])inp.value=saved[String(m)];
+    }
+  }
+  updateQrLabelGrid();
+  const qrMC=document.getElementById('qr-match-count');
+  if(qrMC)qrMC.addEventListener('input',updateQrLabelGrid);
   document.querySelectorAll('.admin-edit-venue').forEach(btn=>btn.addEventListener('click',()=>showVenueModal(parseInt(btn.dataset.idx))));
   document.querySelectorAll('.admin-del-venue').forEach(btn=>btn.addEventListener('click',()=>{
     if(confirm('この場所を削除しますか？')){AD.venues.splice(parseInt(btn.dataset.idx),1);saveAdmin(AD);render();}
