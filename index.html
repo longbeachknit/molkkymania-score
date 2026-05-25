@@ -970,7 +970,7 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
 
 function doReset(){
   clearMatchState();
-  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:true,useAimed:true,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
+  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:true,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
 }
 function goNext(ni){
   S.tlTieExtend=false;
@@ -4075,14 +4075,14 @@ function bind(){
         if(S.iP==='miss')S.iA='cross';
         else S.iA='circle';
       } else {
-        S.iA=S.iP==='miss'?'cross':'unknown'; // OFFでもミスはcross
+        S.iA=S.iP==='miss'?'cross':''; // OFFでもミスはcross、それ以外は空
       }
       render();
     });
   });
   // 狙い通りON/OFFトグル
   const batAim=document.getElementById('btn-aimed-toggle');
-  if(batAim)batAim.onclick=()=>{S.useAimed=!S.useAimed;if(!S.useAimed)S.iA=S.iP==='miss'?'cross':'unknown';render();};
+  if(batAim)batAim.onclick=()=>{S.useAimed=!S.useAimed;if(!S.useAimed)S.iA=S.iP==='miss'?'cross':'';render();};
   // 狙い通りボタン
   document.querySelectorAll('.btn-aim').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -4097,7 +4097,7 @@ function bind(){
     const cset=cs(),ct=cset.ctid,td=cset.teams[ct];
     cset.hist.push({teams:JSON.parse(JSON.stringify(cset.teams)),ctid:cset.ctid,wid:cset.wid});
     const isMiss=S.iP==='miss';let pts=0,raw=0,over=false;
-    const multi=false,result=isMiss?'cross':S.iA;
+    const multi=false,result=isMiss?'cross':(S.useAimed?S.iA:'');
     if(!isMiss){pts=parseInt(S.iP);raw=pts;const ns=td.sc+pts;if(ns>MAX){over=true;td.sc=RST;}else td.sc=ns;}
     const mn=gmb(td,ct);td.mi++;
     const throwSec=S.lastThrowSec!=null?S.lastThrowSec:null;
