@@ -4148,9 +4148,10 @@ function bind(){
   document.querySelectorAll('.btn-pts').forEach(btn=>{
     btn.addEventListener('click',()=>{
       S.iP=btn.dataset.pts;
-      // useAimedがONの場合のみiAを自動セット（ミスの場合は選択を維持）
+      // useAimedがONの場合のみiAを自動セット
       if(S.useAimed){
-        if(S.iP!=='miss')S.iA='circle'; // ミス以外は○をデフォルト、ミスは現在の選択を維持
+        if(S.iP==='miss')S.iA='cross'; // ミスは×をデフォルト
+        else S.iA='circle';            // それ以外は○をデフォルト
       } else {
         S.iA=''; // OFFは常に空
       }
