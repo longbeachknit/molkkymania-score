@@ -92,7 +92,7 @@ let S={
   sets:[],cur:0,fid:0,showHist:false,
   pFirst:null,pIdx:null,pOrders:[[],[]],
   pExclude:[[],[]],
-  iP:'',iM:'single',iA:'',useAimed:true,
+  iP:'',iM:'single',iA:'',useAimed:true,rule37Pending:false,
   prev:null,ssIdx:0,
   endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,
   molkoutWinner:null,
@@ -970,7 +970,7 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
 
 function doReset(){
   clearMatchState();
-  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:true,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,_ssSaveDest:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
+  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:true,rule37Pending:false,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,_ssSaveDest:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
 }
 function goNext(ni){
   S.tlTieExtend=false;
@@ -1216,7 +1216,7 @@ function rGame(){
           <div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-weight:600;">① 得点</div>
           <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
             ${[1,2,3,4,5,6].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#2563eb':'#e5e7eb'};background:${S.iP===String(n)?'#dbeafe':'#f9fafb'};color:${S.iP===String(n)?'#1d4ed8':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
-            <button class="btn-pts" data-pts="miss" style="font-size:17px;font-weight:800;border-radius:8px;border:2px solid ${S.iP==='miss'?'#dc2626':'#e5e7eb'};background:${S.iP==='miss'?'#fee2e2':'#f9fafb'};color:${S.iP==='miss'?'#dc2626':'#111'};cursor:pointer;grid-row:span 2;width:100%;">ミス<br><span style="font-size:20px;">0</span></button>
+            <button class="btn-pts" id="btn-miss" data-pts="miss" style="font-size:17px;font-weight:800;border-radius:8px;border:2px solid ${S.iP==='miss'?'#dc2626':'#e5e7eb'};background:${S.iP==='miss'?'#fee2e2':'#f9fafb'};color:${S.iP==='miss'?'#dc2626':'#111'};cursor:pointer;grid-row:span 2;width:100%;">ミス<br><span style="font-size:20px;">0</span></button>
             ${[7,8,9,10,11,12].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#2563eb':'#e5e7eb'};background:${S.iP===String(n)?'#dbeafe':'#f9fafb'};color:${S.iP===String(n)?'#1d4ed8':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
           </div>
         </div>
@@ -1233,6 +1233,18 @@ function rGame(){
           </div>`:'<div style="padding:8px 10px;background:#f3f4f6;border-radius:8px;font-size:12px;color:#9ca3af;text-align:center;">記録しない（すべて「不明」として保存）</div>'}
         </div>
 
+        ${S.rule37Pending?`
+        <div style="position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:999;display:flex;align-items:center;justify-content:center;">
+          <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:320px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+            <div style="font-size:32px;margin-bottom:10px;">⚠️</div>
+            <div style="font-size:17px;font-weight:700;color:#111;margin-bottom:8px;">37点ルールを適用しますか？</div>
+            <div style="font-size:13px;color:#6b7280;margin-bottom:20px;line-height:1.6;">点数を<strong>25点</strong>に戻して<br>ミス（1カウント）として記録します</div>
+            <div style="display:flex;gap:10px;">
+              <button id="btn-rule37-yes" style="flex:1;padding:12px;border-radius:10px;border:none;background:#dc2626;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">はい</button>
+              <button id="btn-rule37-no" style="flex:1;padding:12px;border-radius:10px;border:2px solid #e5e7eb;background:#f9fafb;color:#374151;font-size:16px;font-weight:700;cursor:pointer;">いいえ</button>
+            </div>
+          </div>
+        </div>`:''}
         <button class="btn btn-green" id="btn-confirm" style="width:100%;padding:14px;font-size:17px;background:${pCl};border-color:${pCl};">確定 ✓</button>
       </div>
     </div>`:''}
@@ -4146,6 +4158,51 @@ function bind(){
       render();
     });
   });
+  // ミスボタン長押し → 37点ルール確認
+  const btnMiss=document.getElementById('btn-miss');
+  if(btnMiss){
+    let _lp37=null;
+    const start37=()=>{
+      _lp37=setTimeout(()=>{
+        const cset=cs(),ct=cset.ctid,td=cset.teams[ct];
+        if(td.sc>=37){
+          S.iP='miss';S.iA='cross';S.rule37Pending=true;render();
+        }
+        _lp37=null;
+      },500);
+    };
+    const cancel37=()=>{if(_lp37){clearTimeout(_lp37);_lp37=null;}};
+    btnMiss.addEventListener('mousedown',start37);
+    btnMiss.addEventListener('touchstart',start37,{passive:true});
+    btnMiss.addEventListener('mouseup',cancel37);
+    btnMiss.addEventListener('mouseleave',cancel37);
+    btnMiss.addEventListener('touchend',cancel37);
+    btnMiss.addEventListener('touchcancel',cancel37);
+  }
+  // 37点ルール確認ダイアログ
+  const br37y=document.getElementById('btn-rule37-yes');
+  const br37n=document.getElementById('btn-rule37-no');
+  if(br37y)br37y.onclick=()=>{
+    // はい → 25点にリセットしてミスとして記録
+    S.rule37Pending=false;
+    const cset=cs(),ct=cset.ctid,td=cset.teams[ct];
+    cset.hist.push({teams:JSON.parse(JSON.stringify(cset.teams)),ctid:cset.ctid,wid:cset.wid});
+    const mn=gmb(td,ct);td.mi++;
+    const throwSec=S.lastThrowSec!=null?S.lastThrowSec:null;
+    td.throws.push({miss:true,pts:0,raw:0,over:false,multi:false,result:'cross',member:mn,cumul:25,time:throwSec,rule37:true});
+    td.ms++;td.sc=25;
+    if(td.ms>=MM)td.el=true;
+    S.iP='';S.iM='single';S.iA='';
+    const active=cset.teams.filter(t=>!t.el);
+    if(active.length===1){active[0].sc=MAX;cset.wid=active[0].id;cset.endType='normal';cset.teams.forEach(t=>{if(t.el)t.sc=0;});S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.phase='setOver';render();return;}
+    if(active.length===0){cset.wid=null;S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.phase='setOver';render();return;}
+    let next=1-ct;if(cset.teams[next].el)next=ct;cset.ctid=next;
+    startTimer();render();
+  };
+  if(br37n)br37n.onclick=()=>{
+    // いいえ → 通常ミスとして確定ボタンへ（フラグだけ消してrerender）
+    S.rule37Pending=false;render();
+  };
   // 狙い通りON/OFFトグル
   const batAim=document.getElementById('btn-aimed-toggle');
   if(batAim)batAim.onclick=()=>{S.useAimed=!S.useAimed;if(!S.useAimed)S.iA=S.iP==='miss'?'cross':'';render();};
