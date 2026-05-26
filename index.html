@@ -4148,12 +4148,11 @@ function bind(){
   document.querySelectorAll('.btn-pts').forEach(btn=>{
     btn.addEventListener('click',()=>{
       S.iP=btn.dataset.pts;
-      // useAimedがONの場合のみiAを自動セット
+      // useAimedがONの場合のみiAを自動セット（ミスの場合は選択を維持）
       if(S.useAimed){
-        if(S.iP==='miss')S.iA='cross';
-        else S.iA='circle';
+        if(S.iP!=='miss')S.iA='circle'; // ミス以外は○をデフォルト、ミスは現在の選択を維持
       } else {
-        S.iA=S.iP==='miss'?'cross':''; // OFFでもミスはcross、それ以外は空
+        S.iA=''; // OFFは常に空
       }
       render();
     });
@@ -4205,7 +4204,7 @@ function bind(){
   };
   // 狙い通りON/OFFトグル
   const batAim=document.getElementById('btn-aimed-toggle');
-  if(batAim)batAim.onclick=()=>{S.useAimed=!S.useAimed;if(!S.useAimed)S.iA=S.iP==='miss'?'cross':'';render();};
+  if(batAim)batAim.onclick=()=>{S.useAimed=!S.useAimed;if(!S.useAimed)S.iA='';render();};
   // 狙い通りボタン
   document.querySelectorAll('.btn-aim').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -4220,7 +4219,7 @@ function bind(){
     const cset=cs(),ct=cset.ctid,td=cset.teams[ct];
     cset.hist.push({teams:JSON.parse(JSON.stringify(cset.teams)),ctid:cset.ctid,wid:cset.wid});
     const isMiss=S.iP==='miss';let pts=0,raw=0,over=false;
-    const multi=false,result=isMiss?'cross':(S.useAimed?S.iA:'');
+    const multi=false,result=S.useAimed?S.iA:'';
     if(!isMiss){pts=parseInt(S.iP);raw=pts;const ns=td.sc+pts;if(ns>MAX){over=true;td.sc=RST;}else td.sc=ns;}
     const mn=gmb(td,ct);td.mi++;
     const throwSec=S.lastThrowSec!=null?S.lastThrowSec:null;
