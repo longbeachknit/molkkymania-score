@@ -1937,8 +1937,8 @@ function rViewTeamDetail(){
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-      ${sr('QH率',qhr+'%',t.rankQh,'#3b82f6',100,(parseInt(t.totalThrows)||0)>0?`${t.totalAim??'?'}投 / ${t.totalThrows??'?'}投`:'')}
-      ${sr('フォルト率',fr+'%',t.rankF,'#3b82f6',100,(parseInt(t.totalThrows)||0)>0?`${t.totalFault??'?'}投 / ${t.totalThrows??'?'}投`:'')}
+      ${sr('QH率',qhr+'%',t.rankQh,'#3b82f6',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalAim??'?'}投 / ${t.dTotalThrows??'?'}投`:'')}
+      ${sr('フォルト率',fr+'%',t.rankF,'#3b82f6',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalFault??'?'}投 / ${t.dTotalThrows??'?'}投`:'')}
       ${sr('上がりターン平均',t.agariAvg,t.rankAgari,'#3b82f6',12)}
       ${sr('セット点数平均',t.setPtsAvg,t.rankSetPts,'#3b82f6',50)}
       ${sr('平均ブレーク本数',t.breakAvg,t.rankBreak,'#3b82f6',12)}
@@ -2034,8 +2034,8 @@ function rViewPersonDetail(){
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-      ${sr('QH率',qhr+'%',d.rankQh,'#3b82f6',100,(parseInt(d.totalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.totalThrows??'?'}投`:'')}
-      ${sr('フォルト率',fr+'%',d.rankF,'#3b82f6',100,(parseInt(d.totalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.totalThrows??'?'}投`:'')}
+      ${sr('QH率',qhr+'%',d.rankQh,'#3b82f6',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.dTotalThrows??'?'}投`:'')}
+      ${sr('フォルト率',fr+'%',d.rankF,'#3b82f6',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.dTotalThrows??'?'}投`:'')}
       ${sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#3b82f6',12)}
       ${sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#3b82f6',12)}
       ${sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#3b82f6',12)}
