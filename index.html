@@ -3111,19 +3111,13 @@ function rTournamentInfo(){
       </div>
     </div>`;
 
-    function teamNameOf(no){
-      const t=teams.find(x=>x.teamNo===no||String(parseInt(x.teamNo,10))===String(parseInt(no,10)));
-      return t?t.teamName:'';
-    }
-
     let body='';
     if(loading){body=`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`;}
     else if(err){body=`<div style="padding:16px;background:#fee2e2;border-radius:10px;color:#dc2626;font-size:13px;">${err}</div>`;}
     else if(sel){
       const setRow=(label,opp,a,b)=>{
-        const oppName=teamNameOf(opp);
         return`<div style="border:1.5px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:10px;">
-          <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;">${label}　<span style="font-weight:400;color:#6b7280;">vs ${opp||'-'}${oppName?' '+oppName:''}</span></div>
+          <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;">${label}　<span style="font-weight:400;color:#6b7280;">vs ${opp||'-'}</span></div>
           <div style="display:flex;gap:8px;">
             <div style="flex:1;text-align:center;background:#f8fafc;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#9ca3af;">1セット目</div><div style="font-size:18px;font-weight:700;color:#111;">${a!==''?a:'-'}</div></div>
             <div style="flex:1;text-align:center;background:#f8fafc;border-radius:8px;padding:8px;"><div style="font-size:11px;color:#9ca3af;">2セット目</div><div style="font-size:18px;font-weight:700;color:#111;">${b!==''?b:'-'}</div></div>
