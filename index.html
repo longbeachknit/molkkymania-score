@@ -475,6 +475,36 @@ async function fetchTournamentInfo(action){
   return await res.json();
 }
 
+async function formatRegulationWithAI(rawText){
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        system:`あなたはスポーツ大会のレギュレーション文章を整形するアシスタントです。
+与えられたJSONデータ（セクション名と内容のペア配列）を読みやすいHTMLに変換してください。
+ルール：
+- 各セクション名は <h3> タグで見出しにする
+- 箇条書き項目（・や- で始まる行）は <ul><li> にまとめる
+- URLは <a href="URL" target="_blank" style="color:#1d4ed8;word-break:break-all;">URL</a> に変換
+- 段落の区切りには <p> を使う
+- style属性はaタグのみ許可、それ以外は使わない
+- コードブロックは使わず、HTMLタグのみ返す
+- 余計な説明文は一切不要`,
+        messages:[{role:'user',content:typeof rawText==='string'?rawText:JSON.stringify(rawText,null,2)}]
+      })
+    });
+    const data=await res.json();
+    const html=data.content&&data.content[0]&&data.content[0].text;
+    return html||null;
+  }catch(e){
+    console.warn('AI整形失敗:',e.message);
+    return null;
+  }
+}
+
 async function fetchCombinedIds(){
   const btn=document.getElementById('btn-fetch-combined');
   if(btn){btn.disabled=true;btn.textContent='取得中...';}
@@ -3041,7 +3071,7 @@ function rTournamentInfo(){
         <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
         <div style="font-size:17px;font-weight:700;color:#111;">🕐 タイムスケジュール</div>
       </div>
-      ${loading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`
+      ${loading?`<div style="text-align:center;padding:32px;color:#9ca3af;">✨ AI整形中...</div>`
       :err?`<div style="padding:16px;background:#fee2e2;border-radius:10px;color:#dc2626;font-size:13px;">${err}</div>`
       :rows.length===0?`<div style="text-align:center;padding:32px;color:#9ca3af;">データがありません</div>`
       :`<table style="width:100%;border-collapse:collapse;font-size:14px;">
@@ -3067,10 +3097,12 @@ function rTournamentInfo(){
         <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
         <div style="font-size:17px;font-weight:700;color:#111;">📜 レギュレーション</div>
       </div>
-      ${loading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`
+      ${loading?`<div style="text-align:center;padding:32px;color:#9ca3af;">✨ AI整形中...</div>`
       :err?`<div style="padding:16px;background:#fee2e2;border-radius:10px;color:#dc2626;font-size:13px;">${err}</div>`
       :!text?`<div style="text-align:center;padding:32px;color:#9ca3af;">データがありません</div>`
-      :`<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;font-size:14px;color:#111;line-height:1.8;white-space:pre-wrap;">${text}</div>`}
+      :S._tiRegulationIsHtml
+        ?`<div id="reg-html-body" style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;font-size:14px;color:#111;line-height:1.9;"></div>`
+        :`<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;font-size:14px;color:#111;line-height:1.9;white-space:pre-wrap;">${text}</div>`}
     </div>`;
   }
 
@@ -4383,6 +4415,24 @@ function bind(){
   app.querySelectorAll('.molkout-btn').forEach(el=>{el.addEventListener('click',()=>{S.molkoutWinner=parseInt(el.dataset.id);render();});});
   const bgm=document.getElementById('btn-go-molkout');if(bgm)bgm.onclick=()=>{S.molkoutWinner=null;S.phase='molkout';render();};
   const bmc=document.getElementById('btn-molkout-confirm');if(bmc)bmc.onclick=()=>{if(S.molkoutWinner==null)return;S.phase='earlyMatchOver';render();};
+  // レギュレーションAI整形HTMLをDOMにセット
+  const regBody=document.getElementById('reg-html-body');
+  if(regBody&&S._tiRegulationIsHtml&&S._tiRegulation){
+    regBody.innerHTML=S._tiRegulation;
+    // スタイル調整
+    regBody.querySelectorAll('h3').forEach(h=>{
+      h.style.cssText='font-size:15px;font-weight:700;color:#111;margin:16px 0 6px;padding-bottom:4px;border-bottom:2px solid #e5e7eb;';
+    });
+    regBody.querySelectorAll('ul').forEach(ul=>{
+      ul.style.cssText='padding-left:18px;margin:4px 0 10px;';
+    });
+    regBody.querySelectorAll('li').forEach(li=>{
+      li.style.cssText='margin-bottom:5px;line-height:1.7;';
+    });
+    regBody.querySelectorAll('p').forEach(p=>{
+      p.style.cssText='margin:6px 0;line-height:1.7;';
+    });
+  }
   // 大会情報画面 - メニューの戻る
   const btib=document.getElementById('btn-ti-back');if(btib)btib.onclick=()=>{S._tiView=null;S.phase='home';render();};
   // サブ画面の戻る（メニューに戻る）
@@ -4405,7 +4455,16 @@ function bind(){
     try{
       const json=await fetchTournamentInfo('getRegulation');
       if(json.error)throw new Error('GAS: '+json.error);
-      S._tiRegulation=json.regulation||'';
+      // sections形式（新）またはregulation文字列（旧）に対応
+      const raw=json.sections||json.regulation||'';
+      if(raw&&(typeof raw==='object'?raw.length>0:raw.trim())){
+        // AI整形を試みる（失敗時はそのまま表示）
+        const formatted=await formatRegulationWithAI(raw);
+        S._tiRegulation=formatted||(typeof raw==='string'?raw:JSON.stringify(raw));
+        S._tiRegulationIsHtml=!!formatted;
+      }else{
+        S._tiRegulation='';S._tiRegulationIsHtml=false;
+      }
     }catch(e){S._tiError='取得に失敗しました: '+e.message;}
     S._tiLoading=false;render();
   };
