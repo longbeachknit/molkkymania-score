@@ -3041,7 +3041,7 @@ function rTournamentInfo(){
         <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
         <div style="font-size:17px;font-weight:700;color:#111;">🕐 タイムスケジュール</div>
       </div>
-      ${loading?`<div style="text-align:center;padding:32px;color:#9ca3af;">✨ AI整形中...</div>`
+      ${loading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`
       :err?`<div style="padding:16px;background:#fee2e2;border-radius:10px;color:#dc2626;font-size:13px;">${err}</div>`
       :rows.length===0?`<div style="text-align:center;padding:32px;color:#9ca3af;">データがありません</div>`
       :`<table style="width:100%;border-collapse:collapse;font-size:14px;">
