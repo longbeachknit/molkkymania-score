@@ -4059,7 +4059,7 @@ function bind(){
     await syncAllFromGitHub(eventCode);
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
-    S.phase='tournamentInfo';render();
+    S._tiView=null;S._tiLoading=false;S._tiError=null;S.phase='tournamentInfo';render();
   };
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
   document.querySelectorAll('.cs-start-btn').forEach(btn=>{
@@ -4404,9 +4404,9 @@ function bind(){
   const bgm=document.getElementById('btn-go-molkout');if(bgm)bgm.onclick=()=>{S.molkoutWinner=null;S.phase='molkout';render();};
   const bmc=document.getElementById('btn-molkout-confirm');if(bmc)bmc.onclick=()=>{if(S.molkoutWinner==null)return;S.phase='earlyMatchOver';render();};
   // 大会情報画面 - メニューの戻る
-  const btib=document.getElementById('btn-ti-back');if(btib)btib.onclick=()=>{S._tiView=null;S.phase='home';render();};
-  // サブ画面の戻る（メニューに戻る）
-  const btisb=document.getElementById('btn-ti-sub-back');if(btisb)btisb.onclick=()=>{S._tiView=null;S._tiLoading=false;S._tiError=null;render();};
+  const btib=document.getElementById('btn-ti-back');if(btib)btib.onclick=()=>{S._tiView=null;S.phase='setup';render();};
+  // サブ画面の戻る → メニュー画面へ（phaseはtournamentInfoのまま、_tiViewだけクリア）
+  const btisb=document.getElementById('btn-ti-sub-back');if(btisb)btisb.onclick=()=>{S._tiView=null;S._tiLoading=false;S._tiError=null;S.phase='tournamentInfo';render();};
   // タイムスケジュール
   const btisc=document.getElementById('btn-ti-schedule');
   if(btisc)btisc.onclick=async()=>{
