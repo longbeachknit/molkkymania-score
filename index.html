@@ -4393,6 +4393,7 @@ function bind(){
     S._tiView='schedule';S._tiLoading=true;S._tiError=null;S._tiSchedule=[];render();
     try{
       const json=await fetchTournamentInfo('getSchedule');
+      if(json.error)throw new Error('GAS: '+json.error);
       S._tiSchedule=json.schedule||[];
     }catch(e){S._tiError='取得に失敗しました: '+e.message;}
     S._tiLoading=false;render();
@@ -4403,6 +4404,7 @@ function bind(){
     S._tiView='regulation';S._tiLoading=true;S._tiError=null;S._tiRegulation='';render();
     try{
       const json=await fetchTournamentInfo('getRegulation');
+      if(json.error)throw new Error('GAS: '+json.error);
       S._tiRegulation=json.regulation||'';
     }catch(e){S._tiError='取得に失敗しました: '+e.message;}
     S._tiLoading=false;render();
