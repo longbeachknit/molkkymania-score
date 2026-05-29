@@ -2804,7 +2804,8 @@ async function publishActiveEvent(eventCode){
 
 async function fetchActiveEvent(){
   try{
-    const url='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/active.json';
+    // ?t=Date.now() でGitHub CDN側のキャッシュをバイパスする（修正①）
+    const url='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/active.json?t='+Date.now();
     const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
     if(!res.ok)return null;
     const apiData=await res.json();
@@ -2819,11 +2820,14 @@ async function fetchActiveEvent(){
   }
 }
 
-// GitHub取得失敗時はローカルのAD.activeEventCodeにフォールバック
+// 修正②：hasOwnProperty で空文字("")を正しく判定し、falsyバグを解消
+// リモート取得成功時は必ずその値（空文字含む）を使用する
+// リモート取得失敗（ネットワークエラー等）時のみ localStorage のコードにフォールバック
 async function resolveActiveEventCode(){
   const remote=await fetchActiveEvent();
-  if(remote&&remote.activeEventCode)return remote.activeEventCode;
-  // ネットワークエラー等の場合、ローカルに保存済みのコードを使用
+  if(remote&&remote.hasOwnProperty('activeEventCode'))return remote.activeEventCode||null;
+  // ネットワークエラー等でremoteがnullの場合のみフォールバック
+  console.warn('resolveActiveEventCode: リモート取得失敗、localStorageにフォールバック');
   return AD.activeEventCode||null;
 }
 
@@ -4157,7 +4161,8 @@ function bind(){
     S._courtSearchQuery={teamNo,matchCode};
     // GitHubから最新データを取得してから検索
     const activeDataCs=await fetchActiveEvent().catch(()=>null);
-    if(activeDataCs&&activeDataCs.activeEventCode){
+    // 修正③：hasOwnProperty で空文字を正しく判定（falsyバグ修正）
+    if(activeDataCs&&activeDataCs.hasOwnProperty('activeEventCode')&&activeDataCs.activeEventCode){
       await syncAllFromGitHub(activeDataCs.activeEventCode);
     } else {
       const atour=activeTour();
