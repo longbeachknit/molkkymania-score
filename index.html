@@ -1654,12 +1654,13 @@ function ruleRowsHtml(rules,prefix,opts){
     </div>`;}).join('');
 }
 
-// 3つのルールカード（試合区分・トーナメント種類・ラウンド名）を折りたたみ形式で生成
+// 3つのルールセクション（試合区分・トーナメント種類・ラウンド名）を「中身だけ」生成
+// （外側のカードは呼び出し側でまとめる）
 function ruleCardsHtml(obj){
   const matchRules=obj.matchRules||[];
   const tourneyRules=obj.tourneyRules||[];
   const roundRules=obj.roundRules||[];
-  const foldCard=(title,count,addBtnId,innerHtml,subHtml)=>`<div class="card" style="padding:14px;margin-bottom:12px;">
+  const foldSection=(title,count,addBtnId,innerHtml,subHtml,first)=>`<div style="${first?'':'border-top:1px solid #e5e7eb;margin-top:12px;'}padding-top:${first?'0':'12px'};">
     <div style="display:flex;align-items:center;margin-bottom:8px;">
       <div style="flex:1;font-size:14px;font-weight:600;color:#111;">${title}</div>
       <button class="btn btn-green btn-xs" id="${addBtnId}" style="padding:4px 10px;">＋ 追加</button>
@@ -1676,9 +1677,9 @@ function ruleCardsHtml(obj){
     <button class="btn btn-red-o btn-xs admin-del-round" data-idx="${i}" style="padding:3px 8px;">削除</button>
   </div>`).join(''):'';
 
-  return foldCard('試合区分ルール',matchRules.length,'btn-add-match-rule',ruleRowsHtml(matchRules,'match',{reorder:true}))
-    +foldCard('トーナメント種類ルール',tourneyRules.length,'btn-add-tourney-rule',ruleRowsHtml(tourneyRules,'tourney',{}))
-    +foldCard('ラウンド名設定',roundRules.length,'btn-add-round-rule',roundInner,'<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">試合区分×トーナメント種類の組み合わせ</div>');
+  return `<div style="margin-top:14px;">`+foldSection('試合区分ルール',matchRules.length,'btn-add-match-rule',ruleRowsHtml(matchRules,'match',{reorder:true}),'',true)
+    +foldSection('トーナメント種類ルール',tourneyRules.length,'btn-add-tourney-rule',ruleRowsHtml(tourneyRules,'tourney',{}),'',false)
+    +foldSection('ラウンド名設定',roundRules.length,'btn-add-round-rule',roundInner,'<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">試合区分×トーナメント種類の組み合わせ</div>',false)+`</div>`;
 }
 
 // 優先ルールの1行トグル
@@ -1743,15 +1744,19 @@ function rAdminTourEdit(){
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
-        <button class="btn btn-blue btn-xs" id="btn-load-rule-tpl" style="flex:1;padding:8px;">📋 読み込む</button>
-        <button class="btn btn-gray btn-xs" id="btn-save-rule-tpl" style="flex:1;padding:8px;">💾 保存</button>
-        <button class="btn btn-gray btn-xs" id="btn-manage-rule-tpl" style="flex:1;padding:8px;">⚙️ 管理</button>
+      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:10px;">大会ルール設定</div>
+      <div style="background:#EEF2FF;border-radius:8px;padding:10px;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:600;color:#3730a3;margin-bottom:6px;">📋 大会ルールのテンプレート</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button class="btn btn-blue btn-xs" id="btn-load-rule-tpl" style="flex:1;padding:8px;">読み込む</button>
+          <button class="btn btn-gray btn-xs" id="btn-save-rule-tpl" style="flex:1;padding:8px;">保存</button>
+          <button class="btn btn-gray btn-xs" id="btn-manage-rule-tpl" style="flex:1;padding:8px;">管理</button>
+        </div>
+        <div style="font-size:11px;color:#6b7280;margin-top:6px;">優先ルール・試合区分・トーナメント種類・ラウンド名をまとめて保存／呼び出しできます</div>
       </div>
       ${priorityToggleHtml(tour.priority)}
+      ${ruleCardsHtml(tour)}
     </div>
-
-    ${ruleCardsHtml(tour)}
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:6px;">
@@ -2801,13 +2806,13 @@ function rTplEdit(){
       <div style="font-size:16px;font-weight:700;color:#111;">${tpl.name||'テンプレート編集'}</div>
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:10px;">テンプレート情報</div>
+      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:10px;">大会ルール設定（テンプレート）</div>
       <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">テンプレート名</div>
         <input type="text" id="tple-name" value="${tpl.name||''}" placeholder="例: 川崎標準ルール"/></div>
-      <div style="margin-top:12px;">${priorityToggleHtml(tpl.priority)}</div>
-      <div style="font-size:11px;color:#9ca3af;margin-top:10px;">入力内容は自動で保存されます。</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:8px;margin-bottom:14px;">入力内容は自動で保存されます。</div>
+      ${priorityToggleHtml(tpl.priority)}
+      ${ruleCardsHtml(tpl)}
     </div>
-    ${ruleCardsHtml(tpl)}
     <button class="btn btn-green" id="btn-tple-save-close" style="width:100%;padding:14px;font-size:15px;font-weight:700;margin-bottom:16px;">💾 保存して一覧に戻る</button>
   </div>`;
 }
