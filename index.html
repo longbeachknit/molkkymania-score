@@ -1523,7 +1523,13 @@ function rEarlyMatchOver(){
 // ===== 管理者画面 =====
 function rAdmin(){
   const ad=AD;
-  // 大会編集モードか大会一覧モードか
+  // テンプレート編集 / テンプレート管理 / 大会編集 / 大会一覧
+  if(S._editingTplId!==undefined&&S._editingTplId!==null){
+    return rTplEdit();
+  }
+  if(S._tplManage){
+    return rTplManage();
+  }
   if(S._editingTourId!==undefined&&S._editingTourId!==null){
     return rAdminTourEdit();
   }
@@ -1618,6 +1624,73 @@ function rAdminTop(){
   </div>`;
 }
 
+// ===== ルール編集の共通ターゲット（大会 or テンプレート） =====
+function ruleEditTarget(){
+  if(S._editingTplId){
+    const tpl=(AD.ruleTemplates||[]).find(t=>t.id===S._editingTplId);
+    return {obj:tpl,isTpl:true,save:()=>saveAdmin(AD)};
+  }
+  const tour=AD.tournaments.find(t=>t.id===S._editingTourId)||activeTour()||makeTournament();
+  return {obj:tour,isTpl:false,save:()=>saveActiveTour(tour)};
+}
+
+// ルール行（prefix: match / tourney）。opts.reorder=true で▲▼並び替えボタンを表示
+function ruleRowsHtml(rules,prefix,opts){
+  opts=opts||{};
+  if(!rules||!rules.length)return'<div style="font-size:13px;color:#9ca3af;padding:6px 0;">まだ設定がありません</div>';
+  return rules.map((r,i)=>{
+    const reorder=opts.reorder?`<div style="display:flex;flex-direction:column;gap:2px;margin-right:2px;">
+      <button class="btn btn-gray btn-xs admin-move-rule" data-prefix="${prefix}" data-idx="${i}" data-dir="up" ${i===0?'disabled':''} style="padding:0 6px;line-height:1.4;${i===0?'opacity:0.3;':''}">▲</button>
+      <button class="btn btn-gray btn-xs admin-move-rule" data-prefix="${prefix}" data-idx="${i}" data-dir="down" ${i===rules.length-1?'disabled':''} style="padding:0 6px;line-height:1.4;${i===rules.length-1?'opacity:0.3;':''}">▼</button>
+    </div>`:'';
+    return`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+      ${reorder}
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${r.code} ${r.name?'/ '+r.name:''}</div>
+        <div style="font-size:12px;color:#1D9E75;">${r.fmt==='best2'?'2先':r.fmt==='best3'?'3先':'表裏'}${r.turnLimit?' 12T':''}　${r.playerMin}〜${r.playerMax>=99?'∞':r.playerMax}人</div>
+      </div>
+      <button class="btn btn-gray btn-xs admin-edit-rule" data-prefix="${prefix}" data-idx="${i}" style="padding:3px 8px;">編集</button>
+      <button class="btn btn-red-o btn-xs admin-del-rule" data-prefix="${prefix}" data-idx="${i}" style="padding:3px 8px;">削除</button>
+    </div>`;}).join('');
+}
+
+// 3つのルールカード（試合区分・トーナメント種類・ラウンド名）を折りたたみ形式で生成
+function ruleCardsHtml(obj){
+  const matchRules=obj.matchRules||[];
+  const tourneyRules=obj.tourneyRules||[];
+  const roundRules=obj.roundRules||[];
+  const foldCard=(title,count,addBtnId,innerHtml,subHtml)=>`<div class="card" style="padding:14px;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;margin-bottom:8px;">
+      <div style="flex:1;font-size:14px;font-weight:600;color:#111;">${title}</div>
+      <button class="btn btn-green btn-xs" id="${addBtnId}" style="padding:4px 10px;">＋ 追加</button>
+    </div>
+    ${subHtml||''}
+    ${count>0?`<details style="margin-top:4px;"><summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">詳細を表示（${count}件）</summary>
+      <div style="margin-top:6px;">${innerHtml}</div>
+    </details>`:'<div style="font-size:13px;color:#9ca3af;padding:4px 0;">まだ設定がありません</div>'}
+  </div>`;
+
+  const roundInner=roundRules.length?roundRules.map((r,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+    <div style="flex:1;font-size:13px;">区分${r.matchCode} × T${r.tourneyCode} → <span style="font-weight:600;">${r.round}</span></div>
+    <button class="btn btn-gray btn-xs admin-edit-round" data-idx="${i}" style="padding:3px 8px;">編集</button>
+    <button class="btn btn-red-o btn-xs admin-del-round" data-idx="${i}" style="padding:3px 8px;">削除</button>
+  </div>`).join(''):'';
+
+  return foldCard('試合区分ルール',matchRules.length,'btn-add-match-rule',ruleRowsHtml(matchRules,'match',{reorder:true}))
+    +foldCard('トーナメント種類ルール',tourneyRules.length,'btn-add-tourney-rule',ruleRowsHtml(tourneyRules,'tourney',{}))
+    +foldCard('ラウンド名設定',roundRules.length,'btn-add-round-rule',roundInner,'<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">試合区分×トーナメント種類の組み合わせ</div>');
+}
+
+// 優先ルールの1行トグル
+function priorityToggleHtml(priority){
+  const cur=priority||'tournament';
+  const opt=(v,l)=>`<button class="btn btn-xs te-prio-btn" data-prio="${v}" style="flex:1;padding:9px 4px;font-size:13px;font-weight:600;border:none;border-radius:8px;background:${cur===v?'#1D9E75':'#f3f4f6'};color:${cur===v?'#fff':'#6b7280'};">${l}</button>`;
+  return`<div style="display:flex;align-items:center;gap:8px;">
+    <div style="font-size:13px;font-weight:600;color:#111;white-space:nowrap;">優先ルール</div>
+    <div style="display:flex;gap:6px;flex:1;">${opt('tournament','トーナメント種類')}${opt('match','試合区分')}</div>
+  </div>`;
+}
+
 function rAdminTourEdit(){
   const tour=AD.tournaments.find(t=>t.id===S._editingTourId)||makeTournament();
   const ad=AD;
@@ -1670,48 +1743,15 @@ function rAdminTourEdit(){
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <button class="btn btn-blue btn-xs" id="btn-load-rule-tpl" style="flex:1;padding:8px;">📋 テンプレートから読み込む</button>
-        <button class="btn btn-gray btn-xs" id="btn-save-rule-tpl" style="flex:1;padding:8px;">💾 テンプレートとして保存</button>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+        <button class="btn btn-blue btn-xs" id="btn-load-rule-tpl" style="flex:1;padding:8px;">📋 読み込む</button>
+        <button class="btn btn-gray btn-xs" id="btn-save-rule-tpl" style="flex:1;padding:8px;">💾 保存</button>
+        <button class="btn btn-gray btn-xs" id="btn-manage-rule-tpl" style="flex:1;padding:8px;">⚙️ 管理</button>
       </div>
-      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:8px;">優先ルール</div>
-      <div style="display:grid;gap:8px;">
-        ${prioOpts.map(([v,l])=>`<label class="radio-card ${(tour.priority||'tournament')===v?'selected':''}">
-          <input type="radio" name="te-prio" value="${v}" ${(tour.priority||'tournament')===v?'checked':''} style="width:auto;accent-color:#1D9E75;"/>
-          <span style="font-size:14px;color:${(tour.priority||'tournament')===v?'#085041':'#111'};">${l}</span>
-        </label>`).join('')}
-      </div>
+      ${priorityToggleHtml(tour.priority)}
     </div>
 
-    <div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;margin-bottom:8px;">
-        <div style="flex:1;font-size:14px;font-weight:600;color:#111;">試合区分ルール</div>
-        <button class="btn btn-green btn-xs" id="btn-add-match-rule" style="padding:4px 10px;">＋ 追加</button>
-      </div>
-      ${ruleRows(tour.matchRules,'match')}
-    </div>
-
-    <div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;margin-bottom:8px;">
-        <div style="flex:1;font-size:14px;font-weight:600;color:#111;">トーナメント種類ルール</div>
-        <button class="btn btn-green btn-xs" id="btn-add-tourney-rule" style="padding:4px 10px;">＋ 追加</button>
-      </div>
-      ${ruleRows(tour.tourneyRules,'tourney')}
-    </div>
-
-    <div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;margin-bottom:8px;">
-        <div style="flex:1;font-size:14px;font-weight:600;color:#111;">ラウンド名設定</div>
-        <button class="btn btn-green btn-xs" id="btn-add-round-rule" style="padding:4px 10px;">＋ 追加</button>
-      </div>
-      <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">試合区分×トーナメント種類の組み合わせ</div>
-      ${(tour.roundRules||[]).length===0?'<div style="font-size:13px;color:#9ca3af;">まだ設定がありません</div>':
-        (tour.roundRules||[]).map((r,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <div style="flex:1;font-size:13px;">区分${r.matchCode} × T${r.tourneyCode} → <span style="font-weight:600;">${r.round}</span></div>
-          <button class="btn btn-gray btn-xs admin-edit-round" data-idx="${i}" style="padding:3px 8px;">編集</button>
-          <button class="btn btn-red-o btn-xs admin-del-round" data-idx="${i}" style="padding:3px 8px;">削除</button>
-        </div>`).join('')}
-    </div>
+    ${ruleCardsHtml(tour)}
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:6px;">
@@ -1756,7 +1796,7 @@ function rAdminTourEdit(){
 
 // ===== ルール入力モーダル（overlay方式） =====
 function showRuleModal(prefix,idx){
-  const tour=AD.tournaments.find(t=>t.id===S._editingTourId)||activeTour()||makeTournament();
+  const _t=ruleEditTarget();const tour=_t.obj;
   const rules=prefix==='match'?(tour.matchRules=tour.matchRules||[]):(tour.tourneyRules=tour.tourneyRules||[]);
   const r=idx!=null?{...rules[idx]}:{code:'',name:'',fmt:'best2',turnLimit:false,playerMin:2,playerMax:4,round:''};
   const label=prefix==='match'?'試合区分':'トーナメント種類';
@@ -1794,10 +1834,10 @@ function showRuleModal(prefix,idx){
       playerMin:parseInt(document.getElementById('m-pmin').value)||2,
       playerMax:pmaxVal==='∞'||pmaxVal===''?99:(parseInt(pmaxVal)||4)
     };
-    const tour=AD.tournaments.find(t=>t.id===S._editingTourId)||activeTour()||makeTournament();
+    const _t2=ruleEditTarget();const tour=_t2.obj;
   const rules=prefix==='match'?(tour.matchRules=tour.matchRules||[]):(tour.tourneyRules=tour.tourneyRules||[]);
     if(idx!=null)rules[idx]=newRule;else rules.push(newRule);
-    saveActiveTour(tour);document.body.removeChild(overlay);render();
+    _t2.save();document.body.removeChild(overlay);render();
   };
 }
 
@@ -2723,6 +2763,96 @@ function rScoreView(){
 }
 
 // ===== ルールテンプレート =====
+// テンプレート管理画面（一覧・新規作成・編集・コピー・削除）
+function rTplManage(){
+  const tpls=AD.ruleTemplates||[];
+  const listHtml=tpls.length?tpls.map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+    <div style="flex:1;">
+      <div style="font-size:14px;font-weight:600;color:#111;">${t.name||'（名称未設定）'}</div>
+      <div style="font-size:12px;color:#6b7280;">優先:${(t.priority||'tournament')==='match'?'試合区分':'トーナメント種類'}　試合区分${(t.matchRules||[]).length}件 / T種類${(t.tourneyRules||[]).length}件 / ラウンド${(t.roundRules||[]).length}件</div>
+    </div>
+    <button class="btn btn-gray btn-xs tplm-edit" data-id="${t.id}" style="padding:3px 8px;">編集</button>
+    <button class="btn btn-gray btn-xs tplm-copy" data-id="${t.id}" style="padding:3px 8px;">コピー</button>
+    <button class="btn btn-red-o btn-xs tplm-del" data-id="${t.id}" style="padding:3px 8px;">削除</button>
+  </div>`).join(''):'<div style="font-size:13px;color:#9ca3af;padding:8px 0;">まだテンプレートがありません</div>';
+  return`<div style="padding:8px 0 4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+      <button class="btn btn-gray btn-sm" id="btn-tplm-back">← 戻る</button>
+      <div style="font-size:16px;font-weight:700;color:#111;">テンプレート管理</div>
+    </div>
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;margin-bottom:8px;">
+        <div style="flex:1;font-size:14px;font-weight:600;color:#111;">テンプレート一覧</div>
+        <button class="btn btn-green btn-xs" id="btn-tplm-new" style="padding:4px 10px;">＋ 新規作成</button>
+      </div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">優先ルール・試合区分・トーナメント種類・ラウンド名をまとめて保存します</div>
+      ${listHtml}
+    </div>
+  </div>`;
+}
+
+// テンプレート編集画面（名前＋優先＋3ルールカード）
+function rTplEdit(){
+  const tpl=(AD.ruleTemplates||[]).find(t=>t.id===S._editingTplId);
+  if(!tpl){S._editingTplId=undefined;return rTplManage();}
+  return`<div style="padding:8px 0 4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+      <button class="btn btn-gray btn-sm" id="btn-tple-back">← 保存して戻る</button>
+      <div style="font-size:16px;font-weight:700;color:#111;">${tpl.name||'テンプレート編集'}</div>
+    </div>
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:10px;">テンプレート情報</div>
+      <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">テンプレート名</div>
+        <input type="text" id="tple-name" value="${tpl.name||''}" placeholder="例: 川崎標準ルール"/></div>
+      <div style="margin-top:12px;">${priorityToggleHtml(tpl.priority)}</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:10px;">入力内容は自動で保存されます。</div>
+    </div>
+    ${ruleCardsHtml(tpl)}
+    <button class="btn btn-green" id="btn-tple-save-close" style="width:100%;padding:14px;font-size:15px;font-weight:700;margin-bottom:16px;">💾 保存して一覧に戻る</button>
+  </div>`;
+}
+
+function showLoadRuleTemplateModal(){
+  if(!AD.ruleTemplates||!AD.ruleTemplates.length){
+    alert('保存済みのテンプレートがありません。\n先に「⚙️ 管理」→「＋ 新規作成」または「💾 保存」で作成してください。');
+    return;
+  }
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  const listHtml=AD.ruleTemplates.map((t,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:600;">${t.name}</div>
+        <div style="font-size:12px;color:#6b7280;">試合区分${(t.matchRules||[]).length}件 / T種類${(t.tourneyRules||[]).length}件 / ラウンド${(t.roundRules||[]).length}件</div>
+      </div>
+      <button class="btn btn-blue btn-xs tpl-load-btn" data-idx="${i}" style="padding:4px 10px;">読み込む</button>
+    </div>`).join('');
+  overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:14px;">テンプレートを選択</div>
+    ${listHtml}
+    <button id="tpl-close" class="btn btn-gray" style="width:100%;margin-top:14px;">閉じる</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('tpl-close').onclick=()=>document.body.removeChild(overlay);
+  overlay.querySelectorAll('.tpl-load-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const tpl=AD.ruleTemplates[parseInt(btn.dataset.idx)];
+      const tour=AD.tournaments.find(t=>t.id===S._editingTourId)||activeTour();
+      if(!tour){alert('大会が選択されていません');return;}
+      if(!confirm('「'+tpl.name+'」を読み込みます。\n現在のルール設定は上書きされます。よろしいですか？'))return;
+      tour.priority=tpl.priority;
+      tour.matchRules=JSON.parse(JSON.stringify(tpl.matchRules||[]));
+      tour.tourneyRules=JSON.parse(JSON.stringify(tpl.tourneyRules||[]));
+      tour.roundRules=JSON.parse(JSON.stringify(tpl.roundRules||[]));
+      saveActiveTour(tour);
+      document.body.removeChild(overlay);
+      render();
+      alert('✅ テンプレート「'+tpl.name+'」を読み込みました');
+    });
+  });
+}
+
+// 現在の大会のルールをテンプレートとして保存
 function showSaveRuleTemplateModal(){
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -2759,57 +2889,6 @@ function showSaveRuleTemplateModal(){
     document.body.removeChild(overlay);
     alert('✅ テンプレート「'+name+'」を保存しました');
   };
-}
-
-function showLoadRuleTemplateModal(){
-  if(!AD.ruleTemplates||!AD.ruleTemplates.length){
-    alert('保存済みのテンプレートがありません。\n先に「💾 テンプレートとして保存」で保存してください。');
-    return;
-  }
-  const overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;';
-  const listHtml=AD.ruleTemplates.map((t,i)=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #f3f4f6;">
-      <div style="flex:1;">
-        <div style="font-size:14px;font-weight:600;">${t.name}</div>
-        <div style="font-size:12px;color:#6b7280;">試合区分${(t.matchRules||[]).length}件 / T種類${(t.tourneyRules||[]).length}件 / ラウンド${(t.roundRules||[]).length}件</div>
-      </div>
-      <button class="btn btn-blue btn-xs tpl-load-btn" data-idx="${i}" style="padding:4px 10px;">読み込む</button>
-      <button class="btn btn-red-o btn-xs tpl-del-btn" data-idx="${i}" style="padding:4px 8px;">削除</button>
-    </div>`).join('');
-  overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto;">
-    <div style="font-size:16px;font-weight:700;margin-bottom:14px;">テンプレートを選択</div>
-    ${listHtml}
-    <button id="tpl-close" class="btn btn-gray" style="width:100%;margin-top:14px;">閉じる</button>
-  </div>`;
-  document.body.appendChild(overlay);
-  document.getElementById('tpl-close').onclick=()=>document.body.removeChild(overlay);
-  overlay.querySelectorAll('.tpl-del-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const idx=parseInt(btn.dataset.idx);
-      if(confirm('テンプレート「'+AD.ruleTemplates[idx].name+'」を削除しますか？')){
-        AD.ruleTemplates.splice(idx,1);saveAdmin(AD);
-        document.body.removeChild(overlay);
-        showLoadRuleTemplateModal();
-      }
-    });
-  });
-  overlay.querySelectorAll('.tpl-load-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const tpl=AD.ruleTemplates[parseInt(btn.dataset.idx)];
-      const tour=AD.tournaments.find(t=>t.id===S._editingTourId)||activeTour();
-      if(!tour){alert('大会が選択されていません');return;}
-      if(!confirm('「'+tpl.name+'」を読み込みます。\n現在のルール設定は上書きされます。よろしいですか？'))return;
-      tour.priority=tpl.priority;
-      tour.matchRules=JSON.parse(JSON.stringify(tpl.matchRules||[]));
-      tour.tourneyRules=JSON.parse(JSON.stringify(tpl.tourneyRules||[]));
-      tour.roundRules=JSON.parse(JSON.stringify(tpl.roundRules||[]));
-      saveActiveTour(tour);
-      document.body.removeChild(overlay);
-      render();
-      alert('✅ テンプレート「'+tpl.name+'」を読み込みました');
-    });
-  });
 }
 
 
@@ -2974,7 +3053,7 @@ function showVenueModal(idx){
 
 // ラウンドルールモーダル
 function showRoundRuleModal(idx){
-  const roundTour=AD.tournaments.find(t=>t.id===S._editingTourId)||activeTour()||makeTournament();
+  const _rt=ruleEditTarget();const roundTour=_rt.obj;
   if(!roundTour.roundRules)roundTour.roundRules=[];
   const r=idx!=null?{...roundTour.roundRules[idx]}:{matchCode:'',tourneyCode:'',round:''};
   const mOpts=(roundTour.matchRules||[]).map(m=>`<option value="${m.code}" ${r.matchCode===m.code?'selected':''}>${m.code}${m.name?' ('+m.name+')':''}</option>`).join('');
@@ -3009,7 +3088,7 @@ function showRoundRuleModal(idx){
     if(!mc||!tc||!rn){alert('全項目を入力してください');return;}
     const newR={matchCode:mc,tourneyCode:tc,round:rn};
     if(idx!=null)roundTour.roundRules[idx]=newR;else roundTour.roundRules.push(newR);
-    saveActiveTour(roundTour);document.body.removeChild(overlay);render();
+    _rt.save();document.body.removeChild(overlay);render();
   };
 }
 
@@ -3707,7 +3786,7 @@ function bind(){
     const pw=prompt('管理者パスワードを入力してください:');
     if(!pw)return;
     const ok=await checkAdminPw(pw);
-    if(ok){S._editingTourId=undefined;S.phase='admin';render();}
+    if(ok){S._editingTourId=undefined;S._editingTplId=undefined;S._tplManage=false;S.phase='admin';render();}
     else{alert('パスワードが正しくありません');}
   };
   const bbadmin=document.getElementById('btn-bk-admin');if(bbadmin)bbadmin.onclick=()=>{S.phase='setup';render();};
@@ -4233,28 +4312,78 @@ function bind(){
   }
   const bspc=document.getElementById('btn-save-publish-close');
   if(bspc)bspc.onclick=()=>savePublishAndClose(bspc);
-  document.querySelectorAll('input[name="te-prio"]').forEach(el=>el.addEventListener('change',e=>{
-    const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
-    tour.priority=e.target.value;saveActiveTour(tour);render();
-  }));
 
   // ルール追加/編集/削除（アクティブ大会対象）
   const bsrt=document.getElementById('btn-save-rule-tpl');if(bsrt)bsrt.onclick=()=>showSaveRuleTemplateModal();
   const blrt=document.getElementById('btn-load-rule-tpl');if(blrt)blrt.onclick=()=>showLoadRuleTemplateModal();
+  const bmrt=document.getElementById('btn-manage-rule-tpl');if(bmrt)bmrt.onclick=()=>{S._tplManage=true;render();};
   const bamr=document.getElementById('btn-add-match-rule');if(bamr)bamr.onclick=()=>showRuleModal('match',null);
   const batr=document.getElementById('btn-add-tourney-rule');if(batr)batr.onclick=()=>showRuleModal('tourney',null);
   const barr=document.getElementById('btn-add-round-rule');if(barr)barr.onclick=()=>showRoundRuleModal(null);
   document.querySelectorAll('.admin-edit-rule').forEach(btn=>btn.addEventListener('click',()=>showRuleModal(btn.dataset.prefix,parseInt(btn.dataset.idx))));
   document.querySelectorAll('.admin-del-rule').forEach(btn=>btn.addEventListener('click',()=>{
-    const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
-    const rules=btn.dataset.prefix==='match'?tour.matchRules:tour.tourneyRules;
-    rules.splice(parseInt(btn.dataset.idx),1);saveActiveTour(tour);render();
+    const _t=ruleEditTarget();const obj=_t.obj;if(!obj)return;
+    const rules=btn.dataset.prefix==='match'?obj.matchRules:obj.tourneyRules;
+    rules.splice(parseInt(btn.dataset.idx),1);_t.save();render();
+  }));
+  // 試合区分ルールの並び替え（▲▼）
+  document.querySelectorAll('.admin-move-rule').forEach(btn=>btn.addEventListener('click',()=>{
+    const _t=ruleEditTarget();const obj=_t.obj;if(!obj)return;
+    const rules=btn.dataset.prefix==='match'?obj.matchRules:obj.tourneyRules;
+    if(!rules)return;
+    const i=parseInt(btn.dataset.idx);
+    const j=btn.dataset.dir==='up'?i-1:i+1;
+    if(j<0||j>=rules.length)return;
+    const tmp=rules[i];rules[i]=rules[j];rules[j]=tmp;
+    _t.save();render();
+  }));
+  // 優先ルールトグル（1行・左右選択）
+  document.querySelectorAll('.te-prio-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    const _t=ruleEditTarget();const obj=_t.obj;if(!obj)return;
+    obj.priority=btn.dataset.prio;_t.save();render();
   }));
   document.querySelectorAll('.admin-edit-round').forEach(btn=>btn.addEventListener('click',()=>showRoundRuleModal(parseInt(btn.dataset.idx))));
   document.querySelectorAll('.admin-del-round').forEach(btn=>btn.addEventListener('click',()=>{
-    const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
-    if(!tour.roundRules)return;tour.roundRules.splice(parseInt(btn.dataset.idx),1);saveActiveTour(tour);render();
+    const _t=ruleEditTarget();const obj=_t.obj;if(!obj||!obj.roundRules)return;
+    obj.roundRules.splice(parseInt(btn.dataset.idx),1);_t.save();render();
   }));
+
+  // ===== テンプレート管理画面 =====
+  const btmBack=document.getElementById('btn-tplm-back');if(btmBack)btmBack.onclick=()=>{S._tplManage=false;render();};
+  const btmNew=document.getElementById('btn-tplm-new');if(btmNew)btmNew.onclick=()=>{
+    const tpl={id:'tpl_'+Date.now(),name:'新しいテンプレート',priority:'tournament',matchRules:[],tourneyRules:[],roundRules:[]};
+    if(!AD.ruleTemplates)AD.ruleTemplates=[];
+    AD.ruleTemplates.push(tpl);saveAdmin(AD);
+    S._editingTplId=tpl.id;render();
+  };
+  document.querySelectorAll('.tplm-edit').forEach(btn=>btn.addEventListener('click',()=>{S._editingTplId=btn.dataset.id;render();}));
+  document.querySelectorAll('.tplm-copy').forEach(btn=>btn.addEventListener('click',()=>{
+    const src=(AD.ruleTemplates||[]).find(t=>t.id===btn.dataset.id);if(!src)return;
+    const copy=JSON.parse(JSON.stringify(src));
+    copy.id='tpl_'+Date.now();copy.name=(src.name||'テンプレート')+'（コピー）';
+    AD.ruleTemplates.push(copy);saveAdmin(AD);render();
+  }));
+  document.querySelectorAll('.tplm-del').forEach(btn=>btn.addEventListener('click',()=>{
+    const tpl=(AD.ruleTemplates||[]).find(t=>t.id===btn.dataset.id);if(!tpl)return;
+    if(confirm('テンプレート「'+(tpl.name||'')+'」を削除しますか？')){
+      AD.ruleTemplates=AD.ruleTemplates.filter(t=>t.id!==btn.dataset.id);saveAdmin(AD);render();
+    }
+  }));
+  // ===== テンプレート編集画面 =====
+  const tpleName=document.getElementById('tple-name');
+  if(tpleName)tpleName.addEventListener('change',()=>{
+    const tpl=(AD.ruleTemplates||[]).find(t=>t.id===S._editingTplId);if(!tpl)return;
+    tpl.name=tpleName.value.trim()||'（名称未設定）';saveAdmin(AD);
+  });
+  const tpleBack=document.getElementById('btn-tple-back');
+  const tpleSaveClose=document.getElementById('btn-tple-save-close');
+  const tpleClose=()=>{
+    const tpl=(AD.ruleTemplates||[]).find(t=>t.id===S._editingTplId);
+    if(tpl){const el=document.getElementById('tple-name');if(el)tpl.name=el.value.trim()||'（名称未設定）';saveAdmin(AD);}
+    S._editingTplId=undefined;render();
+  };
+  if(tpleBack)tpleBack.onclick=tpleClose;
+  if(tpleSaveClose)tpleSaveClose.onclick=tpleClose;
 
   // チーム管理（アクティブ大会対象）
   const bct=document.getElementById('btn-csv-teams');if(bct)bct.onclick=()=>triggerTeamsCSV();
