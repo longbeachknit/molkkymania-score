@@ -1,4 +1,5 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><!DOCTYPE html><!DOCTYPE html>
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -1648,7 +1649,8 @@ function rAdminTourEdit(){
         <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">場所</div>
           <select id="te-venue">${venueOpts||'<option value="">場所を先に登録してください</option>'}</select></div>
         <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">大会コード（試合IDの2番目の項目）</div>
-          <input type="text" id="te-code" value="${tour.eventCode}" placeholder="例: 0601"/></div>
+          <input type="text" id="te-code" value="${tour.eventCode}" placeholder="例: 0601"/>
+          <div id="te-code-status" style="font-size:12px;margin-top:5px;min-height:16px;"></div></div>
         <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">大会名</div>
           <input type="text" id="te-name" value="${tour.eventName}" placeholder="例: 6月川崎大会"/></div>
         <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">組み合わせ取得URL（この大会専用GAS）</div>
@@ -4106,6 +4108,66 @@ function bind(){
 
   // 大会編集ハンドラ
   // 基本情報フィールドを tour オブジェクトに取り込む
+  // ===== 大会コード重複チェック（ローカル＋GitHub） =====
+  // この大会が元々持っていたコード（自分自身の配信済みファイルを誤検知しないため）
+  const _ownOriginalCode=((AD.tournaments||[]).find(t=>t.id===S._editingTourId)||{}).eventCode||'';
+  // ローカル（localStorage）の大会一覧から、同じコードを使う「別の大会」を探す
+  function findLocalCodeConflict(code,selfId){
+    if(!code)return null;
+    return (AD.tournaments||[]).find(t=>t.eventCode===code&&t.id!==selfId)||null;
+  }
+  // GitHub上に {code}_settings.json が存在するか確認し、あれば中身（大会名・場所）を返す
+  async function fetchRemoteCodeInfo(code){
+    if(!code)return null;
+    try{
+      const data=await fetchSettingsJson(code);
+      if(data&&data.eventCode)return data; // 存在する
+      return null;
+    }catch(e){return null;}
+  }
+  // コード欄のステータス表示を更新（ローカル即時 → GitHub非同期）
+  let _codeCheckSeq=0;
+  async function updateCodeStatus(){
+    const input=document.getElementById('te-code');
+    const statusEl=document.getElementById('te-code-status');
+    if(!input||!statusEl)return;
+    const code=input.value.trim();
+    const selfId=S._editingTourId;
+    if(!code){statusEl.style.color='#9ca3af';statusEl.textContent='大会コードを入力してください';return;}
+    const nm=(name)=>name||'（大会名未設定）';
+    // ① ローカルの衝突を即時表示
+    const local=findLocalCodeConflict(code,selfId);
+    if(local){
+      const v=(AD.venues||[]).find(x=>x.code===local.venueCode);
+      statusEl.style.color='#dc2626';
+      statusEl.innerHTML='⚠️ このコードは「'+nm(local.eventName)+'」'+(v?'（'+v.name+'）':'')+'で使用中です';
+      return;
+    }
+    // ② GitHub側を非同期チェック（最新の入力のみ反映するためseqで制御）
+    const mySeq=++_codeCheckSeq;
+    statusEl.style.color='#9ca3af';statusEl.textContent='確認中…';
+    const remote=await fetchRemoteCodeInfo(code);
+    if(mySeq!==_codeCheckSeq)return; // 入力が進んでいたら破棄
+    if(remote&&code===_ownOriginalCode){
+      // 自分自身が配信したファイル → 問題なし
+      statusEl.style.color='#16a34a';
+      statusEl.textContent='✅ この大会のコードとして配信済みです';
+    }else if(remote){
+      const v=(AD.venues||[]).find(x=>x.code===remote.venueCode);
+      statusEl.style.color='#dc2626';
+      statusEl.innerHTML='⚠️ このコードは配信済みです：「'+nm(remote.eventName)+'」'+(v?'（'+v.name+'）':'')+'\u3000上書きに注意してください';
+    }else{
+      statusEl.style.color='#16a34a';
+      statusEl.textContent='✅ この大会ではまだこのコードは使われていません';
+    }
+  }
+  // コード欄の入力に応じてリアルタイム表示
+  const codeInputEl=document.getElementById('te-code');
+  if(codeInputEl){
+    codeInputEl.addEventListener('input',()=>updateCodeStatus());
+    updateCodeStatus(); // 画面表示時に初期判定
+  }
+
   function captureBasicFields(tour){
     if(!tour)return;
     const ve=document.getElementById('te-venue');if(ve)tour.venueCode=ve.value;
@@ -4129,6 +4191,28 @@ function bind(){
     if(!tour){S._editingTourId=undefined;render();return;}
     captureBasicFields(tour);
     saveActiveTour(tour);
+    // 大会コード重複チェック（配信前の最終確認）
+    if(tour.eventCode){
+      // ローカル：別の大会が同じコードを使用
+      const local=findLocalCodeConflict(tour.eventCode,tour.id);
+      if(local){
+        const v=(AD.venues||[]).find(x=>x.code===local.venueCode);
+        if(!confirm('⚠️ 大会コード「'+tour.eventCode+'」は、すでに別の大会\n「'+(local.eventName||'（大会名未設定）')+'」'+(v?'（'+v.name+'）':'')+'\nで使用されています。\n\nこのまま配信すると、GitHub上の設定・試合データが上書きされ、互いのデータが混ざる可能性があります。\n\n本当にこのコードで配信しますか？')){
+          if(triggerBtn){triggerBtn.disabled=false;}
+          return; // キャンセル：編集画面に留まる
+        }
+      } else if(tour.eventCode!==_ownOriginalCode){
+        // GitHub：自分以外が配信済みのコード
+        const remote=await fetchRemoteCodeInfo(tour.eventCode);
+        if(remote){
+          const v=(AD.venues||[]).find(x=>x.code===remote.venueCode);
+          if(!confirm('⚠️ 大会コード「'+tour.eventCode+'」は、すでにGitHubに配信済みです。\n配信元：「'+(remote.eventName||'（大会名未設定）')+'」'+(v?'（'+v.name+'）':'')+'\n\nこのまま配信すると、その大会の設定・試合データを上書きします。\n\n本当にこのコードで配信しますか？')){
+            if(triggerBtn){triggerBtn.disabled=false;}
+            return; // キャンセル：編集画面に留まる
+          }
+        }
+      }
+    }
     let label=null;
     if(triggerBtn){label=triggerBtn.textContent;triggerBtn.disabled=true;triggerBtn.textContent='保存・配信中...';}
     let published=false;
@@ -4706,4 +4790,3 @@ window.addEventListener('beforeunload',(e)=>{
 </div>
 </body>
 </html>
-
