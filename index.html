@@ -1,5 +1,4 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><!DOCTYPE html><!DOCTYPE html>
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -1639,7 +1638,7 @@ function rAdminTourEdit(){
 
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-      <button class="btn btn-gray btn-sm" id="btn-bk-tour-edit">← 大会一覧</button>
+      <button class="btn btn-gray btn-sm" id="btn-bk-tour-edit">← 保存して戻る</button>
       <div style="font-size:16px;font-weight:700;color:#111;">${tour.eventName||'大会設定'}</div>
     </div>
 
@@ -1665,13 +1664,7 @@ function rAdminTourEdit(){
           </div>
         </div>
       </div>
-      <button class="btn btn-green" id="btn-te-save-basic" style="width:100%;padding:11px;font-size:14px;margin-top:12px;">基本情報を保存</button>
-    </div>
-
-    <div class="card" style="padding:14px;margin-bottom:12px;background:#EEF2FF;">
-      <div style="font-size:14px;font-weight:600;color:#3730a3;margin-bottom:6px;">📡 設定を全端末に配信</div>
-      <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">試合形式・ラウンド・参加チームなどの設定をGitHubに配信します。参加者が試合IDを入力した瞬間に自動で反映されます。</div>
-      <button class="btn btn-blue" id="btn-publish-settings" style="width:100%;padding:11px;font-size:14px;">📡 設定を配信する</button>
+      <div style="font-size:11px;color:#9ca3af;margin-top:10px;">入力内容は自動で保存されます。「保存して戻る」を押すと全端末に配信されます。</div>
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
@@ -1754,6 +1747,8 @@ function rAdminTourEdit(){
         </div>
       </details><button class="btn btn-red-o btn-xs" id="btn-clear-matches" style="width:100%;padding:8px;">🗑 対戦カードを全削除</button>`:''}
     </div>
+
+    <button class="btn btn-green" id="btn-save-publish-close" style="width:100%;padding:14px;font-size:15px;font-weight:700;margin-bottom:16px;">💾 保存・配信して大会一覧に戻る</button>
   </div>`;
 }
 
@@ -3714,7 +3709,7 @@ function bind(){
     else{alert('パスワードが正しくありません');}
   };
   const bbadmin=document.getElementById('btn-bk-admin');if(bbadmin)bbadmin.onclick=()=>{S.phase='setup';render();};
-  const bbtoured=document.getElementById('btn-bk-tour-edit');if(bbtoured)bbtoured.onclick=()=>{S._editingTourId=undefined;render();};
+  const bbtoured=document.getElementById('btn-bk-tour-edit');if(bbtoured)bbtoured.onclick=()=>savePublishAndClose(bbtoured);
 
   // 大会一覧ハンドラ
   const bspat=document.getElementById('btn-save-pat');
@@ -4110,22 +4105,50 @@ function bind(){
   });
 
   // 大会編集ハンドラ
-  const bps=document.getElementById('btn-publish-settings');
-  if(bps)bps.onclick=()=>{
+  // 基本情報フィールドを tour オブジェクトに取り込む
+  function captureBasicFields(tour){
+    if(!tour)return;
+    const ve=document.getElementById('te-venue');if(ve)tour.venueCode=ve.value;
+    const co=document.getElementById('te-code');if(co)tour.eventCode=co.value.trim();
+    const na=document.getElementById('te-name');if(na)tour.eventName=na.value.trim();
+    const gu=document.getElementById('te-gasurl');if(gu)tour.gasUrl=gu.value.trim();
+    const psEl=document.getElementById('te-period-start');if(psEl)tour.eventPeriodStart=psEl.value;
+    const peEl=document.getElementById('te-period-end');if(peEl)tour.eventPeriodEnd=peEl.value;
+  }
+  // 各入力欄を自動保存（途中で他操作をしても入力が消えないように）
+  ['te-venue','te-code','te-name','te-gasurl','te-period-start','te-period-end'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('change',()=>{
+      const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
+      captureBasicFields(tour);saveActiveTour(tour);
+    });
+  });
+  // 保存・配信して大会一覧に戻る（戻るボタン・下部ボタン共通）
+  async function savePublishAndClose(triggerBtn){
     const tour=AD.tournaments.find(t=>t.id===S._editingTourId);
-    if(tour)publishSettings(tour);
-  };
-  const bteBasic=document.getElementById('btn-te-save-basic');
-  if(bteBasic)bteBasic.onclick=()=>{
-    const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
-    tour.venueCode=(document.getElementById('te-venue')||{value:''}).value;
-    tour.eventCode=(document.getElementById('te-code')||{value:''}).value.trim();
-    tour.eventName=(document.getElementById('te-name')||{value:''}).value.trim();
-    tour.gasUrl=(document.getElementById('te-gasurl')||{value:''}).value.trim();
-    tour.eventPeriodStart=(document.getElementById('te-period-start')||{value:''}).value;
-    tour.eventPeriodEnd=(document.getElementById('te-period-end')||{value:''}).value;
-    saveActiveTour(tour);alert('保存しました');render();
-  };
+    if(!tour){S._editingTourId=undefined;render();return;}
+    captureBasicFields(tour);
+    saveActiveTour(tour);
+    let label=null;
+    if(triggerBtn){label=triggerBtn.textContent;triggerBtn.disabled=true;triggerBtn.textContent='保存・配信中...';}
+    let published=false;
+    if(tour.eventCode){
+      published=await publishSettings(tour,{silent:true});
+      // 配信中の大会なら active.json も最新化（稼働状態を維持）
+      if(published&&AD.activeEventCode&&AD.activeEventCode===tour.eventCode){
+        await publishActiveEvent(tour.eventCode);
+      }
+    }
+    if(triggerBtn){triggerBtn.disabled=false;triggerBtn.textContent=label;}
+    if(!tour.eventCode){
+      alert('大会コードが未設定のため、ローカル保存のみ行いました。\n配信するには大会コードを入力してください。');
+    } else if(!published){
+      alert('⚠️ 保存はできましたが、配信に失敗しました。\nGitHub Tokenやネットワークを確認してください。');
+    }
+    S._editingTourId=undefined;render();
+  }
+  const bspc=document.getElementById('btn-save-publish-close');
+  if(bspc)bspc.onclick=()=>savePublishAndClose(bspc);
   document.querySelectorAll('input[name="te-prio"]').forEach(el=>el.addEventListener('change',e=>{
     const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
     tour.priority=e.target.value;saveActiveTour(tour);render();
@@ -4683,3 +4706,4 @@ window.addEventListener('beforeunload',(e)=>{
 </div>
 </body>
 </html>
+
