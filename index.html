@@ -2813,7 +2813,8 @@ async function publishActiveEvent(eventCode){
   const apiUrl='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/active.json';
   try{
     let sha=null;
-    const getRes=await fetch(apiUrl,{headers:{'Authorization':'token '+AD.githubPat},cache:'no-store'});
+    // ?t=Date.now() でCDNキャッシュをバイパスし、常に最新のSHAを取得する（古いSHAだとPUTが409で失敗するため）
+    const getRes=await fetch(apiUrl+'?t='+Date.now(),{headers:{'Authorization':'token '+AD.githubPat},cache:'no-store'});
     if(getRes.ok){const d=await getRes.json();sha=d.sha;}
     const body={
       message: eventCode?'Set active event: '+eventCode:'Stop broadcast',
@@ -2893,7 +2894,8 @@ async function publishSettings(tour){
     // 既存ファイルのSHAを取得
     let sha=null;
     try{
-      const getRes=await fetch(apiUrl,{headers:{'Authorization':'token '+AD.githubPat}});
+      // ?t=Date.now() でCDNキャッシュをバイパスし、常に最新のSHAを取得する（古いSHAだとPUTが409で失敗するため）
+      const getRes=await fetch(apiUrl+'?t='+Date.now(),{headers:{'Authorization':'token '+AD.githubPat},cache:'no-store'});
       if(getRes.ok){const d=await getRes.json();sha=d.sha;}
     }catch(e){}
 
