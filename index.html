@@ -400,6 +400,8 @@ async function syncSettingsFromGitHub(eventCode){
     if(data.tourneyRules!==undefined)tour.tourneyRules=data.tourneyRules;
     if(data.roundRules!==undefined)tour.roundRules=data.roundRules;
     if(data.teams!==undefined)tour.teams=data.teams;
+    if(data.eventPeriodStart!==undefined)tour.eventPeriodStart=data.eventPeriodStart;
+    if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
     saveActiveTour(tour);
   } else {
     // 大会が存在しない場合は新規作成してアクティブにセット
@@ -413,7 +415,9 @@ async function syncSettingsFromGitHub(eventCode){
       tourneyRules:data.tourneyRules||[],
       roundRules:data.roundRules||[],
       teams:data.teams||[],
-      matches:[]
+      matches:[],
+      eventPeriodStart:data.eventPeriodStart||'',
+      eventPeriodEnd:data.eventPeriodEnd||''
     });
     if(!AD.tournaments)AD.tournaments=[];
     AD.tournaments.push(newTour);
@@ -575,7 +579,8 @@ function makeTournament(overrides){
     gasUrl:'',
     priority:'tournament',
     matchRules:[],tourneyRules:[],roundRules:[],
-    teams:[],matches:[]
+    teams:[],matches:[],
+    eventPeriodStart:'',eventPeriodEnd:''
   },overrides);
 }
 
@@ -1649,6 +1654,16 @@ function rAdminTourEdit(){
           <input type="text" id="te-name" value="${tour.eventName}" placeholder="例: 6月川崎大会"/></div>
         <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">組み合わせ取得URL（この大会専用GAS）</div>
           <input type="text" id="te-gasurl" value="${tour.gasUrl||''}" placeholder="https://script.google.com/macros/s/.../exec （必須）"/></div>
+        <div style="border-top:1px solid #e5e7eb;margin-top:4px;padding-top:12px;">
+          <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🗓 試合開催期間</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">この期間中のみ「試合IDで開始する」ボタンが使用できます。未設定の場合は常に使用不可となります。</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">開始日時</div>
+              <input type="datetime-local" id="te-period-start" value="${tour.eventPeriodStart||''}" style="font-size:13px;"/></div>
+            <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">終了日時</div>
+              <input type="datetime-local" id="te-period-end" value="${tour.eventPeriodEnd||''}" style="font-size:13px;"/></div>
+          </div>
+        </div>
       </div>
       <button class="btn btn-green" id="btn-te-save-basic" style="width:100%;padding:11px;font-size:14px;margin-top:12px;">基本情報を保存</button>
     </div>
@@ -2862,14 +2877,15 @@ async function resolveActiveEventCode(){
   return AD.activeEventCode||null;
 }
 
-async function publishSettings(tour){
+async function publishSettings(tour,opts){
+  const silent=opts&&opts.silent;
   if(!tour||!tour.eventCode){
-    alert('大会コードが設定されていません。基本情報を先に保存してください。');
-    return;
+    if(!silent)alert('大会コードが設定されていません。基本情報を先に保存してください。');
+    return false;
   }
   if(!AD.githubPat||!AD.githubPat.startsWith('ghp_')){
-    alert('GitHub Personal Access Tokenが設定されていません。\n管理者設定画面のトップで設定してください。');
-    return;
+    if(!silent)alert('GitHub Personal Access Tokenが設定されていません。\n管理者設定画面のトップで設定してください。');
+    return false;
   }
   const payload={
     venueCode: tour.venueCode||'',
@@ -2881,6 +2897,8 @@ async function publishSettings(tour){
     tourneyRules: tour.tourneyRules||[],
     roundRules: tour.roundRules||[],
     teams: tour.teams||[],
+    eventPeriodStart: tour.eventPeriodStart||'',
+    eventPeriodEnd: tour.eventPeriodEnd||'',
     publishedAt: new Date().toISOString()
   };
   const fileName=tour.eventCode+'_settings.json';
@@ -2888,7 +2906,7 @@ async function publishSettings(tour){
   const apiUrl='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/'+fileName;
 
   const btn=document.getElementById('btn-publish-settings');
-  if(btn){btn.disabled=true;btn.textContent='配信中...';}
+  if(btn&&!silent){btn.disabled=true;btn.textContent='配信中...';}
 
   try{
     // 既存ファイルのSHAを取得
@@ -2911,13 +2929,16 @@ async function publishSettings(tour){
       body:JSON.stringify(body)
     });
     if(res.ok){
-      alert('✅ 配信完了！\n参加者が次回アクセス時に自動で設定が反映されます。');
+      if(!silent)alert('✅ 配信完了！\n参加者が次回アクセス時に自動で設定が反映されます。');
+      return true;
     } else {
       const err=await res.json();
-      alert('❌ 配信失敗: '+(err.message||res.status));
+      if(!silent)alert('❌ 配信失敗: '+(err.message||res.status));
+      return false;
     }
   }catch(e){
-    alert('❌ エラー: '+e.message);
+    if(!silent)alert('❌ エラー: '+e.message);
+    return false;
   }finally{
     if(btn){btn.disabled=false;btn.textContent='📡 設定を配信する';}
   }
@@ -4072,9 +4093,17 @@ function bind(){
     btn.addEventListener('click',async()=>{
       const code=btn.dataset.code;
       if(!code){alert('大会コードが設定されていません');return;}
+      const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===code);
       if(confirm(`大会コード「${code}」を配信中にしますか？\n参加者が試合開始・コート検索できるようになります。`)){
+        const orig=btn.textContent;btn.disabled=true;btn.textContent='配信中...';
+        // ① 大会設定（ルール・チーム・試合開催期間など）を先に配信
+        let settingsOk=true;
+        if(tour)settingsOk=await publishSettings(tour,{silent:true});
+        // ② 稼働中フラグ(active.json)を配信
         const ok=await publishActiveEvent(code);
-        if(ok){AD.activeEventCode=code;saveAdmin(AD);render();alert('✅ 配信を開始しました');}
+        btn.disabled=false;btn.textContent=orig;
+        if(ok&&settingsOk){AD.activeEventCode=code;saveAdmin(AD);render();alert('✅ 配信を開始しました\n（大会設定もあわせて配信しました）');}
+        else if(ok&&!settingsOk){AD.activeEventCode=code;saveAdmin(AD);render();alert('⚠️ 稼働中フラグは配信できましたが、大会設定の配信に失敗しました。\n大会編集画面の「設定を配信する」を手動でお試しください。');}
         else alert('❌ 配信に失敗しました。GitHub Tokenを確認してください。');
       }
     });
@@ -4093,6 +4122,8 @@ function bind(){
     tour.eventCode=(document.getElementById('te-code')||{value:''}).value.trim();
     tour.eventName=(document.getElementById('te-name')||{value:''}).value.trim();
     tour.gasUrl=(document.getElementById('te-gasurl')||{value:''}).value.trim();
+    tour.eventPeriodStart=(document.getElementById('te-period-start')||{value:''}).value;
+    tour.eventPeriodEnd=(document.getElementById('te-period-end')||{value:''}).value;
     saveActiveTour(tour);alert('保存しました');render();
   };
   document.querySelectorAll('input[name="te-prio"]').forEach(el=>el.addEventListener('change',e=>{
@@ -4151,6 +4182,19 @@ function bind(){
     await syncAllFromGitHub(eventCode);
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+    // 試合開催期間チェック
+    const ps=tour&&tour.eventPeriodStart;
+    const pe=tour&&tour.eventPeriodEnd;
+    if(!ps||!pe){
+      alert('試合開催期間が設定されていません。\n管理者にお問い合わせください。');
+      return;
+    }
+    const now=new Date();
+    const start=new Date(ps);
+    const end=new Date(pe);
+    const fmt=d=>`${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    if(now<start){alert(`試合開催期間は${fmt(start)}からです。`);return;}
+    if(now>end){alert('今大会の試合開催期間は終了しました。');return;}
     S._matchIdInput='';S._matchIdError='';S.phase='matchId';render();
   };
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
@@ -4184,6 +4228,25 @@ function bind(){
     btn.addEventListener('click',async()=>{
       const mid=btn.dataset.matchid;
       if(!mid)return;
+      // 試合開催期間チェック
+      const eventCode=await resolveActiveEventCode();
+      if(!eventCode){
+        alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+        return;
+      }
+      const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
+      const ps=tour&&tour.eventPeriodStart;
+      const pe=tour&&tour.eventPeriodEnd;
+      if(!ps||!pe){
+        alert('試合開催期間が設定されていません。\n管理者にお問い合わせください。');
+        return;
+      }
+      const now=new Date();
+      const start=new Date(ps);
+      const end=new Date(pe);
+      const fmt=d=>`${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      if(now<start){alert(`試合開催期間は${fmt(start)}からです。`);return;}
+      if(now>end){alert('今大会の試合開催期間は終了しました。');return;}
       btn.disabled=true;btn.textContent='取得中...';
       const parts=mid.split('_');
       if(parts.length>=2)await syncAllFromGitHub(parts[1]);
