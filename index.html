@@ -1,5 +1,4 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><!DOCTYPE html><!DOCTYPE html>
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -400,6 +399,8 @@ async function syncSettingsFromGitHub(eventCode){
     if(data.tourneyRules!==undefined)tour.tourneyRules=data.tourneyRules;
     if(data.roundRules!==undefined)tour.roundRules=data.roundRules;
     if(data.teams!==undefined)tour.teams=data.teams;
+    if(data.eventPeriodStart!==undefined)tour.eventPeriodStart=data.eventPeriodStart;
+    if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
     saveActiveTour(tour);
   } else {
     // 大会が存在しない場合は新規作成してアクティブにセット
@@ -413,7 +414,9 @@ async function syncSettingsFromGitHub(eventCode){
       tourneyRules:data.tourneyRules||[],
       roundRules:data.roundRules||[],
       teams:data.teams||[],
-      matches:[]
+      matches:[],
+      eventPeriodStart:data.eventPeriodStart||'',
+      eventPeriodEnd:data.eventPeriodEnd||''
     });
     if(!AD.tournaments)AD.tournaments=[];
     AD.tournaments.push(newTour);
@@ -2891,6 +2894,8 @@ async function publishSettings(tour){
     tourneyRules: tour.tourneyRules||[],
     roundRules: tour.roundRules||[],
     teams: tour.teams||[],
+    eventPeriodStart: tour.eventPeriodStart||'',
+    eventPeriodEnd: tour.eventPeriodEnd||'',
     publishedAt: new Date().toISOString()
   };
   const fileName=tour.eventCode+'_settings.json';
@@ -4158,7 +4163,6 @@ function bind(){
       alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
       return;
     }
-    // 試合開催期間チェック
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     const ps=tour&&tour.eventPeriodStart;
     const pe=tour&&tour.eventPeriodEnd;
@@ -4170,14 +4174,8 @@ function bind(){
     const start=new Date(ps);
     const end=new Date(pe);
     const fmt=d=>`${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    if(now<start){
-      alert(`試合開催期間は${fmt(start)}からです。`);
-      return;
-    }
-    if(now>end){
-      alert('今大会の試合開催期間は終了しました。');
-      return;
-    }
+    if(now<start){alert(`試合開催期間は${fmt(start)}からです。`);return;}
+    if(now>end){alert('今大会の試合開催期間は終了しました。');return;}
     S._matchIdInput='';S._matchIdError='';S.phase='matchId';render();
   };
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
@@ -4211,6 +4209,25 @@ function bind(){
     btn.addEventListener('click',async()=>{
       const mid=btn.dataset.matchid;
       if(!mid)return;
+      // 試合開催期間チェック
+      const eventCode=await resolveActiveEventCode();
+      if(!eventCode){
+        alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+        return;
+      }
+      const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
+      const ps=tour&&tour.eventPeriodStart;
+      const pe=tour&&tour.eventPeriodEnd;
+      if(!ps||!pe){
+        alert('試合開催期間が設定されていません。\n管理者にお問い合わせください。');
+        return;
+      }
+      const now=new Date();
+      const start=new Date(ps);
+      const end=new Date(pe);
+      const fmt=d=>`${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      if(now<start){alert(`試合開催期間は${fmt(start)}からです。`);return;}
+      if(now>end){alert('今大会の試合開催期間は終了しました。');return;}
       btn.disabled=true;btn.textContent='取得中...';
       const parts=mid.split('_');
       if(parts.length>=2)await syncAllFromGitHub(parts[1]);
@@ -4647,3 +4664,4 @@ window.addEventListener('beforeunload',(e)=>{
 </div>
 </body>
 </html>
+
