@@ -1903,7 +1903,7 @@ function rViewPortal(){
   } else if(vs.tab==='team'){
     // 検索フィルター
     const q=(vs.searchTeam||'').toLowerCase();
-    const filtered=vs.teams.filter(t=>!q||t.teamName.toLowerCase().includes(q)||t.teamNo.includes(q)).sort((a,b)=>parseInt(a.teamNo)-parseInt(b.teamNo));
+    const filtered=vs.teams.filter(t=>!q||t.teamName.toLowerCase().includes(q)||t.teamNo.includes(q));
     if(!filtered.length){listHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">チームが見つかりません</div>';}
     else{
       listHtml='<button class="btn" id="btn-team-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((t,i)=>`
@@ -1917,8 +1917,7 @@ function rViewPortal(){
     }
   } else if(vs.tab==='person'){
     const q=(vs.searchPerson||'').toLowerCase();
-    const _isKanji=n=>/^[\u4E00-\u9FFF\u3400-\u4DBF]/.test(n);
-    const filtered=vs.persons.filter(p=>!q||p.name.toLowerCase().includes(q)||p.teamName.toLowerCase().includes(q)).sort((a,b)=>{const ak=_isKanji(a.name)?0:1,bk=_isKanji(b.name)?0:1;if(ak!==bk)return ak-bk;return a.name.localeCompare(b.name,'ja');});
+    const filtered=vs.persons.filter(p=>!q||p.name.toLowerCase().includes(q)||p.teamName.toLowerCase().includes(q));
     if(!filtered.length){listHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">選手が見つかりません</div>';}
     else{
       listHtml='<button class="btn" id="btn-person-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((p,i)=>`
@@ -2204,15 +2203,32 @@ function rViewRanking(type){
   if(vs.loading){
     bodyHtml='<div style="text-align:center;padding:48px;color:#6b7280;"><div style="font-size:24px;">⏳</div><div>読み込み中...</div></div>';
   } else if(vs.rankData.length){
-    bodyHtml=vs.rankData.map((d,i)=>{
+    // 元のインデックスを保持して分類（クリック時のrankData参照を維持するため）
+    const withIdx=vs.rankData.map((d,i)=>({d,i}));
+    const rankStr=x=>String(x.d.rank==null?'':x.d.rank).trim();
+    // 「データなし」はランキングから除外
+    const visible=withIdx.filter(x=>rankStr(x)!=='データなし');
+    // 数値順位を持つ人／圏外（数値でない）に分類
+    const ranked=visible.filter(x=>{const n=parseInt(rankStr(x));return !isNaN(n)&&n>0;});
+    const out   =visible.filter(x=>{const n=parseInt(rankStr(x));return isNaN(n)||n<=0;});
+    // 順位ありは順位昇順
+    ranked.sort((a,b)=>(parseInt(rankStr(a))||999)-(parseInt(rankStr(b))||999));
+    // 圏外は名前順（漢字優先→五十音順）
+    const _isKanji=n=>/^[\u4E00-\u9FFF\u3400-\u4DBF]/.test(n||'');
+    const nameOf=x=>type==='team'?(x.d.teamName||''):(x.d.name||'');
+    out.sort((a,b)=>{const an=nameOf(a),bn=nameOf(b);const ak=_isKanji(an)?0:1,bk=_isKanji(bn)?0:1;if(ak!==bk)return ak-bk;return an.localeCompare(bn,'ja');});
+
+    const renderRow=(x,isOut)=>{
+      const d=x.d,i=x.i;
       const val=parseFloat(d.value)||0;
-      const r=parseInt(d.rank)||i+1;
+      const r=parseInt(d.rank)||0;
       const label=type==='team'?d.teamName:d.name;
       const sub=type==='team'?`No.${d.teamNo}`:(rankPersonMode==='cumul'?'通算':d.teamName||'');
-      const color=r===1?'#f59e0b':r===2?'#94a3b8':r===3?'#b45309':'#6b7280';
+      const color=isOut?'#9ca3af':(r===1?'#f59e0b':r===2?'#94a3b8':r===3?'#b45309':'#6b7280');
       const dataAttr=type==='team'?`data-rank-team="${i}"`:rankPersonMode==='cumul'?`data-rank-cumul="${d.name}"`:`data-rank-person="${i}"`;
+      const rankDisp=isOut?'<span style="font-size:12px;">圏外</span>':r;
       return`<div class="card" style="padding:10px 14px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:10px;" ${dataAttr}>
-        <div style="font-size:18px;font-weight:800;color:${color};min-width:28px;">${r}</div>
+        <div style="font-size:18px;font-weight:800;color:${color};min-width:28px;">${rankDisp}</div>
         <div style="flex:1;">
           <div style="font-size:14px;font-weight:700;">${label}</div>
           <div style="font-size:12px;color:#9ca3af;">${sub}</div>
@@ -2222,7 +2238,8 @@ function rViewRanking(type){
           <div style="color:#9ca3af;">›</div>
         </div>
       </div>`;
-    }).join('');
+    };
+    bodyHtml=ranked.map(x=>renderRow(x,false)).join('')+out.map(x=>renderRow(x,true)).join('');
   } else if(!vs.loading){
     bodyHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">指標を選択してください</div>';
   }
