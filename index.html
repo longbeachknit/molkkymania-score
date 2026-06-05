@@ -469,7 +469,9 @@ function parseCombinedId(id){
 }
 
 async function fetchTournamentInfo(action){
-  const tour=AD.tournaments&&AD.activeTourId?AD.tournaments.find(t=>t.id===AD.activeTourId):null;
+  // 組み合わせ取得（fetchCombinedIds）と同じ解決方法に揃える。
+  // activeTourId で見つからない場合も activeTour() がフォールバックするため、参加者端末で tour=null になるのを防ぐ。
+  const tour=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):activeTour();
   const fetchUrl=tour&&tour.gasUrl&&tour.gasUrl.trim();
   if(!fetchUrl||!fetchUrl.startsWith('https://script.google.com/')){
     throw new Error('GAS URLが設定されていません。');
