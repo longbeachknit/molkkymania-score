@@ -476,7 +476,7 @@ async function fetchTournamentInfo(action){
   if(!fetchUrl||!fetchUrl.startsWith('https://script.google.com/')){
     throw new Error('GAS URLが設定されていません。');
   }
-  const res=await fetch(fetchUrl+'?action='+action+'&t='+Date.now(),{mode:'cors',cache:'no-store'});
+  const res=await fetch(fetchUrl+'?action='+action+'&t='+Date.now(),{mode:'cors',cache:'no-store',credentials:'omit',redirect:'follow'});
   if(!res.ok)throw new Error('HTTP '+res.status);
   return await res.json();
 }
