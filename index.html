@@ -476,9 +476,28 @@ async function fetchTournamentInfo(action){
   if(!fetchUrl||!fetchUrl.startsWith('https://script.google.com/')){
     throw new Error('GAS URLが設定されていません。');
   }
-  const res=await fetch(fetchUrl+'?action='+action+'&t='+Date.now(),{mode:'cors',cache:'no-store',credentials:'omit',redirect:'follow'});
-  if(!res.ok)throw new Error('HTTP '+res.status);
-  return await res.json();
+  // ① キャッシュ無効化を強化（iOS Safariの壊れたキャッシュ対策）
+  // ② 失敗時は0.5秒待って1回だけ自動リトライ（毎回URLのtを更新してキャッシュ回避）
+  const doFetch=async()=>{
+    const url=fetchUrl+'?action='+action+'&t='+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const res=await fetch(url,{
+      mode:'cors',cache:'no-store',credentials:'omit',redirect:'follow',
+      headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'}
+    });
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    return await res.json();
+  };
+  try{
+    return await doFetch();
+  }catch(e1){
+    // 1回目失敗 → 0.5秒待って再試行
+    await new Promise(r=>setTimeout(r,500));
+    try{
+      return await doFetch();
+    }catch(e2){
+      throw e2;
+    }
+  }
 }
 
 async function fetchCombinedIds(){
