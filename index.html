@@ -430,8 +430,15 @@ async function fetchSettingsJson(eventCode){
 async function syncSettingsFromGitHub(eventCode){
   const data=await fetchSettingsJson(eventCode);
   if(!data)return false;
-  // 大会設定を上書き（対象大会のみ）
-  const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
+  // eventCodeは "01_0601" 形式の場合がある。venueCode/eventCodeに正規化する
+  const parts=String(eventCode).split('_');
+  const normVenue=parts.length>=2?parts[0]:(data.venueCode||'');
+  const normEvent=parts.length>=2?parts[1]:eventCode;
+  // 大会設定を上書き（対象大会のみ。venueCode+eventCodeで照合）
+  const tour=AD.tournaments&&AD.tournaments.find(t=>
+    (t.venueCode===normVenue&&t.eventCode===normEvent)||
+    t.eventCode===eventCode
+  );
   if(tour){
     if(data.eventName!==undefined)tour.eventName=data.eventName;
     if(data.priority!==undefined)tour.priority=data.priority;
@@ -443,10 +450,10 @@ async function syncSettingsFromGitHub(eventCode){
     if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
     saveActiveTour(tour);
   } else {
-    // 大会が存在しない場合は新規作成してアクティブにセット
-    const venueCode=data.venueCode||'';
+    // 大会が存在しない場合は新規作成（venueCode/eventCodeを正規化して保存）
     const newTour=makeTournament({
-      venueCode,eventCode,
+      venueCode:data.venueCode||normVenue,
+      eventCode:normEvent,
       eventName:data.eventName||'',
       gasUrl:data.gasUrl||'',
       priority:data.priority||'tournament',
@@ -460,7 +467,6 @@ async function syncSettingsFromGitHub(eventCode){
     });
     if(!AD.tournaments)AD.tournaments=[];
     AD.tournaments.push(newTour);
-    AD.activeTourId=newTour.id;
     saveAdmin(AD);
   }
   return true;
@@ -3891,7 +3897,12 @@ function bind(){
       _viewState.events=evData.events;
       // 各大会のsettings.jsonを同期してAD.tournamentsに大会名を取得
       for(const ec of evData.events){
-        if(!AD.tournaments||!AD.tournaments.find(t=>t.eventCode===ec)){
+        const p=String(ec).split('_');
+        const hasLocal=AD.tournaments&&AD.tournaments.find(t=>
+          (p.length>=2&&t.venueCode===p[0]&&t.eventCode===p[1])||
+          t.eventCode===ec
+        );
+        if(!hasLocal){
           await syncSettingsFromGitHub(ec).catch(()=>{});
         }
       }
@@ -4133,6 +4144,17 @@ function bind(){
     const evData=await fetchViewData('getEvents');
     if(evData&&evData.events){
       _scoreState.events=evData.events;
+      // 各大会のsettings.jsonを同期して大会名を取得
+      for(const ec of evData.events){
+        const p=String(ec).split('_');
+        const hasLocal=AD.tournaments&&AD.tournaments.find(t=>
+          (p.length>=2&&t.venueCode===p[0]&&t.eventCode===p[1])||
+          t.eventCode===ec
+        );
+        if(!hasLocal){
+          await syncSettingsFromGitHub(ec).catch(()=>{});
+        }
+      }
       if(evData.events.length&&!_scoreState.eventCode)_scoreState.eventCode=evData.events[0];
     }
     _scoreState.loading=false;render();
