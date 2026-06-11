@@ -339,6 +339,45 @@ const GITHUB_DATA_BASE='https://api.github.com/repos/longbeachknit/molkkymania-d
 const CACHE_TTL=20000; // 20秒キャッシュ
 const _jsonCache={};
 
+// ===== メンバー名の難読化（GitHub上のJSONで本名が直接読めないようにする） =====
+// XOR + Base64 による軽量難読化。接頭辞 enc1: で暗号化済みかを自動判定する。
+// 注意: 鍵はアプリ内にあるため「本気の解読」は防げない。覗き見・検索インデックス対策。
+const MEMBER_ENC_KEY='molkky-himitsu-2025';
+function encMembers(plain){
+  if(!plain)return plain;
+  const s=String(plain);
+  if(s.startsWith('enc1:'))return s; // 二重暗号化防止
+  try{
+    const bytes=new TextEncoder().encode(s);
+    const key=new TextEncoder().encode(MEMBER_ENC_KEY);
+    const out=new Uint8Array(bytes.length);
+    for(let i=0;i<bytes.length;i++)out[i]=bytes[i]^key[i%key.length];
+    let bin='';for(const b of out)bin+=String.fromCharCode(b);
+    return'enc1:'+btoa(bin);
+  }catch(e){return s;}
+}
+function decMembers(value){
+  if(!value)return value;
+  const s=String(value);
+  if(!s.startsWith('enc1:'))return s; // 平文（旧データ）はそのまま
+  try{
+    const bin=atob(s.slice(5));
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+    const key=new TextEncoder().encode(MEMBER_ENC_KEY);
+    const out=new Uint8Array(bytes.length);
+    for(let i=0;i<bytes.length;i++)out[i]=bytes[i]^key[i%key.length];
+    return new TextDecoder().decode(out);
+  }catch(e){return s;}
+}
+// teams 配列の members を暗号化／復号したコピーを返す
+function encTeams(teams){
+  return(teams||[]).map(t=>({...t,members:encMembers(t.members||'')}));
+}
+function decTeams(teams){
+  return(teams||[]).map(t=>({...t,members:decMembers(t.members||'')}));
+}
+
 async function fetchMatchesJson(eventCode){
   const now=Date.now();
   if(_jsonCache[eventCode]&&(now-_jsonCache[eventCode].ts)<CACHE_TTL){
@@ -399,7 +438,7 @@ async function syncSettingsFromGitHub(eventCode){
     if(data.matchRules!==undefined)tour.matchRules=data.matchRules;
     if(data.tourneyRules!==undefined)tour.tourneyRules=data.tourneyRules;
     if(data.roundRules!==undefined)tour.roundRules=data.roundRules;
-    if(data.teams!==undefined)tour.teams=data.teams;
+    if(data.teams!==undefined)tour.teams=decTeams(data.teams);
     if(data.eventPeriodStart!==undefined)tour.eventPeriodStart=data.eventPeriodStart;
     if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
     saveActiveTour(tour);
@@ -414,7 +453,7 @@ async function syncSettingsFromGitHub(eventCode){
       matchRules:data.matchRules||[],
       tourneyRules:data.tourneyRules||[],
       roundRules:data.roundRules||[],
-      teams:data.teams||[],
+      teams:decTeams(data.teams||[]),
       matches:[],
       eventPeriodStart:data.eventPeriodStart||'',
       eventPeriodEnd:data.eventPeriodEnd||''
@@ -3014,7 +3053,7 @@ async function publishSettings(tour,opts){
     matchRules: tour.matchRules||[],
     tourneyRules: tour.tourneyRules||[],
     roundRules: tour.roundRules||[],
-    teams: tour.teams||[],
+    teams: encTeams(tour.teams||[]),
     eventPeriodStart: tour.eventPeriodStart||'',
     eventPeriodEnd: tour.eventPeriodEnd||'',
     publishedAt: new Date().toISOString()
