@@ -378,13 +378,21 @@ function decTeams(teams){
   return(teams||[]).map(t=>({...t,members:decMembers(t.members||'')}));
 }
 
+// eventCode("01_0601" 形式)をJSONファイル名用("0601")に変換する
+// venue接頭辞を取り除き、最後のコード部分のみをファイル名に使う
+function toJsonFileCode(eventCode){
+  const parts=String(eventCode).split('_');
+  return parts.length>=2?parts[parts.length-1]:eventCode;
+}
+
 async function fetchMatchesJson(eventCode){
   const now=Date.now();
   if(_jsonCache[eventCode]&&(now-_jsonCache[eventCode].ts)<CACHE_TTL){
     return _jsonCache[eventCode].data;
   }
   try{
-    const url=GITHUB_DATA_BASE+'/'+eventCode+'.json?t='+Date.now();
+    const fileCode=toJsonFileCode(eventCode);
+    const url=GITHUB_DATA_BASE+'/'+fileCode+'.json?t='+Date.now();
     const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const apiData=await res.json();
@@ -409,7 +417,8 @@ async function fetchSettingsJson(eventCode){
     return _jsonCache[cacheKey].data;
   }
   try{
-    const url=GITHUB_DATA_BASE+'/'+eventCode+'_settings.json?t='+Date.now();
+    const fileCode=toJsonFileCode(eventCode);
+    const url=GITHUB_DATA_BASE+'/'+fileCode+'_settings.json?t='+Date.now();
     const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const apiData=await res.json();
