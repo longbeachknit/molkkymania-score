@@ -1976,7 +1976,7 @@ function rViewPortal(){
   } else if(vs.tab==='team'){
     // 検索フィルター
     const q=(vs.searchTeam||'').toLowerCase();
-    const filtered=vs.teams.filter(t=>!q||t.teamName.toLowerCase().includes(q)||t.teamNo.includes(q));
+    const filtered=vs.teams.filter(t=>!q||t.teamName.toLowerCase().includes(q)||t.teamNo.includes(q)).sort((a,b)=>parseInt(a.teamNo)-parseInt(b.teamNo));
     if(!filtered.length){listHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">チームが見つかりません</div>';}
     else{
       listHtml='<button class="btn" id="btn-team-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((t,i)=>`
@@ -1990,7 +1990,8 @@ function rViewPortal(){
     }
   } else if(vs.tab==='person'){
     const q=(vs.searchPerson||'').toLowerCase();
-    const filtered=vs.persons.filter(p=>!q||p.name.toLowerCase().includes(q)||p.teamName.toLowerCase().includes(q));
+    const _isKanji=n=>/^[\u4E00-\u9FFF\u3400-\u4DBF]/.test(n||'');
+    const filtered=vs.persons.filter(p=>!q||p.name.toLowerCase().includes(q)||p.teamName.toLowerCase().includes(q)).sort((a,b)=>{const ak=_isKanji(a.name)?0:1,bk=_isKanji(b.name)?0:1;if(ak!==bk)return ak-bk;return a.name.localeCompare(b.name,'ja');});
     if(!filtered.length){listHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">選手が見つかりません</div>';}
     else{
       listHtml='<button class="btn" id="btn-person-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((p,i)=>`
@@ -4995,7 +4996,7 @@ render();
 window.addEventListener('beforeunload',(e)=>{
   if(typeof S!=='undefined'&&IN_GAME_PHASES.includes(S.phase)){
     e.preventDefault();
-    e.returnValue='試合が進行中です。ページを離れると試合結果が失われる可能性があります。';
+    e.returnValue='試合内容が破棄されますがよろしいですか';
     return e.returnValue;
   }
 });
@@ -5014,7 +5015,7 @@ window.addEventListener('beforeunload',(e)=>{
 window.addEventListener('beforeunload',(e)=>{
   if(typeof S!=='undefined'&&IN_GAME_PHASES.includes(S.phase)){
     e.preventDefault();
-    e.returnValue='試合が進行中です。ページを離れると試合結果が失われる可能性があります。';
+    e.returnValue='試合内容が破棄されますがよろしいですか';
     return e.returnValue;
   }
 });
