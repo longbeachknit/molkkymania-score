@@ -92,7 +92,7 @@ let S={
   sets:[],cur:0,fid:0,showHist:false,
   pFirst:null,pIdx:null,pOrders:[[],[]],
   pExclude:[[],[]],
-  iP:'',iM:'single',iA:'',useAimed:true,rule37Pending:false,_tiView:null,_tiLoading:false,_tiError:null,_tiSchedule:[],_tiRegulation:'',_tiSections:null,_tiPrelim:[],_tiPrelimQuery:'',_tiPrelimSelected:null,
+  iP:'',iM:'single',iA:'',useAimed:false,rule37Pending:false,_tiView:null,_tiLoading:false,_tiError:null,_tiSchedule:[],_tiRegulation:'',_tiSections:null,_tiPrelim:[],_tiPrelimQuery:'',_tiPrelimSelected:null,
   prev:null,ssIdx:0,
   endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,
   molkoutWinner:null,
@@ -1059,7 +1059,7 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
 
 function doReset(){
   clearMatchState();
-  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:true,rule37Pending:false,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,_ssSaveDest:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
+  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:false,rule37Pending:false,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,_ssSaveDest:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
 }
 function goNext(ni){
   S.tlTieExtend=false;
@@ -1078,6 +1078,53 @@ function unknownSets(){
     const hasUnknown=cset.teams.some(td=>td.throws.some(th=>!th.miss&&th.result==='unknown'));
     return hasUnknown?i:-1;
   }).filter(i=>i>=0);
+}
+
+async function startQRScan(){
+  const container=document.getElementById('qr-reader-container');
+  if(!container)return;
+  container.style.display='flex';
+
+  let html5QrCode=null;
+  let scanning=true;
+
+  const stopScan=async()=>{
+    scanning=false;
+    if(html5QrCode){
+      try{await html5QrCode.stop();}catch(e){}
+      html5QrCode=null;
+    }
+    container.style.display='none';
+  };
+
+  const onScanSuccess=async(decodedText)=>{
+    if(!scanning)return;
+    await stopScan();
+    const val=decodedText.trim();
+    const qrParts=val.split('_');
+    if(qrParts.length>=2)await syncAllFromGitHub(qrParts[1]);
+    const result=resolveMatchId(val);
+    if(!result){
+      S._matchIdError='QRコードの形式が正しくありません';
+      S._matchIdInput=val;S.phase='matchId';render();return;
+    }
+    S._matchIdInput=val;S._matchIdError='';S.matchIdData=result;S.phase='matchConfirm';render();
+  };
+
+  const closeBtn=document.getElementById('btn-qr-close');
+  if(closeBtn)closeBtn.onclick=async()=>{ await stopScan(); };
+  // 右下「試合IDを入力する」→ 既存の試合ID入力画面へ
+  const toManual=document.getElementById('btn-qr-to-manual');
+  if(toManual)toManual.onclick=async()=>{ await stopScan(); S._matchIdInput='';S._matchIdError='';S.phase='matchId';render(); };
+
+  try{
+    html5QrCode=new Html5Qrcode('qr-reader');
+    const config={fps:10,qrbox:{width:250,height:250}};
+    await html5QrCode.start({facingMode:'environment'},config,onScanSuccess);
+  }catch(err){
+    alert('カメラの起動に失敗しました。カメラへのアクセスを許可してください。');
+    container.style.display='none';
+  }
 }
 
 function render(){
@@ -1124,10 +1171,10 @@ function rSetup(){
     <div style="font-size:13px;color:#6b7280;margin-bottom:24px;">オンラインスコアリングシステム</div>
     <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">試合</div>
     <button id="btn-go-matchid" style="width:100%;padding:14px 16px;font-size:15px;font-weight:700;margin-bottom:10px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;align-items:center;gap:10px;cursor:pointer;">
-      <span style="font-size:22px;">📋</span>
+      <span style="font-size:22px;">📷</span>
       <div style="text-align:left;">
-        <div style="font-size:15px;font-weight:700;">試合IDで開始する</div>
-        <div style="font-size:11px;font-weight:400;opacity:0.8;">試合IDを入力して試合を開始</div>
+        <div style="font-size:15px;font-weight:700;">QRコードから試合を開始する</div>
+        <div style="font-size:11px;font-weight:400;opacity:0.8;">カメラでQRコードを読み取って試合を開始</div>
       </div>
     </button>
     <button id="btn-go-court-search" style="width:100%;padding:14px 16px;font-size:15px;font-weight:700;margin-bottom:10px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;align-items:center;gap:10px;cursor:pointer;">
@@ -1538,7 +1585,8 @@ function rMatchOver(){
     <button class="btn btn-yellow" id="btn-ss-match-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-match" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">← 戻る（セット終了画面）</button>
 
-    <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信して最初から</button>
+    <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 12px;margin-bottom:10px;text-align:center;font-size:13px;font-weight:700;color:#92400e;">⚠️ 結果はまだ送信されていません</div>
+    <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信する</button>
   </div>`;
 }
 
@@ -1588,7 +1636,8 @@ function rEarlyMatchOver(){
     ${needMolkout&&S.molkoutWinner==null?`<button class="btn btn-orange" id="btn-go-molkout" style="width:100%;padding:14px;font-size:15px;margin-bottom:10px;">🎯 モルックアウトへ進む</button>`:''}
     <button class="btn btn-yellow" id="btn-ss-early-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-early" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">← 戻る（セット終了画面）</button>
-    <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信して最初から</button>
+    <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 12px;margin-bottom:10px;text-align:center;font-size:13px;font-weight:700;color:#92400e;">⚠️ 結果はまだ送信されていません</div>
+    <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信する</button>
   </div>`;
 }
 
@@ -2503,118 +2552,33 @@ async function saveScoresheet(){
   const LB=['#DBEAFE','#FEE2E2'];
   const LT=['#1D4ED8','#B91C1C'];
 
-  // 各セットのHTMLを生成（buildSSと同じロジック）
+  // 各セットのHTMLを生成（画面表示と同じ buildSS をそのまま使う）
+  // buildSS が使うCSSクラスのスタイルを画像化用にインライン展開するための style
+  const ssStyle=`<style>
+    .ss-wrap{overflow:visible;}
+    .ss-tbl{border-collapse:collapse;width:100%;}
+    .ss-tbl th,.ss-tbl td{border:1px solid #bbb;text-align:center;vertical-align:middle;padding:5px 6px;color:#111;}
+    .ss-tbl th{background:#f3f4f6;font-size:13px;font-weight:600;}
+    .turn-col{width:26px;font-size:13px;color:#888;background:#f8f8f8;}
+    .mbr-th{writing-mode:vertical-rl;font-size:13px;min-width:32px;padding:8px 4px;}
+    .tot-th{font-size:13px;min-width:38px;}
+    .sc-cell{font-size:14px;min-width:34px;padding:5px 6px;}
+    .tot-cell{font-size:14px;font-weight:600;min-width:38px;background:#fafaf6;padding:5px 6px;}
+    .team-hdr{font-size:14px;font-weight:600;padding:7px 8px;}
+  </style>`;
+
   function buildSetHtml(cset, si){
-    const fti=cset.ftid, sti=1-fti;
-    const fTeam=S.teams[fti], sTeam=S.teams[sti];
-    const fTh=cset.teams[fti].throws, sTh=cset.teams[sti].throws;
-    const maxT=Math.max(fTh.length,sTh.length);
-    // そのセットで実際に投げた人だけを列として表示（出場していない人は除外）
-    function actualMbrs(ti){
-      const thrown=[...new Set(cset.teams[ti].throws.map(th=>th.member).filter(Boolean))];
-      if(thrown.length>0){
-        // 投げ順(order)の並び順を維持しつつ、実際に投げた人だけ残す
-        const order=(cset.teams[ti].order||[]).length>0?cset.teams[ti].order:S.teams[ti].members||[];
-        const ordered=order.filter(m=>thrown.includes(m));
-        // orderに含まれていないが投げた人も末尾に追加
-        thrown.forEach(m=>{if(!ordered.includes(m))ordered.push(m);});
-        return ordered.length>0?ordered:thrown;
-      }
-      // 投擲がない場合はorderかmembersから1人
-      const order=(cset.teams[ti].order||[]).length>0?cset.teams[ti].order:S.teams[ti].members||[];
-      return order.length>0?[order[0]]:['投てき者'];
-    }
-    const mbrs=[actualMbrs(fti), actualMbrs(sti)];
-    const nM=[Math.max(mbrs[0].length,1),Math.max(mbrs[1].length,1)];
-    const cF=nM[fti], cS=nM[sti];
-
-    // 累計を追跡
-    const prevC=[0,0];
-    function tDisp(th,ti){
-      if(!th)return'';
-      prevC[ti]=th.cumul;
-      if(th.miss)return`<span style="color:#111;font-size:13px;">—</span>`;
-      const sc=th.raw!==undefined?th.raw:th.pts;
-      if(th.result==='circle')
-        return`<svg width="20" height="20" viewBox="0 0 22 22" style="vertical-align:middle;"><circle cx="11" cy="11" r="10" fill="none" stroke="#111" stroke-width="1.5"/><text x="11" y="15.5" text-anchor="middle" font-size="11" font-family="-apple-system,sans-serif" fill="#111">${sc}</text></svg>`;
-      if(th.result==='unknown')
-        return`<span style="font-weight:600;font-size:12px;">${sc}？</span>`;
-      return`<span style="font-weight:600;font-size:12px;">${sc}</span>`;
-    }
-    function totDisp(th,ti){
-      if(!th)return'';
-      prevC[ti]=th.cumul;
-      if(th.miss)return`<span style="font-weight:600;font-size:11px;color:#111;">${prevC[ti]}</span>`;
-      return`<span style="font-weight:600;font-size:11px;">${th.cumul}</span>`;
-    }
-
-    let rows='';
-    for(let t=0;t<maxT;t++){
-      const thF=fTh[t],thS=sTh[t];
-      const mF=thF?(mbrs[fti].indexOf(thF.member)>=0?mbrs[fti].indexOf(thF.member):t%nM[fti]):-1;
-      const mS=thS?(mbrs[sti].indexOf(thS.member)>=0?mbrs[sti].indexOf(thS.member):t%nM[sti]):-1;
-      const cF2=mbrs[fti].map((_,mi)=>mi!==mF||!thF?
-        `<td style="padding:2px 3px;border:1px solid #bbb;"></td>`:
-        `<td style="padding:2px 3px;border:1px solid #bbb;font-size:11px;text-align:center;color:#111;">${tDisp(thF,fti)}</td>`
-      ).join('');
-      const cS2=mbrs[sti].map((_,mi)=>mi!==mS||!thS?
-        `<td style="padding:2px 3px;border:1px solid #bbb;"></td>`:
-        `<td style="padding:2px 3px;border:1px solid #bbb;font-size:11px;text-align:center;color:#111;">${tDisp(thS,sti)}</td>`
-      ).join('');
-      const totF=totDisp(thF,fti),totS=totDisp(thS,sti);
-      rows+=`<tr>
-        <td style="padding:2px 3px;border:1px solid #bbb;font-size:11px;color:#111;text-align:center;">${t+1}</td>
-        ${cF2}<td style="padding:2px 3px;border:1px solid #bbb;border-right:2.5px solid #aaa;font-size:11px;font-weight:600;text-align:center;color:#111;">${totF}</td>
-        ${cS2}<td style="padding:2px 3px;border:1px solid #bbb;font-size:11px;font-weight:600;text-align:center;color:#111;">${totS}</td>
-      </tr>`;
-    }
-
-    // 失格行（色なし・黒のみ）
-    const eF=cset.teams[fti].el,eS=cset.teams[sti].el;
-    if(eF||eS){
-      const fe=eF?`0`:`50`;
-      const se=eS?`0`:`50`;
-      rows+=`<tr style="background:#fafafa;">
-        <td style="padding:2px 3px;border:1px solid #bbb;font-size:11px;font-weight:700;text-align:center;color:#111;">失</td>
-        ${mbrs[fti].map(()=>`<td style="padding:2px 3px;border:1px solid #bbb;background:#fafafa;"></td>`).join('')}
-        <td style="padding:2px 3px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:#fafafa;font-size:11px;font-weight:700;text-align:center;color:#111;">${fe}</td>
-        ${mbrs[sti].map(()=>`<td style="padding:2px 3px;border:1px solid #bbb;background:#fafafa;"></td>`).join('')}
-        <td style="padding:2px 3px;border:1px solid #bbb;background:#fafafa;font-size:11px;font-weight:700;text-align:center;color:#111;">${se}</td>
-      </tr>`;
-    }
-
-    if(!rows)rows=`<tr><td colspan="${1+cF+1+cS+1}" style="border:1px solid #bbb;padding:8px;font-size:12px;color:#9ca3af;text-align:center;">投擲なし</td></tr>`;
-
-    // 勝者表示（色なし）
+    const sl=S.fmt==='round2'?`${si+1}セット目`:`第${si+1}セット`;
+    // 勝者表示
     let resultHtml='';
     if(cset.wid!=null){
-      resultHtml=`<div style="padding:5px 8px;background:#f8fafc;border-top:1px solid #bbb;text-align:center;font-size:12px;font-weight:700;color:#111;">${S.teams[cset.wid].name} 勝利</div>`;
+      resultHtml=`<div style="padding:5px 8px;background:#f8fafc;border:1px solid #bbb;border-top:none;text-align:center;font-size:12px;font-weight:700;color:#111;">${S.teams[cset.wid].name} 勝利</div>`;
     } else if(cset.draw){
-      resultHtml=`<div style="padding:5px 8px;background:#f8fafc;border-top:1px solid #bbb;text-align:center;font-size:12px;font-weight:700;color:#111;">引き分け</div>`;
+      resultHtml=`<div style="padding:5px 8px;background:#f8fafc;border:1px solid #bbb;border-top:none;text-align:center;font-size:12px;font-weight:700;color:#111;">引き分け</div>`;
     }
-
-    const sl=S.fmt==='round2'?`${si+1}セット目`:`第${si+1}セット`;
-    return`<div style="flex-shrink:0;border:1px solid #bbb;border-radius:6px;overflow:hidden;">
-      <div style="background:#f8fafc;padding:5px 10px;font-size:12px;font-weight:700;border-bottom:1px solid #bbb;text-align:center;">${sl}</div>
-      <table style="border-collapse:collapse;width:100%;">
-        <thead>
-          <tr>
-            <th style="padding:3px 3px;border:1px solid #bbb;background:#f8fafc;"></th>
-            <th colspan="${cF}" style="padding:3px 3px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:#f8fafc;color:#111;font-size:12px;">${fTeam.name}</th>
-            <th style="padding:3px 3px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:#f8fafc;color:#111;font-size:11px;">計</th>
-            <th colspan="${cS}" style="padding:3px 3px;border:1px solid #bbb;background:#f8fafc;color:#111;font-size:12px;">${sTeam.name}</th>
-            <th style="padding:3px 3px;border:1px solid #bbb;background:#f8fafc;color:#111;font-size:11px;">計</th>
-          </tr>
-          <tr>
-            <th style="border:1px solid #bbb;background:#f8fafc;"></th>
-            ${mbrs[fti].map(m=>`<th style="padding:2px 2px;border:1px solid #bbb;font-size:10px;background:#f8fafc;color:#111;min-width:16px;"><div style="display:flex;flex-direction:column;align-items:center;gap:0;">${[...m].map(c=>`<span style="line-height:1.3;font-size:10px;">${c}</span>`).join('')}</div></th>`).join('')}
-            <th style="padding:3px 3px;border:1px solid #bbb;border-right:2.5px solid #aaa;background:#f8fafc;font-size:10px;color:#111;">計</th>
-            ${mbrs[sti].map(m=>`<th style="padding:2px 2px;border:1px solid #bbb;font-size:10px;background:#f8fafc;color:#111;min-width:16px;"><div style="display:flex;flex-direction:column;align-items:center;gap:0;">${[...m].map(c=>`<span style="line-height:1.3;font-size:10px;">${c}</span>`).join('')}</div></th>`).join('')}
-            <th style="padding:3px 3px;border:1px solid #bbb;background:#f8fafc;font-size:10px;color:#111;">計</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
+    return`<div style="flex-shrink:0;">
+      <div style="background:#f8fafc;padding:5px 10px;font-size:12px;font-weight:700;border:1px solid #bbb;border-bottom:none;text-align:center;color:#111;">${sl}</div>
+      ${buildSS(cset,false,si)}
       ${resultHtml}
     </div>`;
   }
@@ -2637,7 +2601,7 @@ async function saveScoresheet(){
     </div>
   </div>`;
 
-  container.innerHTML=`${headerHtml}<div style="display:flex;gap:10px;align-items:flex-start;">${setsHtml}</div>`;
+  container.innerHTML=`${ssStyle}${headerHtml}<div style="display:flex;gap:10px;align-items:flex-start;">${setsHtml}</div>`;
   document.body.appendChild(container);
 
   try{
@@ -3862,7 +3826,7 @@ function bind(){
     const fid=S.pFirst!=null?S.pFirst:S.fid;if(S.sets.length===0)S.fid=fid;
     const si=S.pIdx!=null?S.pIdx:S.sets.length;
     S.sets.push(mkSet(si,fid,[...S.pOrders],[...S.pExclude.map(a=>[...a])]));
-    S.cur=si;S.pFirst=null;S.pIdx=null;S.pOrders=[[],[]];S.pExclude=[[],[]];S._orderFromBack=false;S._cameFromGame=false;S.showHist=false;S.iP='';S.iM='single';S.iA='';if(S.useAimed===undefined)S.useAimed=true;S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.lastThrowSec=null;startTimer();S.phase='game';render();
+    S.cur=si;S.pFirst=null;S.pIdx=null;S.pOrders=[[],[]];S.pExclude=[[],[]];S._orderFromBack=false;S._cameFromGame=false;S.showHist=false;S.iP='';S.iM='single';S.iA='';if(S.useAimed===undefined)S.useAimed=false;S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.lastThrowSec=null;startTimer();S.phase='game';render();
   };
   const bee=document.getElementById('btn-early-end');
   if(bee)bee.onclick=()=>{const cset=cs();if(isTurnEnd(cset)){processEarlyEnd();}else{S.endPending=true;render();}};
@@ -4544,7 +4508,7 @@ function bind(){
     const fmt=d=>`${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     if(now<start){alert(`試合開催期間は${fmt(start)}からです。`);return;}
     if(now>end){alert('今大会の試合開催期間は終了しました。');return;}
-    S._matchIdInput='';S._matchIdError='';S.phase='matchId';render();
+    S._matchIdInput='';S._matchIdError='';startQRScan();
   };
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
   const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{S.phase=S._matchConfirmFrom||'matchId';S._matchConfirmFrom=null;render();};
@@ -4676,48 +4640,7 @@ function bind(){
 
   // QRコードスキャン（カメラ起動）
   const bqr=document.getElementById('btn-qr-scan');
-  if(bqr)bqr.onclick=async()=>{
-    const container=document.getElementById('qr-reader-container');
-    if(!container)return;
-    container.style.display='flex';
-
-    let html5QrCode=null;
-    let scanning=true;
-
-    const stopScan=async()=>{
-      scanning=false;
-      if(html5QrCode){
-        try{await html5QrCode.stop();}catch(e){}
-        html5QrCode=null;
-      }
-      container.style.display='none';
-    };
-
-    const onScanSuccess=async(decodedText)=>{
-      if(!scanning)return;
-      await stopScan();
-      const val=decodedText.trim();
-      const qrParts=val.split('_');
-      if(qrParts.length>=2)await syncAllFromGitHub(qrParts[1]);
-      const result=resolveMatchId(val);
-      if(!result){
-        S._matchIdError='QRコードの形式が正しくありません';
-        S._matchIdInput=val;render();return;
-      }
-      S._matchIdInput=val;S._matchIdError='';S.matchIdData=result;S.phase='matchConfirm';render();
-    };
-
-    document.getElementById('btn-qr-close').onclick=async()=>{ await stopScan(); };
-
-    try{
-      html5QrCode=new Html5Qrcode('qr-reader');
-      const config={fps:10,qrbox:{width:250,height:250}};
-      await html5QrCode.start({facingMode:'environment'},config,onScanSuccess);
-    }catch(err){
-      alert('カメラの起動に失敗しました。カメラへのアクセスを許可してください。');
-      container.style.display='none';
-    }
-  };
+  if(bqr)bqr.onclick=()=>startQRScan();
 
   // 対戦カード確認 → 試合開始
   document.querySelectorAll('.change-team-btn').forEach(btn=>{
@@ -5009,6 +4932,7 @@ window.addEventListener('beforeunload',(e)=>{
       </div>
       <div id="qr-reader" style="width:100%;"></div>
     </div>
+    <button id="btn-qr-to-manual" style="position:fixed;right:18px;bottom:24px;padding:12px 16px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);">⌨️ 試合IDを入力する</button>
   </div>
 <script>
 // ページ離脱時の確認（試合中のみ）
@@ -5020,15 +4944,5 @@ window.addEventListener('beforeunload',(e)=>{
   }
 });
 </script>
-<div id="qr-reader-container" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;flex-direction:column;align-items:center;justify-content:center;">
-  <div style="width:90%;max-width:400px;background:#fff;padding:16px;border-radius:12px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <div style="font-weight:700;font-size:16px;">📷 QRコードをかざしてください</div>
-      <button id="btn-qr-close" style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;font-size:13px;cursor:pointer;">閉じる</button>
-    </div>
-    <div id="qr-reader" style="width:100%;"></div>
-    <div id="qr-status" style="font-size:13px;color:#6b7280;text-align:center;margin-top:8px;"></div>
-  </div>
-</div>
 </body>
 </html>
