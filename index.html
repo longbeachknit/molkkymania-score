@@ -1537,7 +1537,8 @@ function rSetOver(){
     ${S.earlyEnd?`<button class="btn btn-green" id="btn-early-match-over" style="width:100%;padding:14px;font-size:16px;">試合結果を確認する →</button>`
     :mw!=null?`<div style="text-align:center;padding:12px 0 14px;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:#111;margin-bottom:4px;">試合終了</div><div style="font-size:14px;font-weight:700;color:#92400e;">⚠️ 結果が送信されるまで画面を進めてください</div></div>
       <button class="btn btn-green" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;">結果を見る</button>`
-    :isLast?`<button class="btn btn-green" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;">試合終了 → 結果へ</button>`
+    :isLast?`<div style="text-align:center;padding:12px 0 14px;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:#111;margin-bottom:4px;">試合終了</div><div style="font-size:14px;font-weight:700;color:#92400e;">⚠️ 結果が送信されるまで画面を進めてください</div></div>
+      <button class="btn btn-green" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;">結果を見る</button>`
     :`<button class="btn btn-green" id="btn-next-set" data-next="${ni}" style="width:100%;padding:14px;font-size:16px;">次のセットへ →</button>`}
   </div>`;
 }
