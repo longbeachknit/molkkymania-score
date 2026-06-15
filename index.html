@@ -1535,7 +1535,7 @@ function rSetOver(){
     </div>`:``}
     <button class="btn btn-red-o" id="btn-undo-end" style="width:100%;margin-bottom:10px;padding:12px;font-size:15px;" ${cu?'':'disabled'}>↩ 最後の1投に戻す</button>
     ${S.earlyEnd?`<button class="btn btn-green" id="btn-early-match-over" style="width:100%;padding:14px;font-size:16px;">試合結果を確認する →</button>`
-    :mw!=null?`<div style="text-align:center;padding:10px 0 14px;background:${LB[mw]};border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:${LT[mw]};">🏆 試合終了 — ${S.teams[mw].name} の勝利！</div></div>
+    :mw!=null?`<div style="text-align:center;padding:12px 0 14px;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:#111;margin-bottom:4px;">試合終了</div><div style="font-size:14px;font-weight:700;color:#92400e;">⚠️ 結果が送信されるまで画面を進めてください</div></div>
       <button class="btn btn-green" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;">結果を見る</button>`
     :isLast?`<button class="btn btn-green" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;">試合終了 → 結果へ</button>`
     :`<button class="btn btn-green" id="btn-next-set" data-next="${ni}" style="width:100%;padding:14px;font-size:16px;">次のセットへ →</button>`}
@@ -1558,6 +1558,10 @@ function rMatchOver(){
   const wins=[0,0];S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});const mw=mW();
   const r2=S.fmt==='round2'?round2Stats():null;
   return`<div style="padding:12px 0;text-align:center;">
+    <div style="background:#fef2f2;border:2px solid #f87171;border-radius:12px;padding:16px 12px;margin-bottom:16px;">
+      <div style="font-size:20px;font-weight:800;color:#dc2626;">⚠️ 結果はまだ送信されていません</div>
+      <div style="font-size:13px;color:#991b1b;margin-top:4px;">下の「結果を送信する」を押してください</div>
+    </div>
     <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">${fl()} 試合終了</div>
     ${S.fmt==='round2'?`
     <div style="font-size:20px;font-weight:700;color:#111;margin-bottom:16px;">試合終了</div>
@@ -1585,7 +1589,6 @@ function rMatchOver(){
     <button class="btn btn-yellow" id="btn-ss-match-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-match" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">← 戻る（セット終了画面）</button>
 
-    <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 12px;margin-bottom:10px;text-align:center;font-size:13px;font-weight:700;color:#92400e;">⚠️ 結果はまだ送信されていません</div>
     <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信する</button>
   </div>`;
 }
@@ -1605,6 +1608,10 @@ function rEarlyMatchOver(){
   const cu=cset.hist.length>0;
   const r2=S.fmt==='round2'?round2Stats():null;
   return`<div style="padding:12px 0;">
+    <div style="background:#fef2f2;border:2px solid #f87171;border-radius:12px;padding:16px 12px;margin-bottom:16px;text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#dc2626;">⚠️ 結果はまだ送信されていません</div>
+      <div style="font-size:13px;color:#991b1b;margin-top:4px;">下の「結果を送信する」を押してください</div>
+    </div>
     <div style="text-align:center;padding:14px 0 12px;background:#FFF7ED;border-radius:12px;margin-bottom:16px;">
       <div style="font-size:13px;color:#92400e;margin-bottom:6px;">⏹ 途中試合終了（${sl}終了時点）</div>
       ${matchWin!=null?`<div style="font-size:24px;font-weight:700;color:#111;">🏆 ${S.teams[matchWin].name} の勝利</div>`
@@ -1636,7 +1643,6 @@ function rEarlyMatchOver(){
     ${needMolkout&&S.molkoutWinner==null?`<button class="btn btn-orange" id="btn-go-molkout" style="width:100%;padding:14px;font-size:15px;margin-bottom:10px;">🎯 モルックアウトへ進む</button>`:''}
     <button class="btn btn-yellow" id="btn-ss-early-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-early" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">← 戻る（セット終了画面）</button>
-    <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 12px;margin-bottom:10px;text-align:center;font-size:13px;font-weight:700;color:#92400e;">⚠️ 結果はまだ送信されていません</div>
     <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信する</button>
   </div>`;
 }
@@ -2560,7 +2566,7 @@ async function saveScoresheet(){
     .ss-tbl th,.ss-tbl td{border:1px solid #bbb;text-align:center;vertical-align:middle;padding:5px 6px;color:#111;}
     .ss-tbl th{background:#f3f4f6;font-size:13px;font-weight:600;}
     .turn-col{width:26px;font-size:13px;color:#888;background:#f8f8f8;}
-    .mbr-th{writing-mode:vertical-rl;font-size:13px;min-width:32px;padding:8px 4px;}
+    .mbr-th{writing-mode:vertical-rl;text-orientation:upright;font-size:13px;width:22px;min-width:22px;max-width:22px;padding:8px 2px;white-space:nowrap;letter-spacing:1px;}
     .tot-th{font-size:13px;min-width:38px;}
     .sc-cell{font-size:14px;min-width:34px;padding:5px 6px;}
     .tot-cell{font-size:14px;font-weight:600;min-width:38px;background:#fafaf6;padding:5px 6px;}
