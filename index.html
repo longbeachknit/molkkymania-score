@@ -780,6 +780,60 @@ function resetReception(){
   _rcpState={mode:'select',teamNo:'',selectedTeamId:null,pwInput:'',pwError:'',loginError:'',q1:null,q2:null,q3:null,q4:null,agreed:false};
 }
 
+// ===== 受付済みチームのパーソナライズ保持（localStorage） =====
+const MYTEAM_KEY='molkky_my_team';
+const MYTEAM_TTL=3*24*60*60*1000; // 3日で失効
+function saveMyTeam(eventCode,teamId){
+  try{
+    localStorage.setItem(MYTEAM_KEY,JSON.stringify({eventCode:String(eventCode||''),teamId:String(teamId),at:Date.now()}));
+  }catch(e){}
+}
+function loadMyTeam(){
+  try{
+    const raw=localStorage.getItem(MYTEAM_KEY);
+    if(!raw)return null;
+    return JSON.parse(raw);
+  }catch(e){return null;}
+}
+function clearMyTeam(){
+  try{localStorage.removeItem(MYTEAM_KEY);}catch(e){}
+}
+// アクティブ大会と照合し、有効な保持データのみ返す（無効なら破棄してnull）
+// eventCode を渡さない場合は activeTour() の大会コードで照合
+function getValidMyTeam(activeEventCode){
+  const m=loadMyTeam();
+  if(!m||!m.teamId){return null;}
+  // 保存が古すぎる（3日経過）→ 破棄
+  if(!m.at||(Date.now()-m.at)>MYTEAM_TTL){clearMyTeam();return null;}
+  // アクティブ大会コードと照合
+  const cur=activeEventCode!=null?String(activeEventCode||''):String((activeTour()||{}).eventCode||'');
+  if(!cur){return null;} // 配信中の大会が分からない場合は保持を使わない（破棄はしない）
+  if(String(m.eventCode||'')!==cur){clearMyTeam();return null;}
+  return m;
+}
+// チームNo・試合区分から対戦カードを検索（ソート済み配列を返す）
+function runCourtSearch(teamNo,matchCode){
+  const searchSrc=(activeTour()||{matches:[]}).matches||[];
+  const results=searchSrc.filter(m=>{
+    const mparts=m.matchId.split('_');
+    const mCode=mparts[2]||'';
+    const teamMatch=!teamNo||(m.teamA===teamNo||m.teamB===teamNo||
+      String(parseInt(m.teamA,10))===String(parseInt(teamNo,10))||
+      String(parseInt(m.teamB,10))===String(parseInt(teamNo,10)));
+    const codeMatch=!matchCode||(mCode===matchCode.padStart(2,'0')||mCode===matchCode);
+    return teamMatch&&codeMatch;
+  });
+  results.sort((a,b)=>{
+    const ma=parseInt((a.matchId.split('_')[2]||'0'));
+    const mb=parseInt((b.matchId.split('_')[2]||'0'));
+    if(mb!==ma)return mb-ma;
+    const ca=parseInt((a.matchId.split('_')[3]||'0'));
+    const cb=parseInt((b.matchId.split('_')[3]||'0'));
+    return ca-cb;
+  });
+  return results;
+}
+
 async function fetchViewData(action,params={}){
   const cacheKey=action+JSON.stringify(params);
   if(_viewCache[cacheKey])return _viewCache[cacheKey];
@@ -1192,6 +1246,20 @@ function render(){
 }
 
 function rSetup(){
+  // 受付済みチームの保持状態（ローカルのアクティブ大会で照合）
+  const _my=getValidMyTeam();
+  let _myTeamObj=null;
+  if(_my){
+    const _at=activeTour()||{teams:[]};
+    _myTeamObj=(_at.teams||[]).find(t=>String(t.id)===String(_my.teamId))||null;
+  }
+  const courtLabel=_my?'対戦コート<br>を見る':'対戦コート<br>を検索';
+  const courtIcon=_my?'📍':'🔍';
+  const myBadge=_my?`<div style="margin-top:8px;padding:8px 12px;background:#E1F5EE;border-radius:10px;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:14px;">👤</span>
+      <div style="flex:1;font-size:12px;color:#085041;">${_myTeamObj?_myTeamObj.name+'（No.'+_my.teamId+'）':'No.'+_my.teamId}として表示中</div>
+      <button id="btn-clear-myteam" style="font-size:11px;color:#085041;background:transparent;border:1px solid #9FE1CB;border-radius:6px;padding:3px 8px;cursor:pointer;">解除</button>
+    </div>`:'';
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
       <div style="flex:1;font-size:22px;font-weight:700;color:#111;">Mölkky Mania OSS</div>
@@ -1203,20 +1271,21 @@ function rSetup(){
       <div style="text-align:left;font-size:20px;font-weight:700;">大会受付をする</div>
     </button>
     <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">試合</div>
-    <div style="display:flex;gap:8px;margin-bottom:20px;">
+    <div style="display:flex;gap:8px;margin-bottom:${_my?'8px':'20px'};">
       <button id="btn-go-matchid" style="flex:1;padding:10px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📷</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">QRコードで<br>試合開始</div>
       </button>
       <button id="btn-go-court-search" style="flex:1;padding:10px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
-        <span style="font-size:22px;">🔍</span>
-        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">対戦コート<br>を検索</div>
+        <span style="font-size:22px;">${courtIcon}</span>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${courtLabel}</div>
       </button>
       <button id="btn-go-tournament-info" style="flex:1;padding:10px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📰</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">大会情報<br>を見る</div>
       </button>
     </div>
+    ${_my?'<div style="margin-bottom:20px;">'+myBadge+'</div>':''}
     <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">成績・記録</div>
     <div style="display:flex;gap:8px;">
       <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#4f46e5;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
@@ -3466,10 +3535,19 @@ function rReception(){
             </select>`
           :`<div style="font-size:13px;color:#9ca3af;padding:8px 0;">参加チームが登録されていません</div>`}
       </div>`
-    :`<div>
-        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チームNo</div>
-        <input type="text" id="rcp-team-no" value="${st.teamNo}" placeholder="例: 073" inputmode="numeric" style="font-size:18px;letter-spacing:2px;text-align:center;"/>
-      </div>`;
+    :(()=>{
+        const matched=teams.find(t=>String(t.id)===st.teamNo||String(parseInt(t.id,10))===String(parseInt(st.teamNo,10)));
+        const preview=st.teamNo
+          ?(matched
+            ?`<div style="margin-top:8px;padding:10px 12px;background:#E1F5EE;border-radius:8px;font-size:15px;font-weight:700;color:#085041;">✓ ${matched.name}</div>`
+            :`<div style="margin-top:8px;padding:10px 12px;background:#FCEBEB;border-radius:8px;font-size:13px;color:#b91c1c;">該当するチームが見つかりません</div>`)
+          :'';
+        return`<div>
+          <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チームNo</div>
+          <input type="text" id="rcp-team-no" value="${st.teamNo}" placeholder="例: 073" inputmode="numeric" style="font-size:18px;letter-spacing:2px;text-align:center;"/>
+          <div id="rcp-team-no-preview">${preview}</div>
+        </div>`;
+      })();
 
   return`<div style="padding:8px 0 4px;">
     ${rcpHeader('大会受付','setup')}
@@ -3596,6 +3674,19 @@ function rRcpFinal(){
 // 完了画面
 function rRcpDone(){
   const t=rcpTeam();
+  const st=_rcpState;
+  // 本部での詳細確認が必要な回答かどうか
+  const needsDesk=(st.q1==='late')||(st.q2==='changed')||(st.q3==='no')||(st.q4==='want');
+  if(needsDesk){
+    return`<div style="padding:8px 0 4px;">
+      <div style="text-align:center;padding:40px 16px;">
+        <div style="font-size:56px;margin-bottom:12px;">⚠️</div>
+        <div style="font-size:21px;font-weight:800;color:#92400e;margin-bottom:14px;line-height:1.5;">詳細の確認を行いますので、<br>本部にお越しください</div>
+        <div style="font-size:15px;color:#374151;line-height:1.6;">${t?t.name+'（No.'+t.id+'）':''}</div>
+      </div>
+      <button class="btn btn-green" id="btn-rcp-home" style="width:100%;padding:15px;font-size:16px;font-weight:700;">ホームに戻る</button>
+    </div>`;
+  }
   return`<div style="padding:8px 0 4px;">
     <div style="text-align:center;padding:40px 16px;">
       <div style="font-size:56px;margin-bottom:12px;">✅</div>
@@ -4725,6 +4816,21 @@ function bind(){
     resetReception();S.phase='reception';render();
   };
   // ===== 大会受付フロー =====
+  // ログイン画面：チームNo入力でチーム名をライブ表示
+  const rcpTnoEl=document.getElementById('rcp-team-no');
+  if(rcpTnoEl)rcpTnoEl.addEventListener('input',()=>{
+    const tn=rcpTnoEl.value.trim();
+    _rcpState.teamNo=tn;
+    const tour=activeTour()||{teams:[]};
+    const teams=tour.teams||[];
+    const matched=tn?teams.find(t=>String(t.id)===tn||String(parseInt(t.id,10))===String(parseInt(tn,10))):null;
+    const box=document.getElementById('rcp-team-no-preview');
+    if(box){
+      box.innerHTML=!tn?'':(matched
+        ?`<div style="margin-top:8px;padding:10px 12px;background:#E1F5EE;border-radius:8px;font-size:15px;font-weight:700;color:#085041;">✓ ${matched.name}</div>`
+        :`<div style="margin-top:8px;padding:10px 12px;background:#FCEBEB;border-radius:8px;font-size:13px;color:#b91c1c;">該当するチームが見つかりません</div>`);
+    }
+  });
   // 戻るボタン（共通）
   const brcb=document.getElementById('btn-rcp-back');
   if(brcb)brcb.onclick=()=>{
@@ -4792,6 +4898,10 @@ function bind(){
   const brcc=document.getElementById('btn-rcp-complete');
   if(brcc)brcc.onclick=()=>{
     if(!_rcpState.agreed)return;
+    // 受付完了：このチームをこの端末に紐付け（パーソナライズ保持）
+    const t=rcpTeam();
+    const tour=activeTour()||{};
+    if(t)saveMyTeam(tour.eventCode||'',t.id);
     S.phase='rcpDone';render();
   };
   // 完了画面：ホームへ
@@ -4835,8 +4945,19 @@ function bind(){
     // ローカルのactiveTourも更新
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+    // 受付済みチームが今の大会と一致していれば、自動でそのチームの結果を表示
+    const my=getValidMyTeam(eventCode);
+    if(my&&my.teamId){
+      S._courtSearchQuery={teamNo:String(my.teamId),matchCode:''};
+      S._courtSearchResults=runCourtSearch(String(my.teamId),'');
+      S.phase='courtSearch';render();
+      return;
+    }
     S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;S.phase='courtSearch';render();
   };
+  // ホーム：パーソナライズ解除
+  const bcmt=document.getElementById('btn-clear-myteam');
+  if(bcmt)bcmt.onclick=()=>{clearMyTeam();render();};
   const bgti=document.getElementById('btn-go-tournament-info');if(bgti)bgti.onclick=async()=>{
     const eventCode=await resolveActiveEventCode();
     if(!eventCode){
@@ -4907,24 +5028,7 @@ function bind(){
       const atour=activeTour();
       if(atour&&atour.eventCode)await syncAllFromGitHub(atour.eventCode);
     }
-    const searchSrc=(activeTour()||{matches:[]}).matches||[];
-    const results=searchSrc.filter(m=>{
-      // matchId は試合ID（4パーツ: 場所_大会_試合区分_コート）
-      const mparts=m.matchId.split('_');
-      const mCode=mparts[2]||'';  // 試合区分ID
-      const teamMatch=!teamNo||(m.teamA===teamNo||m.teamB===teamNo);
-      const codeMatch=!matchCode||(mCode===matchCode.padStart(2,'0')||mCode===matchCode);
-      return teamMatch&&codeMatch;
-    });
-    // 試合区分ID降順（最新試合が上）→ 同じ試合区分内はコート番号順
-    results.sort((a,b)=>{
-      const ma=parseInt((a.matchId.split('_')[2]||'0'));
-      const mb=parseInt((b.matchId.split('_')[2]||'0'));
-      if(mb!==ma)return mb-ma;
-      const ca=parseInt((a.matchId.split('_')[3]||'0'));
-      const cb=parseInt((b.matchId.split('_')[3]||'0'));
-      return ca-cb;
-    });
+    const results=runCourtSearch(teamNo,matchCode);
     S._courtSearchResults=results;
     render();
   };
