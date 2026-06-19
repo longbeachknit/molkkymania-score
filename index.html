@@ -554,6 +554,24 @@ async function fetchTournamentInfo(action){
   }
 }
 
+// 受付データの送信／確認（試合情報と同じ tour.gasUrl 経由・キャッシュなし）
+async function callReceptionGas(action,params={}){
+  const tour=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):activeTour();
+  const fetchUrl=tour&&tour.gasUrl&&tour.gasUrl.trim();
+  if(!fetchUrl||!fetchUrl.startsWith('https://script.google.com/')){
+    throw new Error('GAS URLが設定されていません。');
+  }
+  const extra=Object.keys(params).map(k=>'&'+encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('');
+  const doFetch=async()=>{
+    const url=fetchUrl+'?action='+action+extra+'&t='+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const res=await fetch(url,{mode:'cors',cache:'no-store',credentials:'omit',redirect:'follow'});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    return await res.json();
+  };
+  try{ return await doFetch(); }
+  catch(e1){ await new Promise(r=>setTimeout(r,500)); return await doFetch(); }
+}
+
 async function fetchCombinedIds(){
   const btn=document.getElementById('btn-fetch-combined');
   if(btn){btn.disabled=true;btn.textContent='取得中...';}
@@ -758,6 +776,38 @@ function resolveMatchId(id){
 
 const GAS_URL='https://script.google.com/macros/s/AKfycbwpNH-Z0i-vTVSltUxRCjAQN5v3auD-j5JZWES8NHtiMGr3GrlMd-uzLQmxOheW35zaow/exec';
 const _viewCache={}; // 成績閲覧用キャッシュ
+
+// ===== 受付データ送信（試合結果と同じPOSTメカニズム） =====
+// type:'reception' で GAS に投げ、status:'ok' を確認できたら完了扱い
+async function submitReception(payload){
+  const tour=activeTour()||{};
+  const gasUrl=(tour.gasUrl&&tour.gasUrl.trim())||GAS_URL;
+  const body=new URLSearchParams({data:JSON.stringify({
+    type:'reception',
+    eventCode:tour.eventCode||'',
+    teamNo:payload.teamNo,
+    teamName:payload.teamName,
+    q1:payload.q1,
+    q2:payload.q2,
+    q3:payload.q3,
+    q4:payload.q4,
+    needsDesk:payload.needsDesk,
+    at:new Date().toISOString()
+  })});
+  const res=await fetch(gasUrl,{method:'POST',mode:'cors',body});
+  const json=await res.json();
+  if(json.status!=='ok')throw new Error(json.message||'送信エラー');
+  return json;
+}
+// 受付済みか照会（2台目以降のスキップ判定）。{found,needsDesk}を返す
+async function checkReception(teamNo){
+  const tour=activeTour()||{};
+  const gasUrl=(tour.gasUrl&&tour.gasUrl.trim())||GAS_URL;
+  const qs=new URLSearchParams({action:'getReception',eventCode:tour.eventCode||'',teamNo:String(teamNo),t:Date.now()}).toString();
+  const res=await fetch(gasUrl+'?'+qs,{cache:'no-store',mode:'cors'});
+  const json=await res.json();
+  return json; // { found:true/false, needsDesk:true/false }
+}
 let _scoreState={eventCode:'',teamNo:'',events:[],matchList:[],selectedMatch:null,scoreData:null,loading:false,error:''};
 
 let _viewState={tab:'event',eventCode:'',selectedTeam:null,selectedPerson:null,events:[],teams:[],persons:[],eventStat:null,loading:false,error:'',searchTeam:'',searchPerson:'',personMode:'event',cumulData:null,cumulLoading:false,rankMetric:'',rankType:'team',rankData:[],rankPersonMode:'event'};
@@ -770,14 +820,19 @@ let _rcpState={
   pwInput:'',
   pwError:'',
   loginError:'',
+  checking:false,     // 受付状況の確認中
+  alreadyDone:false,  // 既に受付済み（質問スキップ）
   q1:null,            // 'arrive' / 'late'
   q2:null,            // 'changed' / 'none'
   q3:null,            // 'yes' / 'no'
   q4:null,            // 'want' / 'nowant'
-  agreed:false
+  agreed:false,
+  submitting:false,   // GAS送信中
+  submitError:'',     // 送信エラー
+  resultStatus:null   // 'done' / 'desk'（送信成功後の本部判定）
 };
 function resetReception(){
-  _rcpState={mode:'select',teamNo:'',selectedTeamId:null,pwInput:'',pwError:'',loginError:'',q1:null,q2:null,q3:null,q4:null,agreed:false};
+  _rcpState={mode:'select',teamNo:'',selectedTeamId:null,pwInput:'',pwError:'',loginError:'',checking:false,alreadyDone:false,q1:null,q2:null,q3:null,q4:null,agreed:false,submitting:false,submitError:'',resultStatus:null};
 }
 
 // ===== 受付済みチームのパーソナライズ保持（localStorage） =====
@@ -1222,6 +1277,8 @@ function render(){
   else if(p==='matchConfirm')app.innerHTML=rMatchConfirm();
   else if(p==='courtSearch')app.innerHTML=rCourtSearch();
   else if(p==='reception')app.innerHTML=rReception();
+  else if(p==='rcpPw')app.innerHTML=rRcpPw();
+  else if(p==='rcpPw')app.innerHTML=rRcpPw();
   else if(p==='rcpQ1')app.innerHTML=rRcpQ1();
   else if(p==='rcpQ2')app.innerHTML=rRcpQ2();
   else if(p==='rcpQ3')app.innerHTML=rRcpQ3();
@@ -1255,23 +1312,33 @@ function rSetup(){
   }
   const courtLabel=_my?'対戦コート<br>を見る':'対戦コート<br>を検索';
   const courtIcon=_my?'📍':'🔍';
-  const myBadge=_my?`<div style="margin-top:8px;padding:8px 12px;background:#E1F5EE;border-radius:10px;display:flex;align-items:center;gap:8px;">
-      <span style="font-size:14px;">👤</span>
-      <div style="flex:1;font-size:12px;color:#085041;">${_myTeamObj?_myTeamObj.name+'（No.'+_my.teamId+'）':'No.'+_my.teamId}として表示中</div>
-      <button id="btn-clear-myteam" style="font-size:11px;color:#085041;background:transparent;border:1px solid #9FE1CB;border-radius:6px;padding:3px 8px;cursor:pointer;">解除</button>
-    </div>`:'';
+  const scoreLabel=_my?'スコアシート<br>を見る':'スコアシート<br>を検索';
+
+  // パーソナライズ時：受付ボタンの代わりに「表示中チーム＋解除」バーを表示
+  const topBlock=_my
+    ?`<div style="margin-bottom:20px;padding:14px 16px;background:#E1F5EE;border-radius:14px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:26px;">👤</span>
+        <div style="flex:1;">
+          <div style="font-size:12px;color:#0a6e57;">受付済みチーム</div>
+          <div style="font-size:17px;font-weight:800;color:#085041;line-height:1.3;">${_myTeamObj?_myTeamObj.name:'No.'+_my.teamId}</div>
+          ${_myTeamObj?`<div style="font-size:12px;color:#0a6e57;">No.${_my.teamId}</div>`:''}
+        </div>
+        <button id="btn-clear-myteam" style="font-size:13px;font-weight:700;color:#085041;background:#fff;border:1px solid #9FE1CB;border-radius:10px;padding:8px 14px;cursor:pointer;white-space:nowrap;">解除</button>
+      </div>`
+    :`<button id="btn-go-reception" style="width:100%;padding:24px 20px;font-size:20px;font-weight:700;margin-bottom:20px;background:#1D9E75;color:#fff;border:none;border-radius:14px;display:flex;align-items:center;gap:14px;cursor:pointer;">
+        <span style="font-size:32px;">📝</span>
+        <div style="text-align:left;font-size:20px;font-weight:700;">大会受付をする</div>
+      </button>`;
+
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
       <div style="flex:1;font-size:22px;font-weight:700;color:#111;">Mölkky Mania OSS</div>
       <button class="btn btn-gray btn-xs" id="btn-go-admin" style="font-size:12px;">⚙️ 管理者</button>
     </div>
     <div style="font-size:13px;color:#6b7280;margin-bottom:24px;">オンラインスコアリングシステム</div>
-    <button id="btn-go-reception" style="width:100%;padding:24px 20px;font-size:20px;font-weight:700;margin-bottom:20px;background:#1D9E75;color:#fff;border:none;border-radius:14px;display:flex;align-items:center;gap:14px;cursor:pointer;">
-      <span style="font-size:32px;">📝</span>
-      <div style="text-align:left;font-size:20px;font-weight:700;">大会受付をする</div>
-    </button>
+    ${topBlock}
     <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">試合</div>
-    <div style="display:flex;gap:8px;margin-bottom:${_my?'8px':'20px'};">
+    <div style="display:flex;gap:8px;margin-bottom:20px;">
       <button id="btn-go-matchid" style="flex:1;padding:10px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📷</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">QRコードで<br>試合開始</div>
@@ -1285,7 +1352,6 @@ function rSetup(){
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">大会情報<br>を見る</div>
       </button>
     </div>
-    ${_my?'<div style="margin-bottom:20px;">'+myBadge+'</div>':''}
     <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">成績・記録</div>
     <div style="display:flex;gap:8px;">
       <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#4f46e5;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
@@ -1294,7 +1360,7 @@ function rSetup(){
       </button>
       <button id="btn-go-score-search" style="flex:1;padding:10px 6px;background:#4f46e5;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📋</span>
-        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">スコアシート<br>を検索</div>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${scoreLabel}</div>
       </button>
     </div>
   </div>`;
@@ -2772,11 +2838,34 @@ function rScoreSearch(){
 function rScoreMatchList(){
   const ss=_scoreState;
   const matches=ss.matchList||[];
+  const myS=getValidMyTeam();
+  const personalized=!!myS;
+  const expanded=!!ss.expanded;
+  // 大会選択肢
+  const evOpts=(ss.events||[]).map(e=>`<option value="${e}" ${ss.eventCode===e?'selected':''}>${getEventName(e)}</option>`).join('');
+  const inlineForm=`<div class="card" style="padding:12px;margin-bottom:10px;">
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px;font-weight:600;">大会</div>
+      <select id="ss-event-select" style="font-size:13px;margin-bottom:10px;">
+        <option value="">-- 大会を選択 --</option>${evOpts}
+      </select>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px;font-weight:600;">チームNo</div>
+      <input type="text" id="ss-team-no" value="${ss.teamNo||''}" placeholder="例: 073" style="font-size:14px;margin-bottom:10px;"/>
+      <button class="btn btn-blue" id="btn-ss-search" style="width:100%;padding:10px;font-size:14px;">🔍 検索する</button>
+    </div>`;
+  const formBlock=personalized
+    ?(expanded
+      ?`<div style="margin-bottom:10px;">
+          <button class="btn btn-gray btn-sm" id="btn-ss-toggle" style="width:100%;margin-bottom:8px;font-size:13px;">▲ 検索を閉じる</button>
+          ${inlineForm}
+        </div>`
+      :`<button class="btn btn-gray btn-sm" id="btn-ss-toggle" style="width:100%;margin-bottom:10px;font-size:13px;padding:9px;">🔍 他のチーム・大会を検索</button>`)
+    :'';
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
       <button class="btn btn-gray btn-sm" id="btn-bk-score-list">← 戻る</button>
-      <div style="font-size:16px;font-weight:700;">試合一覧</div>
+      <div style="font-size:16px;font-weight:700;">${personalized?'スコアシート':'試合一覧'}</div>
     </div>
+    ${formBlock}
     ${ss.loading?`<div style="text-align:center;padding:32px;color:#6b7280;"><div style="font-size:24px;">⏳</div><div>読み込み中...</div></div>`:
     matches.length===0?`<div style="text-align:center;padding:32px;color:#9ca3af;">試合が見つかりませんでした</div>`:
     matches.map((m,i)=>`
@@ -3551,19 +3640,31 @@ function rReception(){
 
   return`<div style="padding:8px 0 4px;">
     ${rcpHeader('大会受付','setup')}
-    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${tour.eventName||'大会'}の受付を行います。</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${tour.eventName||'大会'}の受付を行います。<br>まずはチームを選択してください。</div>
     <div class="card" style="padding:16px;margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         ${modeTab('select','チーム名から選ぶ')}
         ${modeTab('search','チームNoで入力')}
       </div>
       ${selectBlock}
-      <div style="margin-top:14px;">
-        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">受付パスワード（数字4桁／会場掲示）</div>
-        <input type="text" id="rcp-pw" value="${st.pwInput}" placeholder="••••" maxlength="4" inputmode="numeric" style="font-size:22px;letter-spacing:10px;text-align:center;"/>
-      </div>
       ${st.loginError?`<div style="font-size:13px;color:#b91c1c;margin-top:10px;">${st.loginError}</div>`:''}
-      <button class="btn btn-green" id="btn-rcp-login" style="width:100%;padding:14px;font-size:16px;font-weight:700;margin-top:16px;">受付を始める →</button>
+      <button class="btn btn-green" id="btn-rcp-team-next" ${st.checking?'disabled':''} style="width:100%;padding:14px;font-size:16px;font-weight:700;margin-top:16px;">${st.checking?'確認中...':'次へ →'}</button>
+    </div>
+  </div>`;
+}
+
+// パスワード入力ステップ（1人目のみ。2人目以降はスキップ済み）
+function rRcpPw(){
+  const st=_rcpState;
+  const t=rcpTeam();
+  return`<div style="padding:8px 0 4px;">
+    ${rcpHeader('大会受付','reception')}
+    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${t?t.name+'（No.'+t.id+'）':''}</div>
+    <div class="card" style="padding:16px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">受付パスワード（数字4桁／会場掲示）</div>
+      <input type="text" id="rcp-pw" value="${st.pwInput}" placeholder="••••" maxlength="4" inputmode="numeric" style="font-size:22px;letter-spacing:10px;text-align:center;"/>
+      ${st.pwError?`<div style="font-size:13px;color:#b91c1c;margin-top:10px;">${st.pwError}</div>`:''}
+      <button class="btn btn-green" id="btn-rcp-pw-next" style="width:100%;padding:14px;font-size:16px;font-weight:700;margin-top:16px;">次へ →</button>
     </div>
   </div>`;
 }
@@ -3667,7 +3768,8 @@ function rRcpFinal(){
       <input type="checkbox" id="rcp-agree" ${st.agreed?'checked':''} style="width:auto;accent-color:#1D9E75;"/>
       <span style="font-size:15px;font-weight:600;">上記の内容を理解しました</span>
     </label>
-    <button class="btn btn-green" id="btn-rcp-complete" ${st.agreed?'':'disabled'} style="width:100%;padding:16px;font-size:17px;font-weight:700;">受付を完了させる</button>
+    ${st.submitError?`<div style="font-size:13px;color:#b91c1c;background:#FCEBEB;border-radius:8px;padding:10px 12px;margin-bottom:12px;">⚠️ ${st.submitError}</div>`:''}
+    <button class="btn btn-green" id="btn-rcp-complete" ${(st.agreed&&!st.submitting)?'':'disabled'} style="width:100%;padding:16px;font-size:17px;font-weight:700;">${st.submitting?'送信中...':(st.submitError?'もう一度送信する':'受付を完了させる')}</button>
   </div>`;
 }
 
@@ -3675,13 +3777,15 @@ function rRcpFinal(){
 function rRcpDone(){
   const t=rcpTeam();
   const st=_rcpState;
-  // 本部での詳細確認が必要な回答かどうか
-  const needsDesk=(st.q1==='late')||(st.q2==='changed')||(st.q3==='no')||(st.q4==='want');
+  // 本部での詳細確認が必要か：送信成功時のresultStatusを優先（スキップ時はq1-q4がnullのため）
+  const needsDesk=st.resultStatus?(st.resultStatus==='desk'):((st.q1==='late')||(st.q2==='changed')||(st.q3==='no')||(st.q4==='want'));
+  const alreadyNote=st.alreadyDone?`<div style="font-size:13px;color:#0a6e57;background:#E1F5EE;border-radius:8px;padding:8px 12px;margin:0 auto 4px;max-width:340px;">このチームは既に受付が完了しています。</div>`:'';
   if(needsDesk){
     return`<div style="padding:8px 0 4px;">
       <div style="text-align:center;padding:40px 16px;">
         <div style="font-size:56px;margin-bottom:12px;">⚠️</div>
         <div style="font-size:21px;font-weight:800;color:#92400e;margin-bottom:14px;line-height:1.5;">詳細の確認を行いますので、<br>本部にお越しください</div>
+        ${alreadyNote}
         <div style="font-size:15px;color:#374151;line-height:1.6;">${t?t.name+'（No.'+t.id+'）':''}</div>
       </div>
       <button class="btn btn-green" id="btn-rcp-home" style="width:100%;padding:15px;font-size:16px;font-weight:700;">ホームに戻る</button>
@@ -3691,6 +3795,7 @@ function rRcpDone(){
     <div style="text-align:center;padding:40px 16px;">
       <div style="font-size:56px;margin-bottom:12px;">✅</div>
       <div style="font-size:22px;font-weight:800;color:#1D9E75;margin-bottom:10px;">受付が完了しました</div>
+      ${alreadyNote}
       <div style="font-size:15px;color:#374151;line-height:1.6;">${t?t.name+'（No.'+t.id+'）':''}<br>受付ありがとうございました。</div>
     </div>
     <button class="btn btn-green" id="btn-rcp-home" style="width:100%;padding:15px;font-size:16px;font-weight:700;">ホームに戻る</button>
@@ -3747,13 +3852,11 @@ function rCourtSearch(){
   }
 
   const tourMatchRules=tourSrc.matchRules||[];
-  return`<div style="padding:8px 0 4px;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-      <button class="btn btn-gray btn-sm" id="btn-bk-court-search">← 戻る</button>
-      <div style="font-size:18px;font-weight:700;color:#111;">対戦コートを検索</div>
-    </div>
-    ${(()=>{const atour=activeTour();if(!atour)return'';const cache=_jsonCache[atour.eventCode];const upd=cache&&cache.data&&cache.data.updatedAt?new Date(cache.data.updatedAt).toLocaleTimeString('ja-JP'):'未取得';return`<div style="font-size:12px;color:#9ca3af;margin-bottom:10px;text-align:right;">最終更新: ${upd} <button class="btn btn-gray btn-xs" id="btn-cs-refresh" style="padding:3px 8px;font-size:11px;">🔄 更新</button></div>`;})()} 
-    <div class="card" style="padding:14px;margin-bottom:12px;">
+  const myCs=getValidMyTeam();
+  const personalized=!!myCs;
+  const expanded=!!S._courtSearchExpanded;
+  // 検索フォーム本体
+  const searchForm=`<div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:grid;gap:10px;">
         <div>
           <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チームNo</div>
@@ -3768,7 +3871,25 @@ function rCourtSearch(){
         </div>
       </div>
       <button class="btn btn-blue" id="btn-cs-search" style="width:100%;padding:13px;font-size:15px;margin-top:12px;">🔍 検索する</button>
+    </div>`;
+  // パーソナライズ時は折りたたみUI
+  const formBlock=personalized
+    ?(expanded
+      ?`<div style="margin-bottom:12px;">
+          <button class="btn btn-gray btn-sm" id="btn-cs-toggle" style="width:100%;margin-bottom:8px;font-size:13px;">▲ 検索を閉じる</button>
+          ${searchForm}
+        </div>`
+      :`<button class="btn btn-gray btn-sm" id="btn-cs-toggle" style="width:100%;margin-bottom:12px;font-size:13px;padding:9px;">🔍 他のチーム・試合区分を検索</button>`)
+    :searchForm;
+
+  const headerTitle=personalized?'対戦コートを見る':'対戦コートを検索';
+  return`<div style="padding:8px 0 4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <button class="btn btn-gray btn-sm" id="btn-bk-court-search">← 戻る</button>
+      <div style="font-size:18px;font-weight:700;color:#111;">${headerTitle}</div>
     </div>
+    ${(()=>{const atour=activeTour();if(!atour)return'';const cache=_jsonCache[atour.eventCode];const upd=cache&&cache.data&&cache.data.updatedAt?new Date(cache.data.updatedAt).toLocaleTimeString('ja-JP'):'未取得';return`<div style="font-size:12px;color:#9ca3af;margin-bottom:10px;text-align:right;">最終更新: ${upd} <button class="btn btn-gray btn-xs" id="btn-cs-refresh" style="padding:3px 8px;font-size:11px;">🔄 更新</button></div>`;})()} 
+    ${formBlock}
     ${results!==null?`<div style="font-size:13px;color:#6b7280;margin-bottom:8px;">${results.length}件見つかりました</div>`:''}
     ${resultHtml}
   </div>`;
@@ -4432,6 +4553,7 @@ function bind(){
   const bgss=document.getElementById('btn-go-score-search');
   if(bgss)bgss.onclick=async()=>{
     _scoreState.loading=true;_scoreState.error='';_scoreState.events=[];
+    _scoreState.matchList=null;_scoreState.expanded=false;
     S.phase='scoreSearch';render();
     const evData=await fetchViewData('getEvents');
     if(evData&&evData.events){
@@ -4449,6 +4571,30 @@ function bind(){
       }
       if(evData.events.length&&!_scoreState.eventCode)_scoreState.eventCode=evData.events[0];
     }
+    // 受付済みチームがあれば、配信中の大会を自動選択してそのチームの試合一覧を即表示
+    const myS=getValidMyTeam();
+    if(myS&&myS.teamId){
+      const at=activeTour()||{};
+      // スコア用イベントコード（フル）を特定：末尾が大会コードに一致するもの
+      let evMatch=(_scoreState.events||[]).find(e=>{
+        const p=String(e).split('_');
+        const ev=p.length>=2?p[1]:e;
+        return ev===String(at.eventCode||'')&&(!at.venueCode||p[0]===at.venueCode);
+      })||(_scoreState.events||[]).find(e=>{
+        const p=String(e).split('_');return (p.length>=2?p[1]:e)===String(at.eventCode||'');
+      });
+      if(evMatch){
+        _scoreState.eventCode=evMatch;
+        _scoreState.teamNo=String(myS.teamId);
+        _scoreState.loading=true;_scoreState.error='';
+        S.phase='scoreMatchList';render();
+        const d=await fetchViewData('getMatchList',{eventCode:evMatch,teamNo:String(myS.teamId)});
+        _scoreState.matchList=d&&d.matches?d.matches:[];
+        if(!_scoreState.matchList.length)_scoreState.error='該当する試合が見つかりませんでした';
+        _scoreState.loading=false;render();
+        return;
+      }
+    }
     _scoreState.loading=false;render();
   };
 
@@ -4456,7 +4602,10 @@ function bind(){
   if(bbkss)bbkss.onclick=()=>{S.phase='setup';render();};
 
   const bbksl=document.getElementById('btn-bk-score-list');
-  if(bbksl)bbksl.onclick=()=>{S.phase='scoreSearch';render();};
+  if(bbksl)bbksl.onclick=()=>{S.phase=getValidMyTeam()?'setup':'scoreSearch';render();};
+  // スコア一覧：他チーム検索の折りたたみトグル
+  const bsst=document.getElementById('btn-ss-toggle');
+  if(bsst)bsst.onclick=()=>{_scoreState.expanded=!_scoreState.expanded;render();};
 
   const bbksv=document.getElementById('btn-bk-score-view');
   if(bbksv)bbksv.onclick=()=>{S.phase='scoreMatchList';render();};
@@ -4845,13 +4994,11 @@ function bind(){
     const pw=document.getElementById('rcp-pw');if(pw)_rcpState.pwInput=pw.value.trim();
     _rcpState.mode=el.dataset.mode;_rcpState.loginError='';render();
   }));
-  // ログイン画面：受付を始める
-  const brcl=document.getElementById('btn-rcp-login');
-  if(brcl)brcl.onclick=()=>{
-    const tour=activeTour()||{teams:[],receptionPw:''};
+  // ステップ1：チームNo確定 → 受付済みか照会 → スキップ or パスワード画面へ
+  const brctn=document.getElementById('btn-rcp-team-next');
+  if(brctn)brctn.onclick=async()=>{
+    const tour=activeTour()||{teams:[]};
     const teams=tour.teams||[];
-    const pw=(document.getElementById('rcp-pw')||{value:''}).value.trim();
-    _rcpState.pwInput=pw;
     // チーム特定
     let team=null;
     if(_rcpState.mode==='select'){
@@ -4868,12 +5015,35 @@ function bind(){
       if(!team){_rcpState.loginError='該当するチームNoが見つかりませんでした。';render();return;}
       _rcpState.selectedTeamId=team.id;
     }
-    // パスワード照合
-    const correct=String(tour.receptionPw||'');
-    if(!correct){_rcpState.loginError='この大会には受付パスワードが設定されていません。管理者にお問い合わせください。';render();return;}
-    if(!pw){_rcpState.loginError='受付パスワードを入力してください。';render();return;}
-    if(pw!==correct){_rcpState.loginError='受付パスワードが正しくありません。';render();return;}
     _rcpState.loginError='';
+    // 受付済みか照会（2台目以降はパスワード・質問をスキップ）
+    _rcpState.checking=true;render();
+    let already=null;
+    try{ already=await checkReception(team.id); }catch(e){ already=null; }
+    _rcpState.checking=false;
+    if(already&&already.found){
+      // 既に受付済み：質問・パスワードを飛ばして完了画面へ
+      _rcpState.alreadyDone=true;
+      _rcpState.resultStatus=already.needsDesk?'desk':'done';
+      // この端末にパーソナライズ保持
+      saveMyTeam((activeTour()||{}).eventCode||'',team.id);
+      S.phase='rcpDone';render();
+      return;
+    }
+    // 未受付：1人目としてパスワード入力へ
+    S.phase='rcpPw';render();
+  };
+  // ステップ2：パスワード確定 → 質問へ
+  const brcpn=document.getElementById('btn-rcp-pw-next');
+  if(brcpn)brcpn.onclick=()=>{
+    const tour=activeTour()||{receptionPw:''};
+    const pw=(document.getElementById('rcp-pw')||{value:''}).value.trim();
+    _rcpState.pwInput=pw;
+    const correct=String(tour.receptionPw||'');
+    if(!correct){_rcpState.pwError='この大会には受付パスワードが設定されていません。管理者にお問い合わせください。';render();return;}
+    if(!pw){_rcpState.pwError='受付パスワードを入力してください。';render();return;}
+    if(pw!==correct){_rcpState.pwError='受付パスワードが正しくありません。';render();return;}
+    _rcpState.pwError='';
     S.phase='rcpQ1';render();
   };
   // 質問画面：選択肢
@@ -4894,15 +5064,32 @@ function bind(){
   // 最終画面：理解チェック
   const brca=document.getElementById('rcp-agree');
   if(brca)brca.onchange=()=>{_rcpState.agreed=brca.checked;render();};
-  // 最終画面：受付完了
+  // 最終画面：受付完了（GASに送信し、成功を確認してから完了表示）
   const brcc=document.getElementById('btn-rcp-complete');
-  if(brcc)brcc.onclick=()=>{
+  if(brcc)brcc.onclick=async()=>{
     if(!_rcpState.agreed)return;
-    // 受付完了：このチームをこの端末に紐付け（パーソナライズ保持）
+    if(_rcpState.submitting)return;
     const t=rcpTeam();
-    const tour=activeTour()||{};
-    if(t)saveMyTeam(tour.eventCode||'',t.id);
-    S.phase='rcpDone';render();
+    const needsDesk=(_rcpState.q1==='late')||(_rcpState.q2==='changed')||(_rcpState.q3==='no')||(_rcpState.q4==='want');
+    _rcpState.submitting=true;_rcpState.submitError='';render();
+    try{
+      await submitReception({
+        teamNo:t?t.id:'',
+        teamName:t?t.name:'',
+        q1:_rcpState.q1,q2:_rcpState.q2,q3:_rcpState.q3,q4:_rcpState.q4,
+        needsDesk:needsDesk
+      });
+      // 送信成功：パーソナライズ保持して完了画面へ
+      _rcpState.submitting=false;
+      _rcpState.resultStatus=needsDesk?'desk':'done';
+      const tour=activeTour()||{};
+      if(t)saveMyTeam(tour.eventCode||'',t.id);
+      S.phase='rcpDone';render();
+    }catch(e){
+      _rcpState.submitting=false;
+      _rcpState.submitError=e.message||'送信に失敗しました。通信環境を確認して、もう一度お試しください。';
+      render();
+    }
   };
   // 完了画面：ホームへ
   const brch=document.getElementById('btn-rcp-home');
@@ -4948,11 +5135,13 @@ function bind(){
     // 受付済みチームが今の大会と一致していれば、自動でそのチームの結果を表示
     const my=getValidMyTeam(eventCode);
     if(my&&my.teamId){
+      S._courtSearchExpanded=false;
       S._courtSearchQuery={teamNo:String(my.teamId),matchCode:''};
       S._courtSearchResults=runCourtSearch(String(my.teamId),'');
       S.phase='courtSearch';render();
       return;
     }
+    S._courtSearchExpanded=false;
     S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;S.phase='courtSearch';render();
   };
   // ホーム：パーソナライズ解除
@@ -4970,6 +5159,9 @@ function bind(){
     S._tiView=null;S._tiLoading=false;S._tiError=null;S.phase='tournamentInfo';render();
   };
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
+  // 対戦コート：他チーム検索の折りたたみトグル
+  const bcst=document.getElementById('btn-cs-toggle');
+  if(bcst)bcst.onclick=()=>{S._courtSearchExpanded=!S._courtSearchExpanded;render();};
   document.querySelectorAll('.cs-start-btn').forEach(btn=>{
     btn.addEventListener('click',async()=>{
       const mid=btn.dataset.matchid;
