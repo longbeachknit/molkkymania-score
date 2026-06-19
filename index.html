@@ -42,6 +42,22 @@ select:focus{outline:none;border-color:#1D9E75;background:#fff;}
 .team-hdr{font-size:14px;font-weight:600;padding:7px 8px;}
 label.radio-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid #e5e7eb;border-radius:10px;cursor:pointer;background:#fff;}
 label.radio-card.selected{border-color:#1D9E75;background:#E1F5EE;}
+textarea{width:100%;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;background:#f3f4f6;color:#111;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;}
+textarea:focus{outline:none;border-color:#1D9E75;background:#fff;}
+/* ===== コート図 ===== */
+.cm-outer{display:flex;flex-direction:column;align-items:center;width:100%;}
+.cm-label-top,.cm-label-bottom{font-size:12px;font-weight:700;color:#374151;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:5px 12px;margin:4px 0;text-align:center;max-width:100%;}
+.cm-middle{display:flex;align-items:stretch;gap:5px;max-width:100%;}
+.cm-label-left,.cm-label-right{writing-mode:vertical-rl;text-orientation:upright;font-size:11px;font-weight:700;color:#374151;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:8px 3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.cm-label-center{font-size:11px;font-weight:700;color:#374151;background:#fff;border:1.5px solid #d1d5db;border-radius:6px;padding:5px 14px;margin-top:6px;text-align:center;}
+.cm-grid-wrap{overflow-x:auto;max-width:100%;}
+.cm-tbl{border-collapse:collapse;}
+.cm-cell{border:1px solid #d1d5db;width:22px;height:22px;min-width:22px;text-align:center;vertical-align:middle;font-size:10px;color:#374151;background:#fff;padding:0;}
+.cm-cell.cm-empty{border-color:transparent;background:transparent;}
+.cm-cell.cm-x{color:#cbd5e1;background:#f9fafb;}
+.cm-cell.cm-hi{background:#1D9E75;color:#fff;font-weight:800;border:2px solid #0d6b4d;animation:cmPulse 1.6s ease-out infinite;}
+.cm-tbl-zoom .cm-cell{width:36px;height:36px;min-width:36px;font-size:15px;}
+@keyframes cmPulse{0%{box-shadow:0 0 0 0 rgba(29,158,117,0.55);}70%{box-shadow:0 0 0 9px rgba(29,158,117,0);}100%{box-shadow:0 0 0 0 rgba(29,158,117,0);}}
 </style>
 </head>
 <body>
@@ -458,6 +474,7 @@ async function syncSettingsFromGitHub(eventCode){
     if(data.eventPeriodStart!==undefined)tour.eventPeriodStart=data.eventPeriodStart;
     if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
     if(data.receptionPw!==undefined)tour.receptionPw=data.receptionPw;
+    if(data.courtLayout!==undefined)tour.courtLayout=data.courtLayout;
     saveActiveTour(tour);
   } else {
     // 大会が存在しない場合は新規作成（venueCode/eventCodeを正規化して保存）
@@ -474,7 +491,8 @@ async function syncSettingsFromGitHub(eventCode){
       matches:[],
       eventPeriodStart:data.eventPeriodStart||'',
       eventPeriodEnd:data.eventPeriodEnd||'',
-      receptionPw:data.receptionPw||''
+      receptionPw:data.receptionPw||'',
+      courtLayout:data.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',labelCenter:''}
     });
     if(!AD.tournaments)AD.tournaments=[];
     AD.tournaments.push(newTour);
@@ -674,7 +692,8 @@ function makeTournament(overrides){
     matchRules:[],tourneyRules:[],roundRules:[],
     teams:[],matches:[],
     eventPeriodStart:'',eventPeriodEnd:'',
-    receptionPw:''
+    receptionPw:'',
+    courtLayout:{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',labelCenter:''}
   },overrides);
 }
 
@@ -2088,6 +2107,28 @@ function rAdminTourEdit(){
       </details><button class="btn btn-red-o btn-xs" id="btn-clear-matches" style="width:100%;padding:8px;">🗑 対戦カードを全削除</button>`:''}
     </div>
 
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px;">📍 コート図設定</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">コート番号をカンマ区切り・改行で入力してください。空欄はそのまま空けて、使わないコートは「×」にしてください。</div>
+      <textarea id="cl-grid" rows="6" placeholder="例:&#10;,,,,64,63,62,61,60,59,58,57,56,55&#10;54,53,52,51,50,49,48,47,46,45,44,43,×,×&#10;42,41,40,39,38,37,36,35,34,33,32,31,30,29&#10;28,27,26,25,24,23,22,21,20,19,18,17,16,15&#10;14,13,12,11,10,9,8,7,6,5,4,3,2,1">${(tour.courtLayout&&tour.courtLayout.grid)||''}</textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
+        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">上の目印（任意）</div>
+          <input type="text" id="cl-top" value="${(tour.courtLayout&&tour.courtLayout.labelTop)||''}" placeholder="例: なし"/></div>
+        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">下の目印</div>
+          <input type="text" id="cl-bottom" value="${(tour.courtLayout&&tour.courtLayout.labelBottom)||''}" placeholder="例: 丸子橋"/></div>
+        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">左の目印</div>
+          <input type="text" id="cl-left" value="${(tour.courtLayout&&tour.courtLayout.labelLeft)||''}" placeholder="例: 多摩川"/></div>
+        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">右の目印</div>
+          <input type="text" id="cl-right" value="${(tour.courtLayout&&tour.courtLayout.labelRight)||''}" placeholder="例: なし"/></div>
+      </div>
+      <div style="margin-top:8px;"><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">中央の目印（本部など・グリッド下に表示）</div>
+        <input type="text" id="cl-center" value="${(tour.courtLayout&&tour.courtLayout.labelCenter)||''}" placeholder="例: 本部"/></div>
+      <div style="font-size:12px;color:#6b7280;margin-top:14px;margin-bottom:6px;">プレビュー</div>
+      <div id="cl-preview" style="overflow-x:auto;padding:10px;background:#fafafa;border-radius:8px;display:flex;justify-content:center;">
+        ${(tour.courtLayout&&tour.courtLayout.grid&&tour.courtLayout.grid.trim())?renderCourtMapFull(tour.courtLayout,null):'<div style="font-size:12px;color:#9ca3af;padding:8px 0;">まだ入力されていません</div>'}
+      </div>
+    </div>
+
     <button class="btn btn-green" id="btn-save-publish-close" style="width:100%;padding:14px;font-size:15px;font-weight:700;margin-bottom:16px;">💾 保存・配信して大会一覧に戻る</button>
   </div>`;
 }
@@ -3231,6 +3272,7 @@ async function publishSettings(tour,opts){
     eventPeriodStart: tour.eventPeriodStart||'',
     eventPeriodEnd: tour.eventPeriodEnd||'',
     receptionPw: tour.receptionPw||'',
+    courtLayout: tour.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',labelCenter:''},
     publishedAt: new Date().toISOString()
   };
   const fileName=tour.eventCode+'_settings.json';
@@ -3802,6 +3844,103 @@ function rRcpDone(){
   </div>`;
 }
 
+// ===== コート図（テキストグリッド方式） =====
+// gridテキスト（カンマ区切り×改行）を2次元配列に変換
+function parseCourtGrid(gridText){
+  if(!gridText)return[];
+  return gridText.split(/\r?\n/).filter(l=>l.trim()!=='').map(row=>row.split(',').map(c=>c.trim()));
+}
+// グリッド内から該当コート番号のセル位置を探す
+function findCourtCell(gridArr,no){
+  if(no==null||no==='')return null;
+  const target=String(no).trim();
+  for(let r=0;r<gridArr.length;r++){
+    for(let c=0;c<gridArr[r].length;c++){
+      if(gridArr[r][c]===target)return{r,c};
+    }
+  }
+  return null;
+}
+// 上下左右＋中央ラベルで枠を組み立てる
+function buildCourtMapShell(layout,gridHtml,showLeft,showRight,showTop,showBottom){
+  const top=(showTop&&layout.labelTop)?`<div class="cm-label-top">${layout.labelTop}</div>`:'';
+  const bottom=(showBottom&&layout.labelBottom)?`<div class="cm-label-bottom">${layout.labelBottom}</div>`:'';
+  const left=(showLeft&&layout.labelLeft)?`<div class="cm-label-left">${layout.labelLeft}</div>`:'';
+  const right=(showRight&&layout.labelRight)?`<div class="cm-label-right">${layout.labelRight}</div>`:'';
+  const center=(showBottom&&layout.labelCenter)?`<div class="cm-label-center">${layout.labelCenter}</div>`:'';
+  return`<div class="cm-outer">
+    ${top}
+    <div class="cm-middle">${left}<div class="cm-grid-wrap">${gridHtml}</div>${right}</div>
+    ${center}
+    ${bottom}
+  </div>`;
+}
+// セル1個分のHTML
+function courtCellHtml(val,isHi){
+  const isX=val==='×'||val.toLowerCase()==='x';
+  const isEmpty=val==='';
+  return`<td class="cm-cell${isHi?' cm-hi':''}${isX?' cm-x':''}${isEmpty?' cm-empty':''}">${isEmpty?'':val}</td>`;
+}
+// 全体表示
+function renderCourtMapFull(layout,highlightNo){
+  const gridArr=parseCourtGrid(layout&&layout.grid||'');
+  if(!gridArr.length)return'';
+  const pos=findCourtCell(gridArr,highlightNo);
+  const maxCols=Math.max(...gridArr.map(r=>r.length));
+  const rowsHtml=gridArr.map((row,ri)=>{
+    let tds='';
+    for(let ci=0;ci<maxCols;ci++){
+      const val=row[ci]!==undefined?row[ci]:'';
+      tds+=courtCellHtml(val,!!(pos&&pos.r===ri&&pos.c===ci));
+    }
+    return`<tr>${tds}</tr>`;
+  }).join('');
+  return buildCourtMapShell(layout,`<table class="cm-tbl">${rowsHtml}</table>`,true,true,true,true);
+}
+// 拡大表示（該当コート周辺だけ切り出す）
+function renderCourtMapZoom(layout,highlightNo){
+  const gridArr=parseCourtGrid(layout&&layout.grid||'');
+  if(!gridArr.length)return'';
+  const pos=findCourtCell(gridArr,highlightNo);
+  if(!pos)return renderCourtMapFull(layout,highlightNo); // 見つからない場合は全体表示にフォールバック
+  const maxCols=Math.max(...gridArr.map(r=>r.length));
+  const numRows=gridArr.length;
+  const R=1,C=2; // 上下1行・左右2列を周辺に表示
+  let r0=pos.r-R,r1=pos.r+R,c0=pos.c-C,c1=pos.c+C;
+  if(r0<0){r1+=(-r0);r0=0;}
+  if(r1>numRows-1){r0-=(r1-(numRows-1));r1=numRows-1;}
+  r0=Math.max(0,r0);
+  if(c0<0){c1+=(-c0);c0=0;}
+  if(c1>maxCols-1){c0-=(c1-(maxCols-1));c1=maxCols-1;}
+  c0=Math.max(0,c0);
+  const touchesLeft=c0<=0,touchesRight=c1>=maxCols-1,touchesTop=r0<=0,touchesBottom=r1>=numRows-1;
+  let rowsHtml='';
+  for(let ri=r0;ri<=r1;ri++){
+    let tds='';
+    for(let ci=c0;ci<=c1;ci++){
+      const val=gridArr[ri][ci]!==undefined?gridArr[ri][ci]:'';
+      tds+=courtCellHtml(val,ri===pos.r&&ci===pos.c);
+    }
+    rowsHtml+=`<tr>${tds}</tr>`;
+  }
+  return buildCourtMapShell(layout,`<table class="cm-tbl cm-tbl-zoom">${rowsHtml}</table>`,touchesLeft,touchesRight,touchesTop,touchesBottom);
+}
+// 検索結果カードに埋め込むブロック（全体／拡大の切替ボタン付き）
+function renderCourtMapBlock(layout,highlightNo,matchId){
+  if(!layout||!layout.grid||!layout.grid.trim())return'';
+  if(!S._csZoomMap)S._csZoomMap={};
+  if(S._csZoomMap[matchId]===undefined)S._csZoomMap[matchId]=true; // 初期表示は拡大
+  const zoomed=S._csZoomMap[matchId];
+  const mapHtml=zoomed?renderCourtMapZoom(layout,highlightNo):renderCourtMapFull(layout,highlightNo);
+  return`<div style="margin-top:10px;border-top:1px dashed #e5e7eb;padding-top:10px;">
+    <div style="display:flex;align-items:center;margin-bottom:8px;">
+      <div style="flex:1;font-size:12px;color:#6b7280;">📍 コートの場所</div>
+      <button class="btn btn-gray btn-xs cm-toggle-btn" data-matchid="${matchId}" style="padding:3px 9px;font-size:11px;">${zoomed?'🔍 全体表示に切替':'🔎 拡大表示に切替'}</button>
+    </div>
+    ${mapHtml}
+  </div>`;
+}
+
 function rCourtSearch(){
   const q=S._courtSearchQuery||{teamNo:'',matchCode:''};
   const results=S._courtSearchResults||null;
@@ -3846,6 +3985,7 @@ function rCourtSearch(){
             </div>
           </div>
           <button class="btn btn-green cs-start-btn" data-matchid="${r.matchId}" style="width:100%;padding:12px;font-size:15px;font-weight:700;">この試合を開始する →</button>
+          ${renderCourtMapBlock(tourSrc.courtLayout,courtNo,r.matchId)}
         </div>`;
       }).join('');
     }
@@ -4800,14 +4940,44 @@ function bind(){
     const psEl=document.getElementById('te-period-start');if(psEl)tour.eventPeriodStart=psEl.value;
     const peEl=document.getElementById('te-period-end');if(peEl)tour.eventPeriodEnd=peEl.value;
     const rpwEl=document.getElementById('te-reception-pw');if(rpwEl)tour.receptionPw=rpwEl.value.trim();
+    // コート図
+    const clGrid=document.getElementById('cl-grid');
+    if(clGrid){
+      if(!tour.courtLayout)tour.courtLayout={};
+      tour.courtLayout.grid=clGrid.value;
+      const clTop=document.getElementById('cl-top');tour.courtLayout.labelTop=clTop?clTop.value.trim():'';
+      const clBottom=document.getElementById('cl-bottom');tour.courtLayout.labelBottom=clBottom?clBottom.value.trim():'';
+      const clLeft=document.getElementById('cl-left');tour.courtLayout.labelLeft=clLeft?clLeft.value.trim():'';
+      const clRight=document.getElementById('cl-right');tour.courtLayout.labelRight=clRight?clRight.value.trim():'';
+      const clCenter=document.getElementById('cl-center');tour.courtLayout.labelCenter=clCenter?clCenter.value.trim():'';
+    }
   }
   // 各入力欄を自動保存（途中で他操作をしても入力が消えないように）
-  ['te-venue','te-code','te-name','te-gasurl','te-period-start','te-period-end','te-reception-pw'].forEach(id=>{
+  ['te-venue','te-code','te-name','te-gasurl','te-period-start','te-period-end','te-reception-pw','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center'].forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.addEventListener('change',()=>{
       const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
       captureBasicFields(tour);saveActiveTour(tour);
     });
+  });
+  // コート図プレビューをキー入力ごとにリアルタイム更新（フォーカスを失わないよう全体renderはしない）
+  function updateCourtMapPreview(){
+    const clGrid=document.getElementById('cl-grid');
+    const previewEl=document.getElementById('cl-preview');
+    if(!clGrid||!previewEl)return;
+    const tempLayout={
+      grid:clGrid.value,
+      labelTop:(document.getElementById('cl-top')||{value:''}).value,
+      labelBottom:(document.getElementById('cl-bottom')||{value:''}).value,
+      labelLeft:(document.getElementById('cl-left')||{value:''}).value,
+      labelRight:(document.getElementById('cl-right')||{value:''}).value,
+      labelCenter:(document.getElementById('cl-center')||{value:''}).value
+    };
+    previewEl.innerHTML=tempLayout.grid.trim()?renderCourtMapFull(tempLayout,null):'<div style="font-size:12px;color:#9ca3af;padding:8px 0;">まだ入力されていません</div>';
+  }
+  ['cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('input',updateCourtMapPreview);
   });
   // 保存・配信して大会一覧に戻る（戻るボタン・下部ボタン共通）
   async function savePublishAndClose(triggerBtn){
@@ -5193,6 +5363,14 @@ function bind(){
       S.matchIdData=result;
       S._matchConfirmFrom='courtSearch';
       S.phase='matchConfirm';render();
+    });
+  });
+  document.querySelectorAll('.cm-toggle-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const mid=btn.dataset.matchid;
+      if(!S._csZoomMap)S._csZoomMap={};
+      S._csZoomMap[mid]=!S._csZoomMap[mid];
+      render();
     });
   });
   const bcsRef=document.getElementById('btn-cs-refresh');
