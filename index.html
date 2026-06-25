@@ -1,6 +1,5 @@
-<meta name="viewport" content="width=device-width, initial-scale=1.0"><!DOCTYPE html><!DOCTYPE html>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"><!DOCTYPE html><!DOCTYPE html><!DOCTYPE html>
 
-<!DOCTYPE html>
 <html lang="ja">
 <head>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -42,22 +41,6 @@ select:focus{outline:none;border-color:#1D9E75;background:#fff;}
 .team-hdr{font-size:14px;font-weight:600;padding:7px 8px;}
 label.radio-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid #e5e7eb;border-radius:10px;cursor:pointer;background:#fff;}
 label.radio-card.selected{border-color:#1D9E75;background:#E1F5EE;}
-textarea{width:100%;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;background:#f3f4f6;color:#111;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;}
-textarea:focus{outline:none;border-color:#1D9E75;background:#fff;}
-/* ===== コート図 ===== */
-.cm-outer{display:flex;flex-direction:column;align-items:center;width:100%;}
-.cm-label-top,.cm-label-bottom{font-size:12px;font-weight:700;color:#374151;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:5px 12px;margin:4px 0;text-align:center;max-width:100%;}
-.cm-middle{display:flex;align-items:stretch;gap:5px;max-width:100%;}
-.cm-label-left,.cm-label-right{writing-mode:vertical-rl;text-orientation:upright;font-size:11px;font-weight:700;color:#374151;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:8px 3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.cm-label-center{font-size:11px;font-weight:700;color:#374151;background:#fff;border:1.5px solid #d1d5db;border-radius:6px;padding:5px 14px;margin-top:6px;text-align:center;}
-.cm-grid-wrap{overflow-x:auto;max-width:100%;}
-.cm-tbl{border-collapse:collapse;}
-.cm-cell{border:1px solid #d1d5db;width:22px;height:22px;min-width:22px;text-align:center;vertical-align:middle;font-size:10px;color:#374151;background:#fff;padding:0;}
-.cm-cell.cm-empty{background:#f9fafb;}
-.cm-cell.cm-x{color:#cbd5e1;background:#f9fafb;}
-.cm-cell.cm-hi{background:#1D9E75;color:#fff;font-weight:800;border:2px solid #0d6b4d;animation:cmPulse 1.6s ease-out infinite;}
-.cm-side-slot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;flex-shrink:0;}
-@keyframes cmPulse{0%{box-shadow:0 0 0 0 rgba(29,158,117,0.55);}70%{box-shadow:0 0 0 9px rgba(29,158,117,0);}100%{box-shadow:0 0 0 0 rgba(29,158,117,0);}}
 </style>
 </head>
 <body>
@@ -474,7 +457,6 @@ async function syncSettingsFromGitHub(eventCode){
     if(data.eventPeriodStart!==undefined)tour.eventPeriodStart=data.eventPeriodStart;
     if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
     if(data.receptionPw!==undefined)tour.receptionPw=data.receptionPw;
-    if(data.courtLayout!==undefined)tour.courtLayout=data.courtLayout;
     saveActiveTour(tour);
   } else {
     // 大会が存在しない場合は新規作成（venueCode/eventCodeを正規化して保存）
@@ -491,8 +473,7 @@ async function syncSettingsFromGitHub(eventCode){
       matches:[],
       eventPeriodStart:data.eventPeriodStart||'',
       eventPeriodEnd:data.eventPeriodEnd||'',
-      receptionPw:data.receptionPw||'',
-      courtLayout:data.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}}
+      receptionPw:data.receptionPw||''
     });
     if(!AD.tournaments)AD.tournaments=[];
     AD.tournaments.push(newTour);
@@ -692,8 +673,7 @@ function makeTournament(overrides){
     matchRules:[],tourneyRules:[],roundRules:[],
     teams:[],matches:[],
     eventPeriodStart:'',eventPeriodEnd:'',
-    receptionPw:'',
-    courtLayout:{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}}
+    receptionPw:''
   },overrides);
 }
 
@@ -2107,38 +2087,6 @@ function rAdminTourEdit(){
       </details><button class="btn btn-red-o btn-xs" id="btn-clear-matches" style="width:100%;padding:8px;">🗑 対戦カードを全削除</button>`:''}
     </div>
 
-    <div class="card" style="padding:14px;margin-bottom:12px;">
-      <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:6px;">📍 コート図設定</div>
-      <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">コート番号をカンマ区切り・改行で入力してください。空欄はそのまま空けて、使わないコートは「×」にしてください。</div>
-      <textarea id="cl-grid" rows="6" placeholder="例:&#10;,,,,64,63,62,61,60,59,58,57,56,55&#10;54,53,52,51,50,49,48,47,46,45,44,43,×,×&#10;42,41,40,39,38,37,36,35,34,33,32,31,30,29&#10;28,27,26,25,24,23,22,21,20,19,18,17,16,15&#10;14,13,12,11,10,9,8,7,6,5,4,3,2,1">${(tour.courtLayout&&tour.courtLayout.grid)||''}</textarea>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
-        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">上の目印（任意）</div>
-          <input type="text" id="cl-top" value="${(tour.courtLayout&&tour.courtLayout.labelTop)||''}" placeholder="例: なし"/></div>
-        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">下の目印</div>
-          <input type="text" id="cl-bottom" value="${(tour.courtLayout&&tour.courtLayout.labelBottom)||''}" placeholder="例: 丸子橋"/></div>
-        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">左の目印</div>
-          <input type="text" id="cl-left" value="${(tour.courtLayout&&tour.courtLayout.labelLeft)||''}" placeholder="例: 多摩川"/></div>
-        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">右の目印</div>
-          <input type="text" id="cl-right" value="${(tour.courtLayout&&tour.courtLayout.labelRight)||''}" placeholder="例: なし"/></div>
-      </div>
-      ${(()=>{const cl=getCenterLabel(tour.courtLayout||{});const clText=cl?cl.text:'';const clPos=cl?(cl.pos||'bottom'):'bottom';return`
-      <div style="margin-top:8px;display:grid;grid-template-columns:2fr 1fr;gap:8px;">
-        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">中央の目印（本部など）</div>
-          <input type="text" id="cl-center-text" value="${clText}" placeholder="例: 本部"/></div>
-        <div><div style="font-size:12px;color:#6b7280;margin-bottom:3px;">表示位置</div>
-          <select id="cl-center-pos">
-            <option value="top" ${clPos==='top'?'selected':''}>上</option>
-            <option value="bottom" ${clPos==='bottom'?'selected':''}>下</option>
-            <option value="left" ${clPos==='left'?'selected':''}>左</option>
-            <option value="right" ${clPos==='right'?'selected':''}>右</option>
-          </select></div>
-      </div>`;})()}
-      <div style="font-size:12px;color:#6b7280;margin-top:14px;margin-bottom:6px;">プレビュー</div>
-      <div id="cl-preview" style="overflow-x:auto;padding:10px;background:#fafafa;border-radius:8px;display:flex;justify-content:center;">
-        ${(tour.courtLayout&&tour.courtLayout.grid&&tour.courtLayout.grid.trim())?renderCourtMapFull(tour.courtLayout,null):'<div style="font-size:12px;color:#9ca3af;padding:8px 0;">まだ入力されていません</div>'}
-      </div>
-    </div>
-
     <button class="btn btn-green" id="btn-save-publish-close" style="width:100%;padding:14px;font-size:15px;font-weight:700;margin-bottom:16px;">💾 保存・配信して大会一覧に戻る</button>
   </div>`;
 }
@@ -3282,7 +3230,6 @@ async function publishSettings(tour,opts){
     eventPeriodStart: tour.eventPeriodStart||'',
     eventPeriodEnd: tour.eventPeriodEnd||'',
     receptionPw: tour.receptionPw||'',
-    courtLayout: tour.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}},
     publishedAt: new Date().toISOString()
   };
   const fileName=tour.eventCode+'_settings.json';
@@ -3854,86 +3801,6 @@ function rRcpDone(){
   </div>`;
 }
 
-// ===== コート図（テキストグリッド方式） =====
-// gridテキスト（カンマ区切り×改行）を2次元配列に変換
-function parseCourtGrid(gridText){
-  if(!gridText)return[];
-  return gridText.split(/\r?\n/).filter(l=>l.trim()!=='').map(row=>row.split(',').map(c=>c.trim()));
-}
-// グリッド内から該当コート番号のセル位置を探す（"037"と"37"のような0埋め差異を無視して一致判定）
-function findCourtCell(gridArr,no){
-  if(no==null||no==='')return null;
-  const targetStr=String(no).trim();
-  const targetNum=parseInt(targetStr,10);
-  for(let r=0;r<gridArr.length;r++){
-    for(let c=0;c<gridArr[r].length;c++){
-      const val=gridArr[r][c];
-      if(val===''||val==null)continue;
-      if(val===targetStr)return{r,c};
-      const valNum=parseInt(val,10);
-      if(!isNaN(valNum)&&!isNaN(targetNum)&&valNum===targetNum)return{r,c};
-    }
-  }
-  return null;
-}
-// 中央ラベル（本部など）の情報を取得。新形式{text,pos}優先、旧labelCenterはbottom扱いでフォールバック
-function getCenterLabel(layout){
-  if(layout.centerLabel&&layout.centerLabel.text)return layout.centerLabel;
-  if(layout.labelCenter)return{text:layout.labelCenter,pos:'bottom'};
-  return null;
-}
-// 上下左右＋中央ラベル（4方向のいずれかに配置可）で枠を組み立てる
-function buildCourtMapShell(layout,gridHtml){
-  const cl=getCenterLabel(layout);
-  const badge=cl?`<div class="cm-label-center">${cl.text}</div>`:'';
-  const pos=cl?(cl.pos||'bottom'):'';
-  const top=layout.labelTop?`<div class="cm-label-top">${layout.labelTop}</div>`:'';
-  const bottom=layout.labelBottom?`<div class="cm-label-bottom">${layout.labelBottom}</div>`:'';
-  const leftEdge=layout.labelLeft?`<div class="cm-label-left">${layout.labelLeft}</div>`:'';
-  const rightEdge=layout.labelRight?`<div class="cm-label-right">${layout.labelRight}</div>`:'';
-  const leftInner=`${pos==='left'?badge:''}${leftEdge}`;
-  const rightInner=`${rightEdge}${pos==='right'?badge:''}`;
-  const leftSlot=leftInner?`<div class="cm-side-slot">${leftInner}</div>`:'';
-  const rightSlot=rightInner?`<div class="cm-side-slot">${rightInner}</div>`:'';
-  return`<div class="cm-outer">
-    ${pos==='top'?badge:''}
-    ${top}
-    <div class="cm-middle">${leftSlot}<div class="cm-grid-wrap">${gridHtml}</div>${rightSlot}</div>
-    ${pos==='bottom'?badge:''}
-    ${bottom}
-  </div>`;
-}
-// セル1個分のHTML（空白セルも枠線付きで描画する）
-function courtCellHtml(val,isHi){
-  const isX=val==='×'||val.toLowerCase()==='x';
-  const isEmpty=val==='';
-  return`<td class="cm-cell${isHi?' cm-hi':''}${isX?' cm-x':''}${isEmpty?' cm-empty':''}">${isEmpty?'':val}</td>`;
-}
-// コート図本体を描画し、該当コートのセルだけ色をつける
-function renderCourtMapFull(layout,highlightNo){
-  const gridArr=parseCourtGrid(layout&&layout.grid||'');
-  if(!gridArr.length)return'';
-  const pos=findCourtCell(gridArr,highlightNo);
-  const maxCols=Math.max(...gridArr.map(r=>r.length));
-  const rowsHtml=gridArr.map((row,ri)=>{
-    let tds='';
-    for(let ci=0;ci<maxCols;ci++){
-      const val=row[ci]!==undefined?row[ci]:'';
-      tds+=courtCellHtml(val,!!(pos&&pos.r===ri&&pos.c===ci));
-    }
-    return`<tr>${tds}</tr>`;
-  }).join('');
-  return buildCourtMapShell(layout,`<table class="cm-tbl">${rowsHtml}</table>`);
-}
-// 検索結果カードに埋め込むブロック
-function renderCourtMapBlock(layout,highlightNo,matchId){
-  if(!layout||!layout.grid||!layout.grid.trim())return'';
-  return`<div style="margin-top:10px;border-top:1px dashed #e5e7eb;padding-top:10px;">
-    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">コートの場所</div>
-    ${renderCourtMapFull(layout,highlightNo)}
-  </div>`;
-}
-
 function rCourtSearch(){
   const q=S._courtSearchQuery||{teamNo:'',matchCode:''};
   const results=S._courtSearchResults||null;
@@ -3978,7 +3845,6 @@ function rCourtSearch(){
             </div>
           </div>
           <button class="btn btn-green cs-start-btn" data-matchid="${r.matchId}" style="width:100%;padding:12px;font-size:15px;font-weight:700;">この試合を開始する →</button>
-          ${renderCourtMapBlock(tourSrc.courtLayout,courtNo,r.matchId)}
         </div>`;
       }).join('');
     }
@@ -4933,56 +4799,15 @@ function bind(){
     const psEl=document.getElementById('te-period-start');if(psEl)tour.eventPeriodStart=psEl.value;
     const peEl=document.getElementById('te-period-end');if(peEl)tour.eventPeriodEnd=peEl.value;
     const rpwEl=document.getElementById('te-reception-pw');if(rpwEl)tour.receptionPw=rpwEl.value.trim();
-    // コート図
-    const clGrid=document.getElementById('cl-grid');
-    if(clGrid){
-      if(!tour.courtLayout)tour.courtLayout={};
-      tour.courtLayout.grid=clGrid.value;
-      const clTop=document.getElementById('cl-top');tour.courtLayout.labelTop=clTop?clTop.value.trim():'';
-      const clBottom=document.getElementById('cl-bottom');tour.courtLayout.labelBottom=clBottom?clBottom.value.trim():'';
-      const clLeft=document.getElementById('cl-left');tour.courtLayout.labelLeft=clLeft?clLeft.value.trim():'';
-      const clRight=document.getElementById('cl-right');tour.courtLayout.labelRight=clRight?clRight.value.trim():'';
-      const clCenterText=document.getElementById('cl-center-text');
-      const clCenterPos=document.getElementById('cl-center-pos');
-      tour.courtLayout.centerLabel={
-        text:clCenterText?clCenterText.value.trim():'',
-        pos:clCenterPos?clCenterPos.value:'bottom'
-      };
-      delete tour.courtLayout.labelCenter; // 旧フィールドは新フィールドに統合
-    }
   }
   // 各入力欄を自動保存（途中で他操作をしても入力が消えないように）
-  ['te-venue','te-code','te-name','te-gasurl','te-period-start','te-period-end','te-reception-pw','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
+  ['te-venue','te-code','te-name','te-gasurl','te-period-start','te-period-end','te-reception-pw'].forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.addEventListener('change',()=>{
       const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
       captureBasicFields(tour);saveActiveTour(tour);
     });
   });
-  // コート図プレビューをキー入力ごとにリアルタイム更新（フォーカスを失わないよう全体renderはしない）
-  function updateCourtMapPreview(){
-    const clGrid=document.getElementById('cl-grid');
-    const previewEl=document.getElementById('cl-preview');
-    if(!clGrid||!previewEl)return;
-    const tempLayout={
-      grid:clGrid.value,
-      labelTop:(document.getElementById('cl-top')||{value:''}).value,
-      labelBottom:(document.getElementById('cl-bottom')||{value:''}).value,
-      labelLeft:(document.getElementById('cl-left')||{value:''}).value,
-      labelRight:(document.getElementById('cl-right')||{value:''}).value,
-      centerLabel:{
-        text:(document.getElementById('cl-center-text')||{value:''}).value,
-        pos:(document.getElementById('cl-center-pos')||{value:'bottom'}).value
-      }
-    };
-    previewEl.innerHTML=tempLayout.grid.trim()?renderCourtMapFull(tempLayout,null):'<div style="font-size:12px;color:#9ca3af;padding:8px 0;">まだ入力されていません</div>';
-  }
-  ['cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el)el.addEventListener('input',updateCourtMapPreview);
-  });
-  const clCenterPosEl=document.getElementById('cl-center-pos');
-  if(clCenterPosEl)clCenterPosEl.addEventListener('change',updateCourtMapPreview);
   // 保存・配信して大会一覧に戻る（戻るボタン・下部ボタン共通）
   async function savePublishAndClose(triggerBtn){
     const tour=AD.tournaments.find(t=>t.id===S._editingTourId);
@@ -5196,12 +5021,11 @@ function bind(){
     try{ already=await checkReception(team.id); }catch(e){ already=null; }
     _rcpState.checking=false;
     if(already&&already.found){
-      // 既に受付済み：質問・パスワードを飛ばして完了画面へ
-      _rcpState.alreadyDone=true;
-      _rcpState.resultStatus=already.needsDesk?'desk':'done';
-      // この端末にパーソナライズ保持
+      // 既に受付済み（2台目以降の合流）：質問・パスワード・本部案内をすべてスキップし、
+      // パーソナライズ済みのホーム画面へ直行する（警告は表示しない）
       saveMyTeam((activeTour()||{}).eventCode||'',team.id);
-      S.phase='rcpDone';render();
+      resetReception();
+      S.phase='setup';render();
       return;
     }
     // 未受付：1人目としてパスワード入力へ
