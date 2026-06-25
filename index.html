@@ -1359,18 +1359,38 @@ function rSetup(){
     <div style="font-size:13px;color:#6b7280;margin-bottom:24px;">オンラインスコアリングシステム</div>
     ${topBlock}
     <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">試合</div>
-    <div style="display:flex;gap:8px;margin-bottom:20px;">
-      <button id="btn-go-matchid" style="flex:1;padding:10px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
+      <button id="btn-go-matchid" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📷</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">QRコードで<br>試合開始</div>
       </button>
-      <button id="btn-go-court-search" style="flex:1;padding:10px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-result-only" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+        <span style="font-size:22px;">📤</span>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">試合結果のみ<br>を送信</div>
+      </button>
+      <button id="btn-go-court-search" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">${courtIcon}</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${courtLabel}</div>
       </button>
-      <button id="btn-go-tournament-info" style="flex:1;padding:10px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
-        <span style="font-size:22px;">📰</span>
-        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">大会情報<br>を見る</div>
+      <button id="btn-go-regulation" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+        <span style="font-size:22px;">📜</span>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">レギュ<br>レーション</div>
+      </button>
+      <button id="btn-go-schedule" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+        <span style="font-size:22px;">🕐</span>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">タイム<br>スケジュール</div>
+      </button>
+      <button id="btn-go-prelim" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+        <span style="font-size:22px;">🏅</span>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">予選結果<br>を確認</div>
+      </button>
+      <button id="btn-go-remaining" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+        <span style="font-size:22px;">📊</span>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">残り試合数<br>を確認</div>
+      </button>
+      <button id="btn-go-bracket" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+        <span style="font-size:22px;">🏆</span>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">決勝<br>トーナメント表</div>
       </button>
     </div>
     <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">成績・記録</div>
@@ -5330,7 +5350,8 @@ function bind(){
   // ホーム：パーソナライズ解除
   const bcmt=document.getElementById('btn-clear-myteam');
   if(bcmt)bcmt.onclick=()=>{clearMyTeam();render();};
-  const bgti=document.getElementById('btn-go-tournament-info');if(bgti)bgti.onclick=async()=>{
+  // 大会情報サブ画面へのショートカット共通処理
+  async function openTournamentInfoView(view){
     const eventCode=await resolveActiveEventCode();
     if(!eventCode){
       alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
@@ -5339,8 +5360,36 @@ function bind(){
     await syncAllFromGitHub(eventCode);
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
-    S._tiView=null;S._tiLoading=false;S._tiError=null;S.phase='tournamentInfo';render();
-  };
+    S._tiView=view;S._tiLoading=true;S._tiError=null;
+    S.phase='tournamentInfo';render();
+    try{
+      if(view==='schedule'){
+        S._tiSchedule=[];
+        const json=await fetchTournamentInfo('getSchedule');
+        if(json.error)throw new Error('GAS: '+json.error);
+        S._tiSchedule=json.schedule||[];
+      } else if(view==='regulation'){
+        S._tiRegulation='';
+        const json=await fetchTournamentInfo('getRegulation');
+        if(json.error)throw new Error('GAS: '+json.error);
+        S._tiSections=json.sections||null;
+        S._tiRegulation=json.regulation||'';
+      } else if(view==='prelim'){
+        S._tiPrelim=[];S._tiPrelimQuery='';S._tiPrelimSelected=null;
+        const json=await fetchTournamentInfo('getPrelim');
+        if(json.error)throw new Error('GAS: '+json.error);
+        S._tiPrelim=json.teams||[];
+      }
+    }catch(e){S._tiError='取得に失敗しました: '+e.message;}
+    S._tiLoading=false;render();
+  }
+  const bgreg=document.getElementById('btn-go-regulation');if(bgreg)bgreg.onclick=()=>openTournamentInfoView('regulation');
+  const bgsch=document.getElementById('btn-go-schedule');if(bgsch)bgsch.onclick=()=>openTournamentInfoView('schedule');
+  const bgpre=document.getElementById('btn-go-prelim');if(bgpre)bgpre.onclick=()=>openTournamentInfoView('prelim');
+  // 新規ボタン（中身は今後実装）
+  const bgro=document.getElementById('btn-go-result-only');if(bgro)bgro.onclick=()=>{alert('「試合結果のみを送信」は準備中です。');};
+  const bgrem=document.getElementById('btn-go-remaining');if(bgrem)bgrem.onclick=()=>{alert('「残り試合数を確認」は準備中です。');};
+  const bgbr=document.getElementById('btn-go-bracket');if(bgbr)bgbr.onclick=()=>{alert('「決勝トーナメント表」は準備中です。');};
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
   // 対戦コート：他チーム検索の折りたたみトグル
   const bcst=document.getElementById('btn-cs-toggle');
@@ -5651,7 +5700,7 @@ function bind(){
   // 大会情報画面 - メニューの戻る
   const btib=document.getElementById('btn-ti-back');if(btib)btib.onclick=()=>{S._tiView=null;S.phase='setup';render();};
   // サブ画面の戻る → メニュー画面へ（phaseはtournamentInfoのまま、_tiViewだけクリア）
-  const btisb=document.getElementById('btn-ti-sub-back');if(btisb)btisb.onclick=()=>{S._tiView=null;S._tiLoading=false;S._tiError=null;S.phase='tournamentInfo';render();};
+  const btisb=document.getElementById('btn-ti-sub-back');if(btisb)btisb.onclick=()=>{S._tiView=null;S._tiLoading=false;S._tiError=null;S.phase='setup';render();};
   // タイムスケジュール
   const btisc=document.getElementById('btn-ti-schedule');
   if(btisc)btisc.onclick=async()=>{
