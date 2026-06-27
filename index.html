@@ -5874,7 +5874,8 @@ function bind(){
     S._roEarly=false;
     S._roSubmitError='';S._roSubmitting=false;
     S.phase='resultOnlyInput';render();
-  };if(bu)bu.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=p.wid;S.iP='';S.iM='single';S.iA='';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;render();};
+  };
+  const bu=document.getElementById('btn-undo');if(bu)bu.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=p.wid;S.iP='';S.iM='single';S.iA='';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;render();};
   const bbo=document.getElementById('btn-bk-order');if(bbo)bbo.onclick=()=>{
     const curIdx=S.cur;
     S.sets.pop();
