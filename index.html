@@ -116,6 +116,7 @@ let S={
   throwStartTime:null,lastThrowSec:null,
   _matchConfirmMode:null, // 'resultOnly' のとき結果のみ送信フロー
   _roScores:null,         // 結果のみ：各セットの[teamA点,teamB点]配列
+  _roEarly:false,         // 結果のみ：時間切れで途中終了
   _roSubmitting:false,_roSubmitError:''
 };
 function fmtSec(sec){if(sec===null||sec===undefined)return'--';const m=Math.floor(sec/60),s=sec%60;return m>0?m+'分'+s+'秒':s+'秒';}
@@ -1172,7 +1173,24 @@ async function submitResultOnly(){
     b===''?null:parseInt(b,10)
   ]);
   // 入力済みセット（両チーム数値）のみ採用
-  const validSets=scores.filter(([a,b])=>a!==null&&b!==null&&!isNaN(a)&&!isNaN(b));
+  const filledSets=scores.filter(([a,b])=>a!==null&&b!==null&&!isNaN(a)&&!isNaN(b));
+
+  const nW=S.fmt==='best2'?2:S.fmt==='best3'?3:99;
+  const early=!!S._roEarly;
+
+  // 有効セットの決定
+  let validSets=filledSets;
+  if(!early&&S.fmt!=='round2'){
+    // 通常：先取で決着したらそのセットまでを有効とする（残りセットは無視）
+    const w=[0,0];const acc=[];
+    for(const [a,b] of filledSets){
+      acc.push([a,b]);
+      if(a>b)w[0]++;else if(b>a)w[1]++;
+      if(w[0]>=nW||w[1]>=nW)break;
+    }
+    validSets=acc;
+  }
+  // 時間切れ（early）：入力済みセットを全て採用（表裏で1セットのみ等も可）
 
   // 各セット勝者（wid: 0/1/null=引き分け）
   const setWid=validSets.map(([a,b])=>a>b?0:b>a?1:null);
@@ -1180,9 +1198,16 @@ async function submitResultOnly(){
   setWid.forEach(w=>{if(w===0)wins[0]++;else if(w===1)wins[1]++;});
 
   // 試合勝敗
-  const nW=S.fmt==='best2'?2:S.fmt==='best3'?3:99;
   let matchWin=null;
-  if(S.fmt!=='round2'){
+  if(early){
+    // 時間切れ終了：earlyロジック（セット勝数→合計点→引き分け）。表裏も同様に判定
+    if(wins[0]>wins[1])matchWin=0;
+    else if(wins[1]>wins[0])matchWin=1;
+    else{
+      const tot=[validSets.reduce((s,r)=>s+r[0],0),validSets.reduce((s,r)=>s+r[1],0)];
+      matchWin=tot[0]>tot[1]?0:tot[1]>tot[0]?1:null;
+    }
+  }else if(S.fmt!=='round2'){
     if(wins[0]>=nW)matchWin=0;
     else if(wins[1]>=nW)matchWin=1;
   }else{
@@ -1190,8 +1215,11 @@ async function submitResultOnly(){
     matchWin=tot[0]>tot[1]?0:tot[1]>tot[0]?1:null;
   }
 
+  // 試合結果ラベル：表裏は通常空欄だが、時間切れ時は勝敗を記入する
+  const writeResult=early||S.fmt!=='round2';
+
   const teamRows=[0,1].map(ti=>{
-    const result=S.fmt==='round2'?'':matchWin===null?'引き分け':matchWin===ti?'勝ち':'負け';
+    const result=writeResult?(matchWin===null?'引き分け':matchWin===ti?'勝ち':'負け'):'';
     const totalSets=validSets.length;
     const lossSets=setWid.filter(w=>w!==null&&w!==ti).length;
     const drawSets=setWid.filter(w=>w===null).length;
@@ -1244,7 +1272,7 @@ async function handleResultOnlySubmit(){
   if(result){
     showSubmitConfirm(result.teamRows,[],()=>{
       // 結果のみ用のリセット：試合状態をクリアして最初の画面へ
-      S._roScores=null;S._matchConfirmMode=null;S._savedMatchIdData=null;
+      S._roScores=null;S._roEarly=false;S._matchConfirmMode=null;S._savedMatchIdData=null;
       S._matchId='';S._teamNos=['',''];S.matchIdData=null;
       S.phase='setup';render();
     });
@@ -4200,6 +4228,7 @@ function rResultOnlyInput(){
   const nameB=S.teams[1]?S.teams[1].name:'チームB';
   const scores=S._roScores||[];
   const nW=S.fmt==='best2'?2:S.fmt==='best3'?3:99;
+  const maxSets=scores.length;
 
   // 各セットの勝敗を点数から判定（点数が両方入力されているセットのみ）
   const setResults=scores.map(([a,b])=>{
@@ -4210,64 +4239,151 @@ function rResultOnlyInput(){
     if(vb>va)return 1;
     return 'draw';
   });
+
+  // 何セット目で試合が決着したか（2先/3先）。決着後のセットは「試合終了」で入力不要
+  let decidedAt=-1; // 決着したセットのindex（0始まり）。-1なら未決着
+  if(S.fmt!=='round2'){
+    const w=[0,0];
+    for(let i=0;i<setResults.length;i++){
+      const r=setResults[i];
+      if(r===0)w[0]++; else if(r===1)w[1]++;
+      if(w[0]>=nW||w[1]>=nW){decidedAt=i;break;}
+    }
+  }
+  const early=!!S._roEarly; // 時間切れで途中終了モード
+
+  // 集計対象セット：通常決着していればそこまで、それ以外は入力済みセット全部
+  const countUpto=decidedAt>=0?decidedAt:(scores.length-1);
   const wins=[0,0];
-  setResults.forEach(r=>{if(r===0)wins[0]++;else if(r===1)wins[1]++;});
-  // 試合勝敗
+  setResults.forEach((r,i)=>{ if(i>countUpto)return; if(r===0)wins[0]++;else if(r===1)wins[1]++; });
+
+  // 通常決着（先取到達）
   let matchWin=null,matchDecided=false;
   if(S.fmt!=='round2'){
     if(wins[0]>=nW){matchWin=0;matchDecided=true;}
     else if(wins[1]>=nW){matchWin=1;matchDecided=true;}
   }
+  // 時間切れ終了時の勝敗判定（earlyロジック：セット勝数→合計点→引き分け）
+  let earlyWin=null; // 0/1/null(引き分け)
+  if(early&&!matchDecided){
+    const played=scores.map(([a,b])=>[a===''?null:parseInt(a,10),b===''?null:parseInt(b,10)])
+      .filter(([a,b])=>a!==null&&b!==null&&!isNaN(a)&&!isNaN(b));
+    if(wins[0]>wins[1])earlyWin=0;
+    else if(wins[1]>wins[0])earlyWin=1;
+    else{
+      const tot=[played.reduce((s,r)=>s+r[0],0),played.reduce((s,r)=>s+r[1],0)];
+      earlyWin=tot[0]>tot[1]?0:tot[1]>tot[0]?1:null;
+    }
+  }
 
-  const setRows=scores.map(([a,b],i)=>{
+  // 点数プルダウン（50→0）。片方が50なら、もう片方は50を選べない
+  const optsFor=(val,oppVal)=>{
+    const oppIs50=String(oppVal)==='50';
+    let o=`<option value=""${val===''?' selected':''}>-</option>`;
+    for(let n=50;n>=0;n--){
+      const disabled=(n===50&&oppIs50&&String(val)!=='50')?' disabled':'';
+      o+=`<option value="${n}"${String(val)===String(n)?' selected':''}${disabled}>${n}</option>`;
+    }
+    return o;
+  };
+
+  // 「試合終了後で入力不要」になるセット：通常決着後、または時間切れ確定後で未入力のセット
+  const isLockedSet=(i)=>{
+    if(decidedAt>=0&&i>decidedAt)return true; // 通常決着の後
+    return false;
+  };
+
+  // 表形式の点数入力（セット=行）
+  const rowsHtml=scores.map(([a,b],i)=>{
+    const ended=isLockedSet(i);
     const r=setResults[i];
-    const badge=r===null?'<span style="font-size:12px;color:#9ca3af;">未入力</span>'
-      :r==='draw'?'<span style="font-size:12px;font-weight:700;color:#92400e;background:#FFF7ED;padding:2px 8px;border-radius:99px;">引き分け</span>'
-      :`<span style="font-size:12px;font-weight:700;color:#fff;background:${C[r]};padding:2px 8px;border-radius:99px;">${(r===0?nameA:nameB)} の勝ち</span>`;
-    return`<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="font-size:14px;font-weight:700;color:#111;">第${i+1}セット</div>
-        ${badge}
-      </div>
-      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;">
-        <div>
-          <div style="font-size:11px;color:${C[0]};font-weight:700;margin-bottom:3px;">${nameA}</div>
-          <input type="number" inputmode="numeric" class="ro-score" data-set="${i}" data-ti="0" value="${a}" placeholder="-" style="text-align:center;font-size:18px;font-weight:700;"/>
-        </div>
-        <div style="font-size:14px;color:#9ca3af;font-weight:700;padding-top:16px;">−</div>
-        <div>
-          <div style="font-size:11px;color:${C[1]};font-weight:700;margin-bottom:3px;">${nameB}</div>
-          <input type="number" inputmode="numeric" class="ro-score" data-set="${i}" data-ti="1" value="${b}" placeholder="-" style="text-align:center;font-size:18px;font-weight:700;"/>
-        </div>
-      </div>
-    </div>`;
+    let resCell;
+    if(ended){
+      resCell=`<span style="font-size:11px;color:#9ca3af;">試合終了</span>`;
+    }else if(r===null){
+      resCell=`<span style="font-size:11px;color:#cbd5e1;">—</span>`;
+    }else if(r==='draw'){
+      resCell=`<span style="font-size:11px;font-weight:700;color:#92400e;">引分</span>`;
+    }else{
+      resCell=`<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;color:${C[r]};"><span style="width:7px;height:7px;border-radius:50%;background:${C[r]};"></span>勝</span>`;
+    }
+    const cellBg=ended?'#f9fafb':'#fff';
+    const selStyle=`width:100%;padding:8px 4px;font-size:16px;font-weight:700;text-align:center;text-align-last:center;border:1.5px solid #d1d5db;border-radius:8px;background:${ended?'#f3f4f6':'#fff'};color:${ended?'#9ca3af':'#111'};`;
+    return`<tr style="background:${cellBg};">
+      <td style="padding:6px 4px;text-align:center;font-size:12px;font-weight:700;color:#6b7280;border-top:1px solid #eef2f7;">${i+1}</td>
+      <td style="padding:6px 4px;border-top:1px solid #eef2f7;">
+        <select class="ro-score" data-set="${i}" data-ti="0" ${ended?'disabled':''} style="${selStyle}border-color:${r===0&&!ended?C[0]:'#d1d5db'};">${optsFor(a,b)}</select>
+      </td>
+      <td style="padding:6px 4px;border-top:1px solid #eef2f7;">
+        <select class="ro-score" data-set="${i}" data-ti="1" ${ended?'disabled':''} style="${selStyle}border-color:${r===1&&!ended?C[1]:'#d1d5db'};">${optsFor(b,a)}</select>
+      </td>
+      <td style="padding:6px 4px;text-align:center;border-top:1px solid #eef2f7;white-space:nowrap;">${resCell}</td>
+    </tr>`;
   }).join('');
 
+  const tableHtml=`<div style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:12px;">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+      <colgroup><col style="width:34px;"/><col/><col/><col style="width:46px;"/></colgroup>
+      <thead>
+        <tr style="background:#f8fafc;">
+          <th style="padding:8px 4px;font-size:11px;color:#6b7280;font-weight:700;">ｾｯﾄ</th>
+          <th style="padding:8px 4px;font-size:12px;font-weight:700;color:${C[0]};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${nameA}</th>
+          <th style="padding:8px 4px;font-size:12px;font-weight:700;color:${C[1]};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${nameB}</th>
+          <th style="padding:8px 4px;font-size:11px;color:#6b7280;font-weight:700;">勝敗</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  </div>`;
+
+  // 時間切れ終了トグル
+  const earlyToggle=`<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1.5px solid ${early?'#fcd34d':'#e5e7eb'};border-radius:10px;background:${early?'#fffbeb':'#fff'};cursor:pointer;margin-bottom:12px;">
+    <input type="checkbox" id="ro-early-toggle" ${early?'checked':''} style="width:auto;accent-color:#f59e0b;transform:scale(1.2);"/>
+    <div>
+      <div style="font-size:14px;font-weight:700;color:#92400e;">⏱ 時間切れで途中終了した試合</div>
+      <div style="font-size:11px;color:#a16207;margin-top:1px;">規定セット数に達していなくても、入力済みのセットだけで結果を送信します</div>
+    </div>
+  </label>`;
+
   // 結果サマリー
-  const anyInput=setResults.some(r=>r!==null);
+  const anyInput=setResults.some((r,i)=>r!==null&&!isLockedSet(i));
+  // 表示用の勝敗：通常決着＞時間切れ確定
+  const effWin=matchDecided?matchWin:(early?earlyWin:null);
+  const effDecided=matchDecided||(early&&anyInput);
   let summaryHtml='';
   if(anyInput){
-    const resLabel=ti=>S.fmt==='round2'?'':matchWin===null?(matchDecided?'引き分け':'—'):matchWin===ti?'勝ち':'負け';
+    const resLabel=ti=>S.fmt==='round2'&&!early
+      ?(effDecided?(effWin===null?'引き分け':effWin===ti?'勝ち':'負け'):'')
+      :!effDecided?'—':effWin===null?'引き分け':effWin===ti?'勝ち':'負け';
     summaryHtml=`<div class="card" style="padding:14px;margin-bottom:12px;background:#f0fdf4;border:1.5px solid #bbf7d0;">
-      <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:10px;">自動判定された結果（${fmtLabel}）</div>
+      <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:10px;">自動判定された結果（${fmtLabel}${early?' / 時間切れ':''}）</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         ${[0,1].map(ti=>{
           const rl=resLabel(ti);
           const col=rl==='勝ち'?'#1D9E75':rl==='負け'?'#E24B4A':'#9ca3af';
           return`<div style="background:#fff;border:1.5px solid ${C[ti]};border-radius:10px;padding:10px;text-align:center;">
-            <div style="font-size:13px;font-weight:700;color:#111;margin-bottom:4px;">${ti===0?nameA:nameB}</div>
+            <div style="font-size:13px;font-weight:700;color:#111;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ti===0?nameA:nameB}</div>
             <div style="font-size:18px;font-weight:800;color:${col};">${rl||'—'}</div>
             <div style="font-size:12px;color:#6b7280;margin-top:2px;">勝利 ${wins[ti]} セット</div>
           </div>`;
         }).join('')}
       </div>
-      ${S.fmt!=='round2'&&!matchDecided?`<div style="font-size:12px;color:#92400e;margin-top:8px;text-align:center;">⚠️ まだ勝敗が確定していません（${fmtLabel}に達していません）</div>`:''}
+      ${!early&&S.fmt!=='round2'&&matchDecided?`<div style="font-size:12px;color:#166534;margin-top:8px;text-align:center;">✓ ${decidedAt+1}セットで決着（残りセットは入力不要）</div>`:''}
+      ${!early&&S.fmt!=='round2'&&!matchDecided?`<div style="font-size:12px;color:#92400e;margin-top:8px;text-align:center;">⚠️ まだ勝敗が確定していません（${fmtLabel}に達していません）</div>`:''}
+      ${early&&earlyWin===null&&effDecided?`<div style="font-size:12px;color:#92400e;margin-top:8px;text-align:center;">セット勝数・合計点ともに同数のため引き分けです</div>`:''}
     </div>`;
   }
 
   const err=S._roSubmitError?`<div style="font-size:13px;color:#b91c1c;margin-bottom:10px;text-align:center;">⚠️ ${S._roSubmitError}</div>`:'';
-  // 送信可能条件：表裏は全セット入力、2先/3先は勝敗確定
-  const canSubmit=S.fmt==='round2'?setResults.every(r=>r!==null):matchDecided;
+  // 送信可能条件
+  // ・通常：2先/3先は勝敗確定、表裏は全セット入力
+  // ・時間切れ：入力済みセットが1つ以上あればOK（連続して入力されている前提）
+  let canSubmit;
+  if(early){
+    canSubmit=setResults.some(r=>r!==null);
+  }else{
+    canSubmit=S.fmt==='round2'?setResults.every(r=>r!==null):matchDecided;
+  }
 
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -4283,58 +4399,14 @@ function rResultOnlyInput(){
       </div>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;">試合ID: ${S._matchId||(d.matchId||'')}</div>
     </div>
-    <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">各セットの点数を入力してください。${S.fmt==='round2'?'（表裏：両セット入力）':`（${fmtLabel}：先取で自動確定）`}</div>
-    ${setRows}
+    <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">各セットの点数をプルダウンで選択してください。${early?'（時間切れ：行ったセットだけ入力してください）':S.fmt==='round2'?'（表裏：両セット入力）':`（${fmtLabel}：先取で自動的に試合終了し、残りセットは入力不要になります）`}</div>
+    ${earlyToggle}
+    ${tableHtml}
     ${summaryHtml}
     ${err}
     <button class="btn btn-green" id="btn-ro-submit" style="width:100%;padding:14px;font-size:16px;" ${(!canSubmit||S._roSubmitting)?'disabled':''}>${S._roSubmitting?'送信中...':'📤 結果を送信する'}</button>
-    ${!canSubmit?`<div style="font-size:12px;color:#9ca3af;text-align:center;margin-top:8px;">${S.fmt==='round2'?'両セットの点数を入力すると送信できます':'勝敗が確定すると送信できます'}</div>`:''}
+    ${!canSubmit?`<div style="font-size:12px;color:#9ca3af;text-align:center;margin-top:8px;">${early?'行ったセットの点数を入力すると送信できます':S.fmt==='round2'?'両セットの点数を入力すると送信できます':'勝敗が確定すると送信できます'}</div>`:''}
   </div>`;
-}
-
-// チーム変更モーダル（対戦カード確認画面から）
-function showChangeTeamModal(ci){
-  const overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;';
-  const label=ci===0?'チームA（緑）':'チームB（赤）';
-  overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:420px;">
-    <div style="font-size:16px;font-weight:700;margin-bottom:14px;">${label}を変更</div>
-    <div style="display:grid;gap:10px;">
-      <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チームNoを入力</div>
-        <input type="text" id="ct-no" placeholder="例: 048" style="font-size:18px;letter-spacing:2px;text-align:center;"/>
-      </div>
-      <div id="ct-preview" style="font-size:13px;color:#6b7280;padding:8px;background:#f9fafb;border-radius:8px;min-height:32px;"></div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:14px;">
-      <button id="ct-cancel" class="btn btn-gray" style="flex:1;">キャンセル</button>
-      <button id="ct-save" class="btn btn-green" style="flex:2;">変更する</button>
-    </div>
-  </div>`;
-  document.body.appendChild(overlay);
-
-  const inp=document.getElementById('ct-no');
-  const preview=document.getElementById('ct-preview');
-  inp.addEventListener('input',()=>{
-    const no=inp.value.trim();
-    const t=AD.teams.find(t=>t.id===no);
-    if(t){
-      const members=t.members?t.members.split(',').map(s=>s.trim()).filter(Boolean):[];
-      preview.innerHTML=`<span style="font-weight:600;">${t.name}</span><br><span style="color:#374151;">${members.join('・')||'メンバー未登録'}</span>`;
-    } else {
-      preview.textContent=no?'チームNoが見つかりません':'';
-    }
-  });
-  document.getElementById('ct-cancel').onclick=()=>document.body.removeChild(overlay);
-  document.getElementById('ct-save').onclick=()=>{
-    const no=inp.value.trim();
-    const t=AD.teams.find(tm=>tm.id===no);
-    if(!t){alert('チームNoが見つかりません');return;}
-    if(!S.matchIdData)return;
-    if(ci===0)S.matchIdData.teamA=t;
-    else S.matchIdData.teamB=t;
-    S.matchIdData.hasTeams=!!(S.matchIdData.teamA&&S.matchIdData.teamB);
-    document.body.removeChild(overlay);render();
-  };
 }
 
 // ===== 対戦カード確認画面 =====
@@ -4384,7 +4456,6 @@ function rMatchConfirm(){
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
           <div style="width:10px;height:10px;border-radius:50%;background:${C[ci]};flex-shrink:0;"></div>
           <span style="font-size:13px;font-weight:700;color:#111;flex:1;">${team?team.name:'未設定'}</span>
-          <button class="btn btn-gray btn-xs change-team-btn" data-ci="${ci}" style="padding:3px 7px;font-size:11px;">変更</button>
         </div>
         ${team&&team.id?`<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;">No.${team.id}</div>`:''}
         ${members.length>0?members.map(m=>`<div style="font-size:12px;color:#374151;padding:1px 0;">・${m}</div>`).join(''):`<div style="font-size:12px;color:#9ca3af;">メンバー未登録</div>`}
@@ -5739,29 +5810,20 @@ function bind(){
     S._matchConfirmMode='resultOnly';S._matchConfirmFrom='resultOnlyMatchId';
     S.phase='matchConfirm';render();
   };
-  document.querySelectorAll('.ro-score').forEach(inp=>{
-    inp.addEventListener('input',()=>{
-      const si=parseInt(inp.dataset.set,10),ti=parseInt(inp.dataset.ti,10);
+  const broEarly=document.getElementById('ro-early-toggle');
+  if(broEarly)broEarly.onchange=()=>{S._roEarly=broEarly.checked;render();};
+  document.querySelectorAll('.ro-score').forEach(sel=>{
+    sel.addEventListener('change',()=>{
+      const si=parseInt(sel.dataset.set,10),ti=parseInt(sel.dataset.ti,10);
       if(!S._roScores[si])S._roScores[si]=['',''];
-      S._roScores[si][ti]=inp.value;
-      // フォーカス保持のため、勝敗サマリーだけ再描画したいが簡易に全再描画
-      const active=document.activeElement;
-      const sel=active&&active.dataset?`${active.dataset.set}-${active.dataset.ti}`:null;
-      const pos=active&&active.selectionStart;
+      S._roScores[si][ti]=sel.value;
       render();
-      if(sel){
-        const next=document.querySelector(`.ro-score[data-set="${sel.split('-')[0]}"][data-ti="${sel.split('-')[1]}"]`);
-        if(next){next.focus();try{next.setSelectionRange(pos,pos);}catch(e){}}
-      }
     });
   });
   const brsub=document.getElementById('btn-ro-submit');
   if(brsub)brsub.onclick=handleResultOnlySubmit;
 
   // 対戦カード確認 → 試合開始
-  document.querySelectorAll('.change-team-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>showChangeTeamModal(parseInt(btn.dataset.ci)));
-  });
   const bmcs=document.getElementById('btn-matchconfirm-start');
   if(bmcs)bmcs.onclick=()=>{
     const d=S.matchIdData;
@@ -5809,6 +5871,7 @@ function bind(){
     // 最大セット数ぶんの空入力を用意（2先=3, 3先=5）
     const maxSets=S.fmt==='best2'?3:S.fmt==='best3'?5:2;
     S._roScores=Array.from({length:maxSets},()=>['','']);
+    S._roEarly=false;
     S._roSubmitError='';S._roSubmitting=false;
     S.phase='resultOnlyInput';render();
   };if(bu)bu.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=p.wid;S.iP='';S.iM='single';S.iA='';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;render();};
