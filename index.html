@@ -117,6 +117,7 @@ let S={
   _matchConfirmMode:null, // 'resultOnly' のとき結果のみ送信フロー
   _roScores:null,         // 結果のみ：各セットの[teamA点,teamB点]配列
   _roEarly:false,         // 結果のみ：時間切れで途中終了
+  _roMolkoutWinner:null,  // 結果のみ：時間切れ同点時のモルックアウト勝者(0/1)
   _roSubmitting:false,_roSubmitError:''
 };
 function fmtSec(sec){if(sec===null||sec===undefined)return'--';const m=Math.floor(sec/60),s=sec%60;return m>0?m+'分'+s+'秒':s+'秒';}
@@ -1208,12 +1209,14 @@ async function submitResultOnly(){
   // 試合勝敗
   let matchWin=null;
   if(early){
-    // 時間切れ終了：earlyロジック（セット勝数→合計点→引き分け）。表裏も同様に判定
+    // 時間切れ終了：earlyロジック（セット勝数→合計点→同点ならモルックアウト勝者）
     if(wins[0]>wins[1])matchWin=0;
     else if(wins[1]>wins[0])matchWin=1;
     else{
       const tot=[validSets.reduce((s,r)=>s+r[0],0),validSets.reduce((s,r)=>s+r[1],0)];
-      matchWin=tot[0]>tot[1]?0:tot[1]>tot[0]?1:null;
+      if(tot[0]>tot[1])matchWin=0;
+      else if(tot[1]>tot[0])matchWin=1;
+      else matchWin=(S._roMolkoutWinner!=null?S._roMolkoutWinner:null); // 同点→モルックアウト勝者
     }
   }else if(S.fmt!=='round2'){
     if(wins[0]>=nW)matchWin=0;
@@ -1280,7 +1283,7 @@ async function handleResultOnlySubmit(){
   if(result){
     showSubmitConfirm(result.teamRows,[],()=>{
       // 結果のみ用のリセット：試合状態をクリアして最初の画面へ
-      S._roScores=null;S._roEarly=false;S._matchConfirmMode=null;S._savedMatchIdData=null;
+      S._roScores=null;S._roEarly=false;S._roMolkoutWinner=null;S._matchConfirmMode=null;S._savedMatchIdData=null;
       S._matchId='';S._teamNos=['',''];S.matchIdData=null;
       S.phase='setup';render();
     });
@@ -4271,8 +4274,9 @@ function rResultOnlyInput(){
     if(wins[0]>=nW){matchWin=0;matchDecided=true;}
     else if(wins[1]>=nW){matchWin=1;matchDecided=true;}
   }
-  // 時間切れ終了時の勝敗判定（earlyロジック：セット勝数→合計点→引き分け）
-  let earlyWin=null; // 0/1/null(引き分け)
+  // 時間切れ終了時の勝敗判定（earlyロジック：セット勝数→合計点→同点ならモルックアウト）
+  let earlyWin=null;       // 0/1/null
+  let earlyNeedMolkout=false; // セット勝数・合計点ともに同点 → モルックアウト
   if(early&&!matchDecided){
     const played=scores.map(([a,b])=>[a===''?null:parseInt(a,10),b===''?null:parseInt(b,10)])
       .filter(([a,b])=>a!==null&&b!==null&&!isNaN(a)&&!isNaN(b));
@@ -4280,24 +4284,34 @@ function rResultOnlyInput(){
     else if(wins[1]>wins[0])earlyWin=1;
     else{
       const tot=[played.reduce((s,r)=>s+r[0],0),played.reduce((s,r)=>s+r[1],0)];
-      earlyWin=tot[0]>tot[1]?0:tot[1]>tot[0]?1:null;
+      if(tot[0]>tot[1])earlyWin=0;
+      else if(tot[1]>tot[0])earlyWin=1;
+      else if(played.length>0){earlyNeedMolkout=true;earlyWin=(S._roMolkoutWinner!=null?S._roMolkoutWinner:null);}
     }
   }
 
-  // 点数プルダウン（50→0）。片方が50なら、もう片方は50を選べない
+  // 点数プルダウン（50→0）
+  // ・2先/3先：セットに引き分けが無いため、相手と同じ点数は選べない
+  // ・表裏：両者50（同時上がり）だけ不可
   const optsFor=(val,oppVal)=>{
-    const oppIs50=String(oppVal)==='50';
+    const opp=String(oppVal);
+    const noDraw=(S.fmt!=='round2');
     let o=`<option value=""${val===''?' selected':''}>-</option>`;
     for(let n=50;n>=0;n--){
-      const disabled=(n===50&&oppIs50&&String(val)!=='50')?' disabled':'';
+      const sameAsOpp=(opp!==''&&opp===String(n));
+      let disabled='';
+      if(String(val)!==String(n)){
+        if(noDraw&&sameAsOpp)disabled=' disabled';            // 2先/3先：同点不可
+        else if(!noDraw&&n===50&&opp==='50')disabled=' disabled'; // 表裏：両者50不可
+      }
       o+=`<option value="${n}"${String(val)===String(n)?' selected':''}${disabled}>${n}</option>`;
     }
     return o;
   };
 
-  // 「試合終了後で入力不要」になるセット：通常決着後、または時間切れ確定後で未入力のセット
+  // 「試合終了後で入力不要」になるセット：通常決着後
   const isLockedSet=(i)=>{
-    if(decidedAt>=0&&i>decidedAt)return true; // 通常決着の後
+    if(decidedAt>=0&&i>decidedAt)return true;
     return false;
   };
 
@@ -4344,20 +4358,33 @@ function rResultOnlyInput(){
     </table>
   </div>`;
 
-  // 時間切れ終了トグル
-  const earlyToggle=`<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1.5px solid ${early?'#fcd34d':'#e5e7eb'};border-radius:10px;background:${early?'#fffbeb':'#fff'};cursor:pointer;margin-bottom:12px;">
-    <input type="checkbox" id="ro-early-toggle" ${early?'checked':''} style="width:auto;accent-color:#f59e0b;transform:scale(1.2);"/>
-    <div>
-      <div style="font-size:14px;font-weight:700;color:#92400e;">⏱ 時間切れで途中終了した試合</div>
-      <div style="font-size:11px;color:#a16207;margin-top:1px;">規定セット数に達していなくても、入力済みのセットだけで結果を送信します</div>
-    </div>
+  // 時間切れ終了トグル（大きめ・文言シンプル）
+  const earlyToggle=`<label style="display:flex;align-items:center;gap:14px;padding:16px 16px;border:2px solid ${early?'#f59e0b':'#e5e7eb'};border-radius:12px;background:${early?'#fffbeb':'#fff'};cursor:pointer;margin-bottom:12px;">
+    <input type="checkbox" id="ro-early-toggle" ${early?'checked':''} style="width:24px;height:24px;flex-shrink:0;accent-color:#f59e0b;cursor:pointer;"/>
+    <span style="font-size:16px;font-weight:700;color:#92400e;">時間切れで終了した試合の場合はチェック</span>
   </label>`;
 
   // 結果サマリー
   const anyInput=setResults.some((r,i)=>r!==null&&!isLockedSet(i));
-  // 表示用の勝敗：通常決着＞時間切れ確定
+  // モルックアウトボタン（時間切れ同点時）
+  const molkoutHtml=(early&&earlyNeedMolkout)?`
+    <div class="card" style="padding:14px;margin-bottom:12px;background:#FFF7ED;border:1.5px solid #fed7aa;">
+      <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:4px;">🎯 モルックアウトで決着</div>
+      <div style="font-size:12px;color:#a16207;margin-bottom:10px;line-height:1.5;">勝利セット数・合計点が等しいため、規定によりモルックアウトで決着をつけてください。勝者を選択してください。</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        ${[0,1].map(ti=>`<button class="ro-molkout-btn" data-id="${ti}" style="padding:14px 8px;border:2.5px solid ${S._roMolkoutWinner===ti?C[ti]:'#d1d5db'};background:${S._roMolkoutWinner===ti?LB[ti]:'#fff'};border-radius:10px;cursor:pointer;font-family:inherit;">
+          <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
+            <div style="width:12px;height:12px;border-radius:50%;background:${C[ti]};flex-shrink:0;"></div>
+            <span style="font-size:14px;font-weight:700;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ti===0?nameA:nameB}</span>
+          </div>
+          ${S._roMolkoutWinner===ti?`<div style="font-size:11px;color:${C[ti]};font-weight:700;margin-top:4px;">勝者 ✓</div>`:''}
+        </button>`).join('')}
+      </div>
+    </div>`:'';
+
+  // 表示用の勝敗
   const effWin=matchDecided?matchWin:(early?earlyWin:null);
-  const effDecided=matchDecided||(early&&anyInput);
+  const effDecided=matchDecided||(early&&anyInput&&!earlyNeedMolkout)||(early&&earlyNeedMolkout&&S._roMolkoutWinner!=null);
   let summaryHtml='';
   if(anyInput){
     const resLabel=ti=>S.fmt==='round2'&&!early
@@ -4378,17 +4405,16 @@ function rResultOnlyInput(){
       </div>
       ${!early&&S.fmt!=='round2'&&matchDecided?`<div style="font-size:12px;color:#166534;margin-top:8px;text-align:center;">✓ ${decidedAt+1}セットで決着（残りセットは入力不要）</div>`:''}
       ${!early&&S.fmt!=='round2'&&!matchDecided?`<div style="font-size:12px;color:#92400e;margin-top:8px;text-align:center;">⚠️ まだ勝敗が確定していません（${fmtLabel}に達していません）</div>`:''}
-      ${early&&earlyWin===null&&effDecided?`<div style="font-size:12px;color:#92400e;margin-top:8px;text-align:center;">セット勝数・合計点ともに同数のため引き分けです</div>`:''}
+      ${early&&earlyNeedMolkout&&S._roMolkoutWinner==null?`<div style="font-size:12px;color:#92400e;margin-top:8px;text-align:center;">セット勝数・合計点が同数のため、下のモルックアウトで勝者を選択してください</div>`:''}
     </div>`;
   }
 
   const err=S._roSubmitError?`<div style="font-size:13px;color:#b91c1c;margin-bottom:10px;text-align:center;">⚠️ ${S._roSubmitError}</div>`:'';
   // 送信可能条件
-  // ・通常：2先/3先は勝敗確定、表裏は全セット入力
-  // ・時間切れ：入力済みセットが1つ以上あればOK（連続して入力されている前提）
   let canSubmit;
   if(early){
-    canSubmit=setResults.some(r=>r!==null);
+    const hasInput=setResults.some(r=>r!==null);
+    canSubmit=hasInput && (!earlyNeedMolkout || S._roMolkoutWinner!=null);
   }else{
     canSubmit=S.fmt==='round2'?setResults.every(r=>r!==null):matchDecided;
   }
@@ -4408,12 +4434,13 @@ function rResultOnlyInput(){
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;">試合ID: ${S._matchId||(d.matchId||'')}</div>
     </div>
     <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">各セットの点数をプルダウンで選択してください。${early?'（時間切れ：行ったセットだけ入力してください）':S.fmt==='round2'?'（表裏：両セット入力）':`（${fmtLabel}：先取で自動的に試合終了し、残りセットは入力不要になります）`}</div>
-    ${earlyToggle}
     ${tableHtml}
     ${summaryHtml}
+    ${molkoutHtml}
+    ${earlyToggle}
     ${err}
     <button class="btn btn-green" id="btn-ro-submit" style="width:100%;padding:14px;font-size:16px;" ${(!canSubmit||S._roSubmitting)?'disabled':''}>${S._roSubmitting?'送信中...':'📤 結果を送信する'}</button>
-    ${!canSubmit?`<div style="font-size:12px;color:#9ca3af;text-align:center;margin-top:8px;">${early?'行ったセットの点数を入力すると送信できます':S.fmt==='round2'?'両セットの点数を入力すると送信できます':'勝敗が確定すると送信できます'}</div>`:''}
+    ${!canSubmit?`<div style="font-size:12px;color:#9ca3af;text-align:center;margin-top:8px;">${early?(earlyNeedMolkout&&S._roMolkoutWinner==null?'モルックアウトの勝者を選択すると送信できます':'行ったセットの点数を入力すると送信できます'):S.fmt==='round2'?'両セットの点数を入力すると送信できます':'勝敗が確定すると送信できます'}</div>`:''}
   </div>`;
 }
 
@@ -4525,6 +4552,7 @@ function rMolkout(){
       <div style="font-size:16px;font-weight:700;color:#111;margin-bottom:4px;">モルックアウト</div>
       <div style="font-size:14px;color:#6b7280;">代表者1名ずつ2投ずつ</div>
     </div>
+    <div style="background:#FFF7ED;border:1.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px;color:#92400e;line-height:1.5;">勝利セット数・合計点が等しいため、規定によりモルックアウトにて決着をつけてください。</div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:12px;">勝利チームを選択してください</div>
       ${[0,1].map(i=>`<div style="margin-bottom:10px;">
@@ -5823,14 +5851,18 @@ function bind(){
     S.phase='matchConfirm';render();
   };
   const broEarly=document.getElementById('ro-early-toggle');
-  if(broEarly)broEarly.onchange=()=>{S._roEarly=broEarly.checked;render();};
+  if(broEarly)broEarly.onchange=()=>{S._roEarly=broEarly.checked;if(!broEarly.checked)S._roMolkoutWinner=null;render();};
   document.querySelectorAll('.ro-score').forEach(sel=>{
     sel.addEventListener('change',()=>{
       const si=parseInt(sel.dataset.set,10),ti=parseInt(sel.dataset.ti,10);
       if(!S._roScores[si])S._roScores[si]=['',''];
       S._roScores[si][ti]=sel.value;
+      S._roMolkoutWinner=null; // 点数が変わったらモルックアウト選択をリセット
       render();
     });
+  });
+  document.querySelectorAll('.ro-molkout-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{S._roMolkoutWinner=parseInt(btn.dataset.id,10);render();});
   });
   const brsub=document.getElementById('btn-ro-submit');
   if(brsub)brsub.onclick=handleResultOnlySubmit;
@@ -5884,6 +5916,7 @@ function bind(){
     const maxSets=S.fmt==='best2'?3:S.fmt==='best3'?5:2;
     S._roScores=Array.from({length:maxSets},()=>['','']);
     S._roEarly=false;
+    S._roMolkoutWinner=null;
     S._roSubmitError='';S._roSubmitting=false;
     S.phase='resultOnlyInput';render();
   };
@@ -6079,7 +6112,7 @@ function bind(){
   app.querySelectorAll('.molkout-btn').forEach(el=>{el.addEventListener('click',()=>{S.molkoutWinner=parseInt(el.dataset.id);render();});});
   const bgm=document.getElementById('btn-go-molkout');if(bgm)bgm.onclick=()=>{S.molkoutWinner=null;S.phase='molkout';render();};
   const bbkmo=document.getElementById('btn-bk-molkout');if(bbkmo)bbkmo.onclick=()=>{S.molkoutWinner=null;S.earlyEnd=true;S.phase='setOver';render();};
-  const bmc=document.getElementById('btn-molkout-confirm');if(bmc)bmc.onclick=()=>{if(S.molkoutWinner==null)return;S.phase='earlyMatchOver';render();};
+  const bmc=document.getElementById('btn-molkout-confirm');if(bmc)bmc.onclick=()=>{if(S.molkoutWinner==null)return;S._ssSaveDest='earlyMatchOver';S.phase='ssSaveConfirm';render();};
   // 大会情報画面 - メニューの戻る
   const btib=document.getElementById('btn-ti-back');if(btib)btib.onclick=()=>{S._tiView=null;S.phase='setup';render();};
   // サブ画面の戻る → メニュー画面へ（phaseはtournamentInfoのまま、_tiViewだけクリア）
