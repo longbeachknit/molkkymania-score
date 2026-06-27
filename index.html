@@ -217,6 +217,14 @@ function gIO(ni,fid){
   return{orders:o,excludes:excls};
 }
 const gT=()=>{const t=[0,0];S.sets.forEach(s=>{t[0]+=s.teams[0].sc;t[1]+=s.teams[1].sc;});return t;}
+// 途中終了時にモルックアウトが必要か（勝利セット数・合計点ともに同点）
+function needsMolkout(){
+  if(S.fmt==='round2')return false;
+  const wins=[0,0];S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});
+  if(wins[0]!==wins[1])return false;
+  const t=gT();
+  return t[0]===t[1];
+}
 const mxS=()=>S.fmt==='best2'?3:S.fmt==='best3'?5:2;
 const nW=()=>S.fmt==='best2'?2:S.fmt==='best3'?3:99;
 function mW(){if(S.fmt==='round2')return null;const w=[0,0];S.sets.forEach(s=>{if(s.wid!=null)w[s.wid]++;});const n=nW();return w[0]>=n?0:w[1]>=n?1:null;}
@@ -1974,7 +1982,7 @@ function rEarlyMatchOver(){
     ${histTbl(S.sets.length)}
     ${needMolkout&&S.molkoutWinner==null?`<button class="btn btn-orange" id="btn-go-molkout" style="width:100%;padding:14px;font-size:15px;margin-bottom:10px;">🎯 モルックアウトへ進む</button>`:''}
     <button class="btn btn-yellow" id="btn-ss-early-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
-    <button class="btn btn-gray" id="btn-bk-to-setover-early" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">← 戻る（セット終了画面）</button>
+    <button class="btn btn-gray" id="btn-bk-to-setover-early" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">${needMolkout&&S.molkoutWinner!=null?'← 戻る（モルックアウト）':'← 戻る（セット終了画面）'}</button>
     <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信する</button>
   </div>`;
 }
@@ -4509,7 +4517,11 @@ function rUnknownCheck(){
 function rMolkout(){
   const mw=S.molkoutWinner;
   return`<div style="padding:12px 0;">
-    <div style="text-align:center;padding:14px 0 12px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <button class="btn btn-gray btn-sm" id="btn-bk-molkout">← 戻る</button>
+      <div style="flex:1;"></div>
+    </div>
+    <div style="text-align:center;padding:6px 0 12px;">
       <div style="font-size:16px;font-weight:700;color:#111;margin-bottom:4px;">モルックアウト</div>
       <div style="font-size:14px;color:#6b7280;">代表者1名ずつ2投ずつ</div>
     </div>
@@ -5890,7 +5902,10 @@ function bind(){
   const bue=document.getElementById('btn-undo-end');if(bue)bue.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=null;S.iP='';S.iM='single';S.iA='';S.tlTieExtend=false;S.earlyEnd=false;S.phase='game';render();};
   const bue2=document.getElementById('btn-undo-early');if(bue2)bue2.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=null;if(cset.draw!==undefined)cset.draw=false;S.iP='';S.iM='single';S.iA='';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.phase='game';render();};
   const bbksm=document.getElementById('btn-bk-to-setover-match');if(bbksm)bbksm.onclick=()=>{S.phase='setOver';render();};
-  const bbkse=document.getElementById('btn-bk-to-setover-early');if(bbkse)bbkse.onclick=()=>{S.phase='setOver';render();};
+  const bbkse=document.getElementById('btn-bk-to-setover-early');if(bbkse)bbkse.onclick=()=>{
+    if(needsMolkout()&&S.molkoutWinner!=null){S.phase='molkout';render();return;}
+    S.earlyEnd=true;S.phase='setOver';render();
+  };
   const bum=document.getElementById('btn-undo-match');if(bum)bum.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=null;S.iP='';S.iM='single';S.iA='';S.phase='game';render();};
   const bh=document.getElementById('btn-hist');if(bh)bh.onclick=()=>{S.showHist=!S.showHist;render();};
   const bss=document.getElementById('btn-scoresheet');if(bss)bss.onclick=()=>{S.ssIdx=S.cur;S.prev='game';S.afterEdit=null;S.phase='scoresheet';render();};
@@ -6049,9 +6064,12 @@ function bind(){
   const bns=document.getElementById('btn-next-set');
   if(bns)bns.onclick=()=>{S.tlTieExtend=false;S.earlyEnd=false;goNext(parseInt(bns.dataset.next));};
   const bemo=document.getElementById('btn-early-match-over');if(bemo)bemo.onclick=()=>{
-    S.earlyEnd=false;S._ssSaveDest='earlyMatchOver';
-    if(unknownSets().length>0){S.ssIdx=0;S.afterEdit=null;S._ucFrom='ssSaveConfirm';S.phase='unknownCheck';render();return;}
-    S.phase='ssSaveConfirm';render();
+    S.earlyEnd=false;
+    // 「？」未確定があれば先に確認画面へ
+    if(unknownSets().length>0){S.ssIdx=0;S.afterEdit=null;S._ucFrom=needsMolkout()&&S.molkoutWinner==null?'molkout':'ssSaveConfirm';S._ssSaveDest='earlyMatchOver';S.phase='unknownCheck';render();return;}
+    // モルックアウトが必要かつ未決着なら、セット終了画面から直接モルックアウトへ
+    if(needsMolkout()&&S.molkoutWinner==null){S.phase='molkout';render();return;}
+    S._ssSaveDest='earlyMatchOver';S.phase='ssSaveConfirm';render();
   };
   const bmo=document.getElementById('btn-match-over');if(bmo)bmo.onclick=()=>{
     S._ssSaveDest='matchOver';
@@ -6060,6 +6078,7 @@ function bind(){
   };
   app.querySelectorAll('.molkout-btn').forEach(el=>{el.addEventListener('click',()=>{S.molkoutWinner=parseInt(el.dataset.id);render();});});
   const bgm=document.getElementById('btn-go-molkout');if(bgm)bgm.onclick=()=>{S.molkoutWinner=null;S.phase='molkout';render();};
+  const bbkmo=document.getElementById('btn-bk-molkout');if(bbkmo)bbkmo.onclick=()=>{S.molkoutWinner=null;S.earlyEnd=true;S.phase='setOver';render();};
   const bmc=document.getElementById('btn-molkout-confirm');if(bmc)bmc.onclick=()=>{if(S.molkoutWinner==null)return;S.phase='earlyMatchOver';render();};
   // 大会情報画面 - メニューの戻る
   const btib=document.getElementById('btn-ti-back');if(btib)btib.onclick=()=>{S._tiView=null;S.phase='setup';render();};
