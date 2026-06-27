@@ -113,7 +113,10 @@ let S={
   endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,
   molkoutWinner:null,
   editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,_ssSaveDest:null,
-  throwStartTime:null,lastThrowSec:null
+  throwStartTime:null,lastThrowSec:null,
+  _matchConfirmMode:null, // 'resultOnly' のとき結果のみ送信フロー
+  _roScores:null,         // 結果のみ：各セットの[teamA点,teamB点]配列
+  _roSubmitting:false,_roSubmitError:''
 };
 function fmtSec(sec){if(sec===null||sec===undefined)return'--';const m=Math.floor(sec/60),s=sec%60;return m>0?m+'分'+s+'秒':s+'秒';}
 let _timerInterval=null;
@@ -1160,6 +1163,96 @@ async function submitResult(){
   return {teamRows,personalRows,summaryRows};
 }
 
+// ===== 結果のみ送信：各セット点数からチーム結果行を組み立ててGASへ =====
+async function submitResultOnly(){
+  const matchId=S._matchId||'';
+  const teamNos=S._teamNos||['',''];
+  const scores=(S._roScores||[]).map(([a,b])=>[
+    a===''?null:parseInt(a,10),
+    b===''?null:parseInt(b,10)
+  ]);
+  // 入力済みセット（両チーム数値）のみ採用
+  const validSets=scores.filter(([a,b])=>a!==null&&b!==null&&!isNaN(a)&&!isNaN(b));
+
+  // 各セット勝者（wid: 0/1/null=引き分け）
+  const setWid=validSets.map(([a,b])=>a>b?0:b>a?1:null);
+  const wins=[0,0];
+  setWid.forEach(w=>{if(w===0)wins[0]++;else if(w===1)wins[1]++;});
+
+  // 試合勝敗
+  const nW=S.fmt==='best2'?2:S.fmt==='best3'?3:99;
+  let matchWin=null;
+  if(S.fmt!=='round2'){
+    if(wins[0]>=nW)matchWin=0;
+    else if(wins[1]>=nW)matchWin=1;
+  }else{
+    const tot=[validSets.reduce((s,r)=>s+r[0],0),validSets.reduce((s,r)=>s+r[1],0)];
+    matchWin=tot[0]>tot[1]?0:tot[1]>tot[0]?1:null;
+  }
+
+  const teamRows=[0,1].map(ti=>{
+    const result=S.fmt==='round2'?'':matchWin===null?'引き分け':matchWin===ti?'勝ち':'負け';
+    const totalSets=validSets.length;
+    const lossSets=setWid.filter(w=>w!==null&&w!==ti).length;
+    const drawSets=setWid.filter(w=>w===null).length;
+    const setScores=[0,1,2,3,4].map(si=>{
+      const s=validSets[si];
+      return s?s[ti]:'';
+    });
+    return [
+      matchId,          // A: 試合ID
+      teamNos[ti],      // B: チームNo
+      S.teams[ti].name, // C: チーム名
+      result,           // D: 試合結果
+      totalSets,        // E: 総セット
+      wins[ti],         // F: 勝利セット数
+      lossSets,         // G: 敗北セット数
+      drawSets,         // H: 引き分けセット数
+      setScores[0],     // I: 1セット目点数
+      setScores[1],     // J: 2セット目点数
+      setScores[2],     // K: 3セット目点数
+      setScores[3],     // L: 4セット目点数
+      setScores[4],     // M: 5セット目点数
+      '', '', '', '', '', // N〜R: 上がりターン数（点数のみのため空欄）
+      '', '', '', '', '', '' // S〜X: 先攻後攻統計（点数のみのため空欄）
+    ];
+  });
+
+  // 既存と同じ type:'all' で teamRows のみ送信（personalRows等は空）
+  const body=new URLSearchParams({data:JSON.stringify({
+    type:'all',
+    teamRows,
+    personalRows:[],
+    summaryRows:[]
+  })});
+  const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
+  const json=await res.json();
+  if(json.status!=='ok')throw new Error(json.message||'送信エラー');
+  return {teamRows};
+}
+
+async function handleResultOnlySubmit(){
+  S._roSubmitting=true;S._roSubmitError='';render();
+  let result=null;
+  try{
+    result=await submitResultOnly();
+  }catch(e){
+    console.error(e);
+    S._roSubmitError=e.message||'送信に失敗しました';
+  }
+  S._roSubmitting=false;
+  if(result){
+    showSubmitConfirm(result.teamRows,[],()=>{
+      // 結果のみ用のリセット：試合状態をクリアして最初の画面へ
+      S._roScores=null;S._matchConfirmMode=null;S._savedMatchIdData=null;
+      S._matchId='';S._teamNos=['',''];S.matchIdData=null;
+      S.phase='setup';render();
+    });
+  }else{
+    render();
+  }
+}
+
 async function handleSubmitAndReset(){
   const btn=document.getElementById('btn-submit-reset');
   if(btn){btn.disabled=true;btn.textContent='送信中...';}
@@ -1196,7 +1289,7 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
     <div style="text-align:center;margin-bottom:14px;">
       <div style="font-size:28px;">✅</div>
       <div style="font-size:17px;font-weight:700;color:#111;margin-top:4px;">結果を送信しました</div>
-      <div style="font-size:12px;color:#6b7280;margin-top:2px;">個人データ ${personalRows.length}行を含む</div>
+      ${personalRows&&personalRows.length?`<div style="font-size:12px;color:#6b7280;margin-top:2px;">個人データ ${personalRows.length}行を含む</div>`:`<div style="font-size:12px;color:#6b7280;margin-top:2px;">試合結果（チーム）のみ送信しました</div>`}
     </div>
     ${teamHtml}
     <button id="confirm-close" class="btn btn-green" style="width:100%;padding:14px;font-size:16px;margin-top:8px;">最初から</button>
@@ -1231,7 +1324,8 @@ function unknownSets(){
   }).filter(i=>i>=0);
 }
 
-async function startQRScan(){
+async function startQRScan(mode){
+  const resultOnly=(mode==='resultOnly');
   const container=document.getElementById('qr-reader-container');
   if(!container)return;
   container.style.display='flex';
@@ -1257,16 +1351,23 @@ async function startQRScan(){
     const result=resolveMatchId(val);
     if(!result){
       S._matchIdError='QRコードの形式が正しくありません';
-      S._matchIdInput=val;S.phase='matchId';render();return;
+      S._matchIdInput=val;S.phase=resultOnly?'resultOnlyMatchId':'matchId';render();return;
     }
-    S._matchIdInput=val;S._matchIdError='';S.matchIdData=result;S.phase='matchConfirm';render();
+    S._matchIdInput=val;S._matchIdError='';S.matchIdData=result;
+    if(resultOnly){
+      S._matchConfirmMode='resultOnly';
+      S._matchConfirmFrom='resultOnlyMatchId';
+    }else{
+      S._matchConfirmMode=null;
+    }
+    S.phase='matchConfirm';render();
   };
 
   const closeBtn=document.getElementById('btn-qr-close');
   if(closeBtn)closeBtn.onclick=async()=>{ await stopScan(); };
   // 右下「試合IDを入力する」→ 既存の試合ID入力画面へ
   const toManual=document.getElementById('btn-qr-to-manual');
-  if(toManual)toManual.onclick=async()=>{ await stopScan(); S._matchIdInput='';S._matchIdError='';S.phase='matchId';render(); };
+  if(toManual)toManual.onclick=async()=>{ await stopScan(); S._matchIdInput='';S._matchIdError='';S.phase=resultOnly?'resultOnlyMatchId':'matchId';render(); };
 
   try{
     html5QrCode=new Html5Qrcode('qr-reader');
@@ -1295,6 +1396,8 @@ function render(){
   else if(p==='unknownCheck')app.innerHTML=rUnknownCheck();
   else if(p==='admin')app.innerHTML=rAdmin();
   else if(p==='matchId')app.innerHTML=rMatchId();
+  else if(p==='resultOnlyMatchId')app.innerHTML=rResultOnlyMatchId();
+  else if(p==='resultOnlyInput')app.innerHTML=rResultOnlyInput();
   else if(p==='matchConfirm')app.innerHTML=rMatchConfirm();
   else if(p==='courtSearch')app.innerHTML=rCourtSearch();
   else if(p==='reception')app.innerHTML=rReception();
@@ -4069,6 +4172,126 @@ function rMatchId(){
   </div>`;
 }
 
+// ===== 結果のみ：試合ID入力画面 =====
+function rResultOnlyMatchId(){
+  const mid=S._matchIdInput||'';
+  const err=S._matchIdError||'';
+  return`<div style="padding:8px 0 4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+      <button class="btn btn-gray btn-sm" id="btn-bk-ro-matchid">← 戻る</button>
+      <div style="font-size:18px;font-weight:700;color:#111;">試合結果のみを送信</div>
+    </div>
+    <div style="background:#EEF2FF;border:1.5px solid #c7d2fe;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#3730a3;">📤 試合の結果（各セットの点数）だけを送信します。投擲データは送信されません。</div>
+    <div class="card" style="padding:16px;margin-bottom:12px;">
+      <div style="font-size:13px;color:#6b7280;margin-bottom:8px;">試合IDを入力またはQRコードで読み取ってください</div>
+      <input type="text" id="ro-matchid-input" value="${mid}" placeholder="例: 01_0602_02_002" style="font-size:16px;letter-spacing:1px;"/>
+      ${err?`<div style="font-size:13px;color:#b91c1c;margin-top:8px;">⚠️ ${err}</div>`:''}
+    </div>
+    <button class="btn btn-blue" id="btn-ro-qr-scan" style="width:100%;padding:13px;font-size:15px;margin-bottom:10px;">📷 QRコードで読み取る</button>
+    <button class="btn btn-green" id="btn-ro-matchid-go" style="width:100%;padding:14px;font-size:16px;">この試合IDで進む →</button>
+  </div>`;
+}
+
+// ===== 結果のみ：各セット点数入力画面 =====
+function rResultOnlyInput(){
+  const d=S._savedMatchIdData||{};
+  const fmtLabel=S.fmt==='best2'?'2先':S.fmt==='best3'?'3先':'表裏';
+  const nameA=S.teams[0]?S.teams[0].name:'チームA';
+  const nameB=S.teams[1]?S.teams[1].name:'チームB';
+  const scores=S._roScores||[];
+  const nW=S.fmt==='best2'?2:S.fmt==='best3'?3:99;
+
+  // 各セットの勝敗を点数から判定（点数が両方入力されているセットのみ）
+  const setResults=scores.map(([a,b])=>{
+    const va=a===''?null:parseInt(a,10);
+    const vb=b===''?null:parseInt(b,10);
+    if(va===null||vb===null||isNaN(va)||isNaN(vb))return null; // 未入力
+    if(va>vb)return 0;
+    if(vb>va)return 1;
+    return 'draw';
+  });
+  const wins=[0,0];
+  setResults.forEach(r=>{if(r===0)wins[0]++;else if(r===1)wins[1]++;});
+  // 試合勝敗
+  let matchWin=null,matchDecided=false;
+  if(S.fmt!=='round2'){
+    if(wins[0]>=nW){matchWin=0;matchDecided=true;}
+    else if(wins[1]>=nW){matchWin=1;matchDecided=true;}
+  }
+
+  const setRows=scores.map(([a,b],i)=>{
+    const r=setResults[i];
+    const badge=r===null?'<span style="font-size:12px;color:#9ca3af;">未入力</span>'
+      :r==='draw'?'<span style="font-size:12px;font-weight:700;color:#92400e;background:#FFF7ED;padding:2px 8px;border-radius:99px;">引き分け</span>'
+      :`<span style="font-size:12px;font-weight:700;color:#fff;background:${C[r]};padding:2px 8px;border-radius:99px;">${(r===0?nameA:nameB)} の勝ち</span>`;
+    return`<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:700;color:#111;">第${i+1}セット</div>
+        ${badge}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;">
+        <div>
+          <div style="font-size:11px;color:${C[0]};font-weight:700;margin-bottom:3px;">${nameA}</div>
+          <input type="number" inputmode="numeric" class="ro-score" data-set="${i}" data-ti="0" value="${a}" placeholder="-" style="text-align:center;font-size:18px;font-weight:700;"/>
+        </div>
+        <div style="font-size:14px;color:#9ca3af;font-weight:700;padding-top:16px;">−</div>
+        <div>
+          <div style="font-size:11px;color:${C[1]};font-weight:700;margin-bottom:3px;">${nameB}</div>
+          <input type="number" inputmode="numeric" class="ro-score" data-set="${i}" data-ti="1" value="${b}" placeholder="-" style="text-align:center;font-size:18px;font-weight:700;"/>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // 結果サマリー
+  const anyInput=setResults.some(r=>r!==null);
+  let summaryHtml='';
+  if(anyInput){
+    const resLabel=ti=>S.fmt==='round2'?'':matchWin===null?(matchDecided?'引き分け':'—'):matchWin===ti?'勝ち':'負け';
+    summaryHtml=`<div class="card" style="padding:14px;margin-bottom:12px;background:#f0fdf4;border:1.5px solid #bbf7d0;">
+      <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:10px;">自動判定された結果（${fmtLabel}）</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        ${[0,1].map(ti=>{
+          const rl=resLabel(ti);
+          const col=rl==='勝ち'?'#1D9E75':rl==='負け'?'#E24B4A':'#9ca3af';
+          return`<div style="background:#fff;border:1.5px solid ${C[ti]};border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:13px;font-weight:700;color:#111;margin-bottom:4px;">${ti===0?nameA:nameB}</div>
+            <div style="font-size:18px;font-weight:800;color:${col};">${rl||'—'}</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:2px;">勝利 ${wins[ti]} セット</div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${S.fmt!=='round2'&&!matchDecided?`<div style="font-size:12px;color:#92400e;margin-top:8px;text-align:center;">⚠️ まだ勝敗が確定していません（${fmtLabel}に達していません）</div>`:''}
+    </div>`;
+  }
+
+  const err=S._roSubmitError?`<div style="font-size:13px;color:#b91c1c;margin-bottom:10px;text-align:center;">⚠️ ${S._roSubmitError}</div>`:'';
+  // 送信可能条件：表裏は全セット入力、2先/3先は勝敗確定
+  const canSubmit=S.fmt==='round2'?setResults.every(r=>r!==null):matchDecided;
+
+  return`<div style="padding:8px 0 4px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <button class="btn btn-gray btn-sm" id="btn-bk-ro-input">← 戻る</button>
+      <div style="font-size:18px;font-weight:700;color:#111;">結果を入力</div>
+    </div>
+    <div class="card" style="padding:10px 12px;margin-bottom:10px;background:#f8fafc;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:14px;font-weight:700;color:${C[0]};">${nameA}</span>
+        <span style="font-size:12px;color:#9ca3af;">vs</span>
+        <span style="font-size:14px;font-weight:700;color:${C[1]};">${nameB}</span>
+        <span style="font-size:12px;background:#EEF2FF;color:#3730a3;padding:2px 8px;border-radius:99px;margin-left:auto;">${fmtLabel}</span>
+      </div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">試合ID: ${S._matchId||(d.matchId||'')}</div>
+    </div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">各セットの点数を入力してください。${S.fmt==='round2'?'（表裏：両セット入力）':`（${fmtLabel}：先取で自動確定）`}</div>
+    ${setRows}
+    ${summaryHtml}
+    ${err}
+    <button class="btn btn-green" id="btn-ro-submit" style="width:100%;padding:14px;font-size:16px;" ${(!canSubmit||S._roSubmitting)?'disabled':''}>${S._roSubmitting?'送信中...':'📤 結果を送信する'}</button>
+    ${!canSubmit?`<div style="font-size:12px;color:#9ca3af;text-align:center;margin-top:8px;">${S.fmt==='round2'?'両セットの点数を入力すると送信できます':'勝敗が確定すると送信できます'}</div>`:''}
+  </div>`;
+}
+
 // チーム変更モーダル（対戦カード確認画面から）
 function showChangeTeamModal(ci){
   const overlay=document.createElement('div');
@@ -4169,7 +4392,9 @@ function rMatchConfirm(){
       ${gi===0?`<div style="text-align:center;padding-top:20px;font-size:20px;font-weight:700;color:#9ca3af;">VS</div>`:''}
       `).join('')}
     </div>
-    <button class="btn btn-green" id="btn-matchconfirm-start" style="width:100%;padding:14px;font-size:16px;" ${!d.hasRule?'disabled':''}>この内容で試合開始 →</button>
+    ${S._matchConfirmMode==='resultOnly'
+      ?`<button class="btn btn-green" id="btn-matchconfirm-resultonly" style="width:100%;padding:14px;font-size:16px;" ${!d.hasRule?'disabled':''}>結果を入力する →</button>`
+      :`<button class="btn btn-green" id="btn-matchconfirm-start" style="width:100%;padding:14px;font-size:16px;" ${!d.hasRule?'disabled':''}>この内容で試合開始 →</button>`}
   </div>`;
 }
 
@@ -5323,7 +5548,7 @@ function bind(){
     S._matchIdInput='';S._matchIdError='';startQRScan();
   };
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
-  const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{S.phase=S._matchConfirmFrom||'matchId';S._matchConfirmFrom=null;render();};
+  const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{const m=S._matchConfirmMode;S._matchConfirmMode=null;S.phase=S._matchConfirmFrom||(m==='resultOnly'?'resultOnlyMatchId':'matchId');S._matchConfirmFrom=null;render();};
   const bgcs=document.getElementById('btn-go-court-search');if(bgcs)bgcs.onclick=async()=>{
     const eventCode=await resolveActiveEventCode();
     if(!eventCode){
@@ -5386,8 +5611,8 @@ function bind(){
   const bgreg=document.getElementById('btn-go-regulation');if(bgreg)bgreg.onclick=()=>openTournamentInfoView('regulation');
   const bgsch=document.getElementById('btn-go-schedule');if(bgsch)bgsch.onclick=()=>openTournamentInfoView('schedule');
   const bgpre=document.getElementById('btn-go-prelim');if(bgpre)bgpre.onclick=()=>openTournamentInfoView('prelim');
-  // 新規ボタン（中身は今後実装）
-  const bgro=document.getElementById('btn-go-result-only');if(bgro)bgro.onclick=()=>{alert('「試合結果のみを送信」は準備中です。');};
+  // 「試合結果のみを送信」→ QRスキャン（結果のみモード）
+  const bgro=document.getElementById('btn-go-result-only');if(bgro)bgro.onclick=()=>{S._matchIdInput='';S._matchIdError='';startQRScan('resultOnly');};
   const bgrem=document.getElementById('btn-go-remaining');if(bgrem)bgrem.onclick=()=>{alert('「残り試合数を確認」は準備中です。');};
   const bgbr=document.getElementById('btn-go-bracket');if(bgbr)bgbr.onclick=()=>{alert('「決勝トーナメント表」は準備中です。');};
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
@@ -5482,6 +5707,57 @@ function bind(){
   const bqr=document.getElementById('btn-qr-scan');
   if(bqr)bqr.onclick=()=>startQRScan();
 
+  // ===== 結果のみ：試合ID入力画面 =====
+  const bbrm=document.getElementById('btn-bk-ro-matchid');
+  if(bbrm)bbrm.onclick=()=>{S.phase='setup';render();};
+  const broqr=document.getElementById('btn-ro-qr-scan');
+  if(broqr)broqr.onclick=()=>startQRScan('resultOnly');
+  const brmgo=document.getElementById('btn-ro-matchid-go');
+  if(brmgo)brmgo.onclick=async()=>{
+    const inp=document.getElementById('ro-matchid-input');
+    const id=inp?inp.value.trim():'';
+    if(!id){S._matchIdError='試合IDを入力してください';render();return;}
+    const parts=id.split('_');
+    if(parts.length<4){S._matchIdError='試合IDの形式が正しくありません（例: 01_0602_02_002）';S._matchIdInput=id;render();return;}
+    S._matchIdError='';S._matchIdInput=id;
+    const btn=document.getElementById('btn-ro-matchid-go');
+    if(btn){btn.disabled=true;btn.textContent='取得中...';}
+    await syncAllFromGitHub(parts[1]);
+    if(btn){btn.disabled=false;btn.textContent='この試合IDで進む →';}
+    const result=resolveMatchId(id);
+    if(!result){S._matchIdError='試合データの取得に失敗しました。もう一度お試しください。';render();return;}
+    S._matchIdInput=id;S._matchIdError='';S.matchIdData=result;
+    S._matchConfirmMode='resultOnly';S._matchConfirmFrom='resultOnlyMatchId';
+    S.phase='matchConfirm';render();
+  };
+
+  // ===== 結果のみ：点数入力画面 =====
+  const bbri=document.getElementById('btn-bk-ro-input');
+  if(bbri)bbri.onclick=()=>{
+    // 対戦カード確認に戻る
+    if(S._savedMatchIdData)S.matchIdData=JSON.parse(JSON.stringify(S._savedMatchIdData));
+    S._matchConfirmMode='resultOnly';S._matchConfirmFrom='resultOnlyMatchId';
+    S.phase='matchConfirm';render();
+  };
+  document.querySelectorAll('.ro-score').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      const si=parseInt(inp.dataset.set,10),ti=parseInt(inp.dataset.ti,10);
+      if(!S._roScores[si])S._roScores[si]=['',''];
+      S._roScores[si][ti]=inp.value;
+      // フォーカス保持のため、勝敗サマリーだけ再描画したいが簡易に全再描画
+      const active=document.activeElement;
+      const sel=active&&active.dataset?`${active.dataset.set}-${active.dataset.ti}`:null;
+      const pos=active&&active.selectionStart;
+      render();
+      if(sel){
+        const next=document.querySelector(`.ro-score[data-set="${sel.split('-')[0]}"][data-ti="${sel.split('-')[1]}"]`);
+        if(next){next.focus();try{next.setSelectionRange(pos,pos);}catch(e){}}
+      }
+    });
+  });
+  const brsub=document.getElementById('btn-ro-submit');
+  if(brsub)brsub.onclick=handleResultOnlySubmit;
+
   // 対戦カード確認 → 試合開始
   document.querySelectorAll('.change-team-btn').forEach(btn=>{
     btn.addEventListener('click',()=>showChangeTeamModal(parseInt(btn.dataset.ci)));
@@ -5511,7 +5787,31 @@ function bind(){
     const _gn=gIO(0,S.fid);S.pOrders=_gn.orders;S.pExclude=_gn.excludes;
     S.phase='firstChoice';render();
   };
-  const bu=document.getElementById('btn-undo');if(bu)bu.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=p.wid;S.iP='';S.iM='single';S.iA='';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;render();};
+  // 対戦カード確認 → 結果のみ入力へ
+  const bmcro=document.getElementById('btn-matchconfirm-resultonly');
+  if(bmcro)bmcro.onclick=()=>{
+    const d=S.matchIdData;
+    if(!d||!d.hasRule)return;
+    const r=d.rule;
+    S.fmt=r.fmt;S.turnLimit=r.turnLimit;S.playerMin=r.playerMin;S.playerMax=r.playerMax>=99?99:r.playerMax;
+    if(d.hasTeams){
+      const mA=d.teamA.members?d.teamA.members.split(/[,、]/).map(s=>s.trim()).filter(Boolean):[];
+      const mB=d.teamB.members?d.teamB.members.split(/[,、]/).map(s=>s.trim()).filter(Boolean):[];
+      S.teams=[{id:0,name:d.teamA.name,members:mA},{id:1,name:d.teamB.name,members:mB}];
+    }
+    S._matchId=d.matchId||'';
+    S._teamNos=[
+      d.teamA?String(d.teamA.id).padStart(3,'0'):'',
+      d.teamB?String(d.teamB.id).padStart(3,'0'):''
+    ];
+    S._savedMatchIdData=JSON.parse(JSON.stringify(d));
+    S.matchIdData=null;
+    // 最大セット数ぶんの空入力を用意（2先=3, 3先=5）
+    const maxSets=S.fmt==='best2'?3:S.fmt==='best3'?5:2;
+    S._roScores=Array.from({length:maxSets},()=>['','']);
+    S._roSubmitError='';S._roSubmitting=false;
+    S.phase='resultOnlyInput';render();
+  };if(bu)bu.onclick=()=>{const cset=cs();if(!cset.hist.length)return;const p=cset.hist.pop();cset.teams=p.teams;cset.ctid=p.ctid;cset.wid=p.wid;S.iP='';S.iM='single';S.iA='';S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;render();};
   const bbo=document.getElementById('btn-bk-order');if(bbo)bbo.onclick=()=>{
     const curIdx=S.cur;
     S.sets.pop();
