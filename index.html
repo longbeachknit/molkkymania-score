@@ -1737,11 +1737,18 @@ function rGame(){
 
 function buildSS(cset,editable,_setIdx){
   const fti=cset.ftid,sti=1-fti;
-  // スコアシート：excluded を除いたメンバーのみ表示
+  // スコアシート：実際に投げたメンバーは必ず列に含める（excludedでも投擲があれば表示）
   const mbrs=[0,1].map(ti=>{
-    const excl=cset.teams[ti].excluded||[];
-    const full=cset.teams[ti].order.length>0?cset.teams[ti].order:S.teams[ti].members.length?S.teams[ti].members:['投てき者'];
-    const active=full.filter(m=>!excl.includes(m));
+    const td=cset.teams[ti];
+    const excl=td.excluded||[];
+    const full=td.order&&td.order.length>0?td.order:(S.teams[ti].members.length?S.teams[ti].members:['投てき者']);
+    // このセットで実際に投げたメンバー（throwsに登場する名前）
+    const threwSet=new Set();
+    (td.throws||[]).forEach(th=>{if(th&&th.member!=null&&th.member!=='')threwSet.add(th.member);});
+    // 基本はexcludedを除いた順。ただし実際に投げたメンバーはexcludedでも残す
+    let active=full.filter(m=>!excl.includes(m)||threwSet.has(m));
+    // orderに載っていないが投げたメンバー（名簿変更等）も末尾に追加して取りこぼし防止
+    threwSet.forEach(m=>{if(!active.includes(m))active.push(m);});
     return active.length>0?active:full;
   });
   const nM=[mbrs[0].length,mbrs[1].length];
@@ -1769,8 +1776,11 @@ function buildSS(cset,editable,_setIdx){
   let rows='';
   for(let t=0;t<maxT;t++){
     const thF=cset.teams[fti].throws[t],thS=cset.teams[sti].throws[t];
-    const mF=thF?(mbrs[fti].indexOf(thF.member)>=0?mbrs[fti].indexOf(thF.member):t%nM[fti]):-1;
-    const mS=thS?(mbrs[sti].indexOf(thS.member)>=0?mbrs[sti].indexOf(thS.member):t%nM[sti]):-1;
+    // 投擲者名で列を特定。名前が見つからない場合のみローテーション位置でフォールバック
+    const idxF=thF?mbrs[fti].indexOf(thF.member):-1;
+    const idxS=thS?mbrs[sti].indexOf(thS.member):-1;
+    const mF=thF?(idxF>=0?idxF:(nM[fti]?t%nM[fti]:-1)):-1;
+    const mS=thS?(idxS>=0?idxS:(nM[sti]?t%nM[sti]:-1)):-1;
     const cF2=mbrs[fti].map((_,mi)=>mi!==mF||!thF?`<td class="sc-cell" style="border:1px solid #bbb;"></td>`:`<td class="sc-cell ${editable?'editable':''}" style="border:1px solid #bbb;">${tDisp(thF,fti,t)}</td>`).join('');
     const cS2=mbrs[sti].map((_,mi)=>mi!==mS||!thS?`<td class="sc-cell" style="border:1px solid #bbb;"></td>`:`<td class="sc-cell ${editable?'editable':''}" style="border:1px solid #bbb;">${tDisp(thS,sti,t)}</td>`).join('');
     rows+=`<tr><td class="turn-col" style="border:1px solid #bbb;">${t+1}</td>${cF2}<td class="tot-cell" style="border:1px solid #bbb;border-right:2.5px solid #aaa;">${totDisp(thF,fti)}</td>${cS2}<td class="tot-cell" style="border:1px solid #bbb;">${totDisp(thS,sti)}</td></tr>`;
