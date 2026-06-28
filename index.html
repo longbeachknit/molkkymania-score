@@ -5732,8 +5732,30 @@ function bind(){
   const bgreg=document.getElementById('btn-go-regulation');if(bgreg)bgreg.onclick=()=>openTournamentInfoView('regulation');
   const bgsch=document.getElementById('btn-go-schedule');if(bgsch)bgsch.onclick=()=>openTournamentInfoView('schedule');
   const bgpre=document.getElementById('btn-go-prelim');if(bgpre)bgpre.onclick=()=>openTournamentInfoView('prelim');
-  // 「試合結果のみを送信」→ QRスキャン（結果のみモード）
-  const bgro=document.getElementById('btn-go-result-only');if(bgro)bgro.onclick=()=>{S._matchIdInput='';S._matchIdError='';startQRScan('resultOnly');};
+  // 「試合結果のみを送信」→ QRスキャン（結果のみモード）。配信中・開催期間中のみ
+  const bgro=document.getElementById('btn-go-result-only');if(bgro)bgro.onclick=async()=>{
+    const eventCode=await resolveActiveEventCode();
+    if(!eventCode){
+      alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+      return;
+    }
+    await syncAllFromGitHub(eventCode);
+    const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
+    if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+    const ps=tour&&tour.eventPeriodStart;
+    const pe=tour&&tour.eventPeriodEnd;
+    if(!ps||!pe){
+      alert('試合開催期間が設定されていません。\n管理者にお問い合わせください。');
+      return;
+    }
+    const now=new Date();
+    const start=new Date(ps);
+    const end=new Date(pe);
+    const fmt=d=>`${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    if(now<start){alert(`試合開催期間は${fmt(start)}からです。`);return;}
+    if(now>end){alert('今大会の試合開催期間は終了しました。');return;}
+    S._matchIdInput='';S._matchIdError='';startQRScan('resultOnly');
+  };
   const bgrem=document.getElementById('btn-go-remaining');if(bgrem)bgrem.onclick=()=>{alert('「残り試合数を確認」は準備中です。');};
   const bgbr=document.getElementById('btn-go-bracket');if(bgbr)bgbr.onclick=()=>{alert('「決勝トーナメント表」は準備中です。');};
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
