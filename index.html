@@ -5757,6 +5757,13 @@ function bind(){
         const json=await fetchTournamentInfo('getPrelim');
         if(json.error)throw new Error('GAS: '+json.error);
         S._tiPrelim=json.teams||[];
+        // パーソナライズ済みなら自分のチームNoを自動入力して検索結果を表示
+        const myP=getValidMyTeam(eventCode);
+        if(myP&&myP.teamId){
+          const q=String(myP.teamId);
+          S._tiPrelimQuery=q;
+          S._tiPrelimSelected=S._tiPrelim.find(t=>t.teamNo===q||String(parseInt(t.teamNo,10))===String(parseInt(q,10)))||null;
+        }
       }
     }catch(e){S._tiError='取得に失敗しました: '+e.message;}
     S._tiLoading=false;render();
