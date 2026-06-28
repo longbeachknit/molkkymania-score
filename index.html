@@ -3431,20 +3431,29 @@ async function publishActiveEvent(eventCode){
 }
 
 async function fetchActiveEvent(){
-  try{
-    // ?t=Date.now() でGitHub CDN側のキャッシュをバイパスする（修正①）
-    const url='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/active.json?t='+Date.now();
+  // 1回の取得処理（毎回URLを変えてSafari等の強いキャッシュをバイパス）
+  const doFetch=async()=>{
+    const url='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/active.json?t='+Date.now()+'_'+Math.random().toString(36).slice(2);
     const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
-    if(!res.ok)return null;
+    if(!res.ok)throw new Error('HTTP '+res.status);
     const apiData=await res.json();
     const b64=apiData.content.replace(/\s/g,'');
     const binary=atob(b64);
     const bytes=new Uint8Array(binary.length);
     for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
     return JSON.parse(new TextDecoder('utf-8').decode(bytes));
-  }catch(e){
-    console.warn('active.json取得失敗:',e);
-    return null;
+  };
+  try{
+    return await doFetch();
+  }catch(e1){
+    // 1回目失敗 → 0.5秒待って再試行（Safariのキャッシュ・一時的な通信エラー対策）
+    await new Promise(r=>setTimeout(r,500));
+    try{
+      return await doFetch();
+    }catch(e2){
+      console.warn('active.json取得失敗:',e2);
+      return null;
+    }
   }
 }
 
