@@ -6242,9 +6242,23 @@ function parseDeepLinkId(){
   if(m&&m[1])return decodeURIComponent(m[1]).trim();
   return null;
 }
+let _deepLinkBusy=false;
 async function enterMatchFromDeepLink(rawId){
   const id=(rawId||'').trim();
   if(!id)return;
+  if(_deepLinkBusy)return; // 処理中の多重起動を防ぐ
+  // 試合中・結果入力中などに割り込むと内容が失われるため確認
+  const inProgress=(typeof IN_GAME_PHASES!=='undefined'&&IN_GAME_PHASES.includes(S.phase))
+    ||S.phase==='resultOnlyInput';
+  if(inProgress){
+    if(!confirm('別の試合のQRが読み込まれました。\n現在の入力内容を破棄して新しい試合に切り替えますか？')){
+      // キャンセル時はハッシュだけ消して現状維持
+      try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}
+      return;
+    }
+  }
+  _deepLinkBusy=true;
+  try{
   // ハッシュは一度消費したら消す（リロードや戻る操作で再発火しないように）
   try{history.replaceState(null,'',location.pathname+location.search);}catch(e){location.hash='';}
 
@@ -6279,6 +6293,7 @@ async function enterMatchFromDeepLink(rawId){
   S._matchConfirmMode='choose';
   S._matchConfirmFrom='setup'; // 「戻る」でホームへ
   S.phase='matchConfirm';render();
+  }finally{_deepLinkBusy=false;}
 }
 
 (function bootstrapDeepLink(){
@@ -6286,6 +6301,13 @@ async function enterMatchFromDeepLink(rawId){
   render(); // まず通常描画
   if(id)enterMatchFromDeepLink(id); // ディープリンクがあれば非同期で着地
 })();
+
+// 2回目以降：同じタブが開いたままカメラから別のQRを開くと、
+// ページは再読み込みされずハッシュだけが書き換わる。これを検知して再着地する。
+window.addEventListener('hashchange',()=>{
+  const id=parseDeepLinkId();
+  if(id)enterMatchFromDeepLink(id);
+});
 </script>
   <script>
 // ページ離脱時の確認（試合中のみ）
