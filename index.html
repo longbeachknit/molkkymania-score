@@ -759,6 +759,29 @@ let AD=loadAdmin();
 })();
 
 // 試合IDから設定を解決
+// スキャン/入力された文字列から試合IDを取り出す（URL形式・素のID形式の両対応）
+// 対応: "…/#/m/01_0602_02_003" "…/#/r/ID" "…?m=ID" "01_0602_02_003"
+function normalizeScannedId(raw){
+  let s=(raw||'').trim();
+  if(!s)return s;
+  // URLなら末尾のID部分を抽出
+  if(/^https?:\/\//i.test(s)||s.includes('#/')||s.includes('?')){
+    // ハッシュ #/m/ID or #/r/ID
+    let m=s.match(/#\/[mr]\/([^?&#]+)/);
+    if(m&&m[1])return decodeURIComponent(m[1]).trim();
+    // クエリ ?m=ID or &m=ID
+    m=s.match(/[?&]m=([^?&#]+)/);
+    if(m&&m[1])return decodeURIComponent(m[1]).trim();
+    // それ以外のURLはパス末尾セグメントを試す
+    try{
+      const u=new URL(s);
+      const seg=(u.pathname.split('/').filter(Boolean).pop())||'';
+      if(seg.split('_').length>=4)return decodeURIComponent(seg).trim();
+    }catch(e){}
+  }
+  return s;
+}
+
 function resolveMatchId(id){
   // 試合ID: 場所_大会_試合区分_コート（4パーツ）
   const parts=id.trim().split('_');
@@ -807,6 +830,8 @@ function resolveMatchId(id){
 
 
 const GAS_URL='https://script.google.com/macros/s/AKfycbwpNH-Z0i-vTVSltUxRCjAQN5v3auD-j5JZWES8NHtiMGr3GrlMd-uzLQmxOheW35zaow/exec';
+// QRに埋め込むアプリのベースURL（カメラアプリからの読み取り用）。末尾スラッシュ必須。
+const APP_BASE_URL='https://longbeachknit.github.io/molkkymania-score/';
 const _viewCache={}; // 成績閲覧用キャッシュ
 
 // ===== 受付データ送信（試合結果と同じPOSTメカニズム） =====
@@ -1384,7 +1409,7 @@ async function startQRScan(mode){
   const onScanSuccess=async(decodedText)=>{
     if(!scanning)return;
     await stopScan();
-    const val=decodedText.trim();
+    const val=normalizeScannedId(decodedText); // URL形式なら試合IDを抽出
     const qrParts=val.split('_');
     if(qrParts.length>=2)await syncAllFromGitHub(qrParts[1]);
     const result=resolveMatchId(val);
@@ -2847,11 +2872,12 @@ function generateQRPrintPage(venueId, eventId, courtCount, matchCount, customLab
       let itemsHtml='';
       for(let m=startM;m<=endM;m++){
         const matchStr=String(m).padStart(2,'0');
-        const qrText=`${venueId}_${eventId}_${matchStr}_${courtStr}`;
+        const plainId=`${venueId}_${eventId}_${matchStr}_${courtStr}`;
+        const qrText=`${APP_BASE_URL}#/m/${plainId}`; // カメラアプリからも開けるURLを埋め込む
         itemsHtml+=`<div class="qr-item">
           <div class="qr-code" id="qr-${c}-${m}" data-text="${qrText}"></div>
           <div class="qr-label">${getLabel(m)}</div>
-          <div class="qr-id">${qrText}</div>
+          <div class="qr-id">${plainId}</div>
         </div>`;
       }
       const pageLabel=pageCount>1?` (${pg+1}/${pageCount})`:'' ;
@@ -4508,7 +4534,13 @@ function rMatchConfirm(){
       ${gi===0?`<div style="text-align:center;padding-top:20px;font-size:20px;font-weight:700;color:#9ca3af;">VS</div>`:''}
       `).join('')}
     </div>
-    ${S._matchConfirmMode==='resultOnly'
+    ${S._matchConfirmMode==='choose'
+      ?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <button class="btn btn-green" id="btn-matchconfirm-start" style="padding:14px 8px;font-size:15px;" ${!d.hasRule?'disabled':''}>▶ この内容で<br>試合開始</button>
+          <button class="btn btn-blue" id="btn-matchconfirm-resultonly" style="padding:14px 8px;font-size:15px;" ${!d.hasRule?'disabled':''}>📤 結果のみ<br>送信</button>
+        </div>
+        ${!d.hasRule?'<div style="font-size:12px;color:#9ca3af;text-align:center;margin-top:8px;">ルールが見つからないため進めません</div>':''}`
+      :S._matchConfirmMode==='resultOnly'
       ?`<button class="btn btn-green" id="btn-matchconfirm-resultonly" style="width:100%;padding:14px;font-size:16px;" ${!d.hasRule?'disabled':''}>結果を入力する →</button>`
       :`<button class="btn btn-green" id="btn-matchconfirm-start" style="width:100%;padding:14px;font-size:16px;" ${!d.hasRule?'disabled':''}>この内容で試合開始 →</button>`}
   </div>`;
@@ -5830,7 +5862,7 @@ function bind(){
   const bmiGo=document.getElementById('btn-matchid-go');
   if(bmiGo)bmiGo.onclick=async()=>{
     const inp=document.getElementById('matchid-input');
-    const id=inp?inp.value.trim():'';
+    const id=inp?normalizeScannedId(inp.value):'';
     if(!id){S._matchIdError='試合IDを入力してください';render();return;}
     const parts=id.split('_');
     if(parts.length<4){S._matchIdError='試合IDの形式が正しくありません（例: 01_0602_02_002）';S._matchIdInput=id;render();return;}
@@ -5858,7 +5890,7 @@ function bind(){
   const brmgo=document.getElementById('btn-ro-matchid-go');
   if(brmgo)brmgo.onclick=async()=>{
     const inp=document.getElementById('ro-matchid-input');
-    const id=inp?inp.value.trim():'';
+    const id=inp?normalizeScannedId(inp.value):'';
     if(!id){S._matchIdError='試合IDを入力してください';render();return;}
     const parts=id.split('_');
     if(parts.length<4){S._matchIdError='試合IDの形式が正しくありません（例: 01_0602_02_002）';S._matchIdInput=id;render();return;}
@@ -6200,7 +6232,60 @@ function bind(){
   if(tps)tps.onclick=doPrelimSearch;
   if(tpi)tpi.addEventListener('keydown',e=>{if(e.key==='Enter')doPrelimSearch();});
 }
-render();
+// ===== カメラアプリ等からのディープリンク起動 =====
+// QRに埋め込まれたURL（…/#/m/＜試合ID＞）を起動時に解釈し、
+// 大会ガード（配信中・開催期間内）を通したうえで対戦カード確認（選択モード）に着地させる。
+function parseDeepLinkId(){
+  // 形式: #/m/＜試合ID＞ （将来の拡張のため /r/ も受理して同じ着地にする）
+  const h=(location.hash||'').trim();
+  const m=h.match(/^#\/[mr]\/(.+)$/);
+  if(m&&m[1])return decodeURIComponent(m[1]).trim();
+  return null;
+}
+async function enterMatchFromDeepLink(rawId){
+  const id=(rawId||'').trim();
+  if(!id)return;
+  // ハッシュは一度消費したら消す（リロードや戻る操作で再発火しないように）
+  try{history.replaceState(null,'',location.pathname+location.search);}catch(e){location.hash='';}
+
+  // 大会ガード（試合IDで開始ボタンと同じ判定）
+  const eventCode=await resolveActiveEventCode();
+  if(!eventCode){
+    alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+    S.phase='setup';render();return;
+  }
+  await syncAllFromGitHub(eventCode);
+  const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
+  if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+  const ps=tour&&tour.eventPeriodStart;
+  const pe=tour&&tour.eventPeriodEnd;
+  if(!ps||!pe){
+    alert('試合開催期間が設定されていません。\n管理者にお問い合わせください。');
+    S.phase='setup';render();return;
+  }
+  const now=new Date(),start=new Date(ps),end=new Date(pe);
+  const fmt=d=>`${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  if(now<start){alert(`試合開催期間は${fmt(start)}からです。`);S.phase='setup';render();return;}
+  if(now>end){alert('今大会の試合開催期間は終了しました。');S.phase='setup';render();return;}
+
+  // 試合ID解決 → 対戦カード確認（選択モード：試合開始 / 結果のみ送信）
+  const result=resolveMatchId(id);
+  if(!result){
+    alert('QRコードの試合IDが正しくありません。\nホームから試合IDを入力してください。');
+    S.phase='setup';render();return;
+  }
+  S._matchIdInput=id;S._matchIdError='';
+  S.matchIdData=result;
+  S._matchConfirmMode='choose';
+  S._matchConfirmFrom='setup'; // 「戻る」でホームへ
+  S.phase='matchConfirm';render();
+}
+
+(function bootstrapDeepLink(){
+  const id=parseDeepLinkId();
+  render(); // まず通常描画
+  if(id)enterMatchFromDeepLink(id); // ディープリンクがあれば非同期で着地
+})();
 </script>
   <script>
 // ページ離脱時の確認（試合中のみ）
