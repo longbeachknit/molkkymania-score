@@ -2222,7 +2222,7 @@ function ruleCardsHtml(obj){
           先頭の <span style="font-family:monospace;">タイトル: / 予選: / 行: / 凡例:</span> 行で全体設定。<br>
           ※ 色は下の「② 色の設定」で選びます。
         </div>
-        <textarea id="sc-edit" rows="9" placeholder="タイトル: 128T&#10;予選: 予選第1試合 | 予選第2試合 | 予選第3試合&#10;行: 第1試合 | 第2試合 | 第3試合 | 第4試合 | 第5試合 | 第6試合&#10;凡例: 表裏=gray | 3先=pink | 2先=green&#10;&#10;決勝トーナメント | 1 | 上位64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 準決勝, 決勝・3決&#10;5位タイ\\nトーナメント | 1 | 次点64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 5回戦, 5位タイ決定戦&#10;15位タイ\\nトーナメント | 2 |  | 1回戦, 2回戦, 3回戦, 4回戦, 15位タイ決定戦&#10;交流戦 | 3 |  | 1回戦, 2回戦">${scEsc(scText)}</textarea>
+        <textarea id="sc-edit" rows="9" placeholder="タイトル: 128T&#10;予選: 予選第1試合 | 予選第2試合 | 予選第3試合&#10;行: 第1試合 | 第2試合 | 第3試合 | 第4試合 | 第5試合 | 第6試合&#10;凡例: 表裏=gray | 3先=pink | 2先=green&#10;&#10;決勝トーナメント | 1 | 上位64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 準決勝, 決勝、3決&#10;5位タイ\\nトーナメント | 1 | 次点64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 5回戦, 5位タイ決定戦&#10;15位タイ\\nトーナメント | 2 |  | 1回戦, 2回戦, 3回戦, 4回戦, 15位タイ決定戦&#10;交流戦 | 3 |  | 1回戦, 2回戦">${scEsc(scText)}</textarea>
       </div>
     </details>
 
@@ -3767,6 +3767,19 @@ function scColorOf(v){
   return'green';
 }
 function fmtToColor(f){return f==='best3'?'pink':f==='round2'?'gray':'green';}
+// 既存の壊れたデータ対策：「決勝」の直後に「3決」等が別セルに分かれていたら結合
+function scRepairCols(columns){
+  const isThird=s=>/^[0-9０-９]+\s*位?\s*決(定戦?)?$/.test(String(s||'').trim());
+  return(columns||[]).map(col=>{
+    const out=[];
+    (col.cells||[]).forEach(cell=>{
+      const prev=out.length?out[out.length-1]:null;
+      if((prev==='決勝'||prev==='決勝戦')&&isThird(cell)){out[out.length-1]=prev+'、'+cell;}
+      else{out.push(cell);}
+    });
+    return Object.assign({},col,{cells:out});
+  });
+}
 // 列名を2行対応のHTMLに（\n / <br> を改行に）
 function scNameHtml(name){return String(name==null?'':name).split(/\\n|<br\s*\/?>/i).map(scEsc).join('<br>');}
 // 列の実効色を解決（colorsマップ優先、なければ旧col.color、なければgreen）
@@ -3828,8 +3841,8 @@ function systemChartFromText(txt){
     const km=line.match(/^([^|:：]+)[:：]\s*(.*)$/);
     const key=km?km[1].trim().toLowerCase():'';
     if(km&&/^(タイトル|title)$/.test(key)){ch.cornerLabel=km[2].trim();return;}
-    if(km&&/^(予選|prelim|prelims)$/.test(key)){ch.prelims=km[2].split(/[|,、]/).map(x=>x.trim()).filter(Boolean);return;}
-    if(km&&/^(行|行ラベル|rows|row)$/.test(key)){ch.rowLabels=km[2].split(/[|,、]/).map(x=>x.trim()).filter(Boolean);return;}
+    if(km&&/^(予選|prelim|prelims)$/.test(key)){ch.prelims=km[2].split(/[|,，]/).map(x=>x.trim()).filter(Boolean);return;}
+    if(km&&/^(行|行ラベル|rows|row)$/.test(key)){ch.rowLabels=km[2].split(/[|,，]/).map(x=>x.trim()).filter(Boolean);return;}
     if(km&&/^(凡例|legend)$/.test(key)){
       ch.legend=km[2].split('|').map(x=>x.trim()).filter(Boolean).map(p=>{const mm=p.split('=');return{label:(mm[0]||'').trim(),color:scColorOf(mm[1])};});
       return;
@@ -3845,7 +3858,7 @@ function systemChartFromText(txt){
         color=f[1]||null;start=parseInt(f[2],10);note=f[3]||'';cellsRaw=f[4]||'';
       }
       if(isNaN(start)||start<1)start=1;
-      const cells=cellsRaw.split(/[,、]/).map(x=>x.trim());
+      const cells=cellsRaw.split(/[,，]/).map(x=>x.trim());
       while(cells.length&&cells[cells.length-1]==='')cells.pop();
       if(name&&cells.length){
         const col={name,startRow:start-1,note,cells};
@@ -3854,6 +3867,7 @@ function systemChartFromText(txt){
       }
     }
   });
+  ch.columns=scRepairCols(ch.columns);
   return ch;
 }
 
@@ -3885,7 +3899,7 @@ function renderSystemChart(ch,editable){
   if(!ch||!ch.columns||!ch.columns.length){
     return'<div style="font-size:13px;color:#9ca3af;padding:24px 12px;text-align:center;">試合システム図はまだ設定されていません。<br>管理者画面の「大会設定」または「ルールテンプレート」で登録してください。</div>';
   }
-  const cols=ch.columns,nCols=cols.length;
+  const cols=scRepairCols(ch.columns),nCols=cols.length;
   const cellOf=(c,r)=>{const col=cols[c];const i=r-(col.startRow||0);return(i>=0&&i<col.cells.length)?col.cells[i]:null;};
   const hasCell=(c,r)=>{const v=cellOf(c,r);return v!=null&&v!=='';};
   const loseKey=(c,r)=>cols[c].name+'@'+r;
