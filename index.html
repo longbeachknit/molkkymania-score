@@ -2188,26 +2188,53 @@ function ruleCardsHtml(obj){
 
   const scText=systemChartToText(obj.systemChart);
   const scHasRules=(matchRules.length||tourneyRules.length||roundRules.length);
+  const scCh=obj.systemChart;
+  const scCols=(scCh&&scCh.columns)||[];
+  // 色設定（10色パレットから列ごとに選択）
+  const scColorRows=scCols.length?scCols.map(col=>{
+    const cur=(scCh.colors&&scCh.colors[col.name])||col.color||'green';
+    const curCk=scColorOf(cur);
+    const cc=SC_COLORS[curCk]||SC_COLORS.green;
+    const opts=SC_PALETTE.map(p=>`<option value="${p.key}" ${p.key===curCk?'selected':''}>${p.label}</option>`).join('');
+    const nm=String(col.name||'').replace(/\\n|<br\s*\/?>/ig,' ');
+    return`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+      <span style="display:inline-block;width:20px;height:14px;border-radius:3px;background:${cc.bg};border:1px solid ${cc.bd};flex-shrink:0;" class="sc-color-sw" data-col="${scEsc(col.name)}"></span>
+      <div style="flex:1;font-size:13px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${scEsc(nm)}</div>
+      <select class="sc-color" data-col="${scEsc(col.name)}" style="width:auto;min-width:130px;font-size:13px;padding:6px 8px;background:${cc.bg};">${opts}</select>
+    </div>`;
+  }).join(''):'<div style="font-size:12px;color:#9ca3af;padding:4px 0;">先に構成を入力すると、トーナメントごとに色を選べます。</div>';
+
   const scSection=`<div style="border-top:1px solid #e5e7eb;margin-top:12px;padding-top:12px;">
     <div style="display:flex;align-items:center;margin-bottom:8px;">
       <div style="flex:1;font-size:14px;font-weight:600;color:#111;">🗺 試合システム図</div>
       <button class="btn btn-blue btn-xs" id="btn-sc-autogen" style="padding:4px 10px;">ルールから自動生成</button>
     </div>
     <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">「残り試合数を確認」で表示される図です。一度負けると右の列（トーナメント）へ移ります。${scHasRules?'':'<br>※ 先に試合区分・トーナメント種類・ラウンド名を登録すると自動生成できます。'}</div>
-    <details style="margin-bottom:8px;"${scText.trim()?'':' open'}>
-      <summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">図を編集する</summary>
+
+    <details style="margin-bottom:10px;"${scText.trim()?'':' open'}>
+      <summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">① 構成を編集する（トーナメント名・回戦）</summary>
       <div style="margin-top:8px;">
         <div style="font-size:11px;color:#9ca3af;line-height:1.7;background:#f9fafb;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
           1行＝1トーナメント（列）。形式は<br>
-          <span style="font-family:monospace;color:#374151;">列名 | 色 | 開始行 | 注記 | 回戦1, 回戦2, …</span><br>
-          色＝<b>gray</b>(表裏) / <b>pink</b>(3先) / <b>green</b>(2先)。開始行＝何試合目から始まるか(1〜)。<br>
-          先頭の <span style="font-family:monospace;">タイトル: / 予選: / 行: / 凡例:</span> 行で全体設定。
+          <span style="font-family:monospace;color:#374151;">トーナメント名 | 開始行 | 注記 | 回戦1, 回戦2, …</span><br>
+          開始行＝何試合目から始まるか(1〜)。注記は空欄でもOK。<br>
+          トーナメント名に <span style="font-family:monospace;">\\n</span> を入れると2行に折り返します（例: <span style="font-family:monospace;">5位タイ\\nトーナメント</span>）。<br>
+          先頭の <span style="font-family:monospace;">タイトル: / 予選: / 行: / 凡例:</span> 行で全体設定。<br>
+          ※ 色は下の「② 色の設定」で選びます。
         </div>
-        <textarea id="sc-edit" rows="9" placeholder="タイトル: 128T&#10;予選: 予選第1試合 | 予選第2試合 | 予選第3試合&#10;行: 第1試合 | 第2試合 | 第3試合 | 第4試合 | 第5試合 | 第6試合&#10;凡例: 表裏=gray | 3先=pink | 2先=green&#10;&#10;決勝トーナメント | pink | 1 | 上位64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 準決勝, 決勝・3決&#10;5位タイ決定T | green | 1 | 次点64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 5回戦, 5位タイ決定戦&#10;15位タイ決定T | green | 2 |  | 1回戦, 2回戦, 3回戦, 4回戦, 15位タイ決定戦&#10;交流戦 | green | 3 |  | 1回戦, 2回戦">${scEsc(scText)}</textarea>
+        <textarea id="sc-edit" rows="9" placeholder="タイトル: 128T&#10;予選: 予選第1試合 | 予選第2試合 | 予選第3試合&#10;行: 第1試合 | 第2試合 | 第3試合 | 第4試合 | 第5試合 | 第6試合&#10;凡例: 表裏=gray | 3先=pink | 2先=green&#10;&#10;決勝トーナメント | 1 | 上位64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 準決勝, 決勝・3決&#10;5位タイ\\nトーナメント | 1 | 次点64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 5回戦, 5位タイ決定戦&#10;15位タイ\\nトーナメント | 2 |  | 1回戦, 2回戦, 3回戦, 4回戦, 15位タイ決定戦&#10;交流戦 | 3 |  | 1回戦, 2回戦">${scEsc(scText)}</textarea>
       </div>
     </details>
-    <div style="font-size:12px;color:#6b7280;margin:6px 0 4px;">プレビュー</div>
-    <div id="sc-preview" style="overflow-x:auto;padding:8px;background:#fafafa;border-radius:8px;">${renderSystemChart(obj.systemChart)}</div>
+
+    <details style="margin-bottom:10px;">
+      <summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">② 色の設定（10色から選択）</summary>
+      <div style="margin-top:8px;background:#f9fafb;border-radius:8px;padding:8px 10px;">
+        ${scColorRows}
+      </div>
+    </details>
+
+    <div style="font-size:12px;color:#6b7280;margin:6px 0 4px;">プレビュー　<span style="color:#9ca3af;">（青い ↘ をタップすると「負け矢印」の表示／非表示を切り替えできます）</span></div>
+    <div id="sc-preview" style="overflow-x:auto;padding:8px;background:#fafafa;border-radius:8px;">${renderSystemChart(scCh,true)}</div>
   </div>`;
 
   return `<div style="margin-top:14px;">`+foldSection('試合区分ルール',matchRules.length,'btn-add-match-rule',ruleRowsHtml(matchRules,'match',{reorder:true}),'',true)
@@ -3709,36 +3736,56 @@ function showMatchModal(idx){
 // ===== 試合システム図（残り試合数の確認用） =====
 // データ構造:
 //   { enabled, cornerLabel, prelims:[文字列...], rowLabels:[文字列...],
-//     legend:[{label,color}], columns:[{name,color,startRow,note,cells:[文字列...]}] }
-//   color は 'gray'(表裏) / 'pink'(3先) / 'green'(2先)
-const SC_COLORS={
-  gray :{bg:'#D9D9D9',bd:'#9e9e9e',tx:'#333333'},
-  pink :{bg:'#F2DCDC',bd:'#D9A6A6',tx:'#5a2d2d'},
-  green:{bg:'#E2EFDA',bd:'#A9C98C',tx:'#2f4a1a'}
-};
+//     legend:[{label,color}], columns:[{name,startRow,note,cells:[文字列...]}],
+//     colors:{ 列名:色キー }, loseArrows:{ "列名@行index":true/false } }
+//   ・色は図の構成テキストとは分離して colors マップで管理（10色パレット）
+//   ・loseArrows は自動判定の上書き（負け矢印を消す/出す）。未指定なら自動。
+//   ・列名に \n または <br> を入れると2行に折り返す。
+const SC_PALETTE=[
+  {key:'gray',  label:'グレー（表裏）',  bg:'#D9D9D9',bd:'#9e9e9e',tx:'#333333'},
+  {key:'pink',  label:'ピンク（3先）',  bg:'#F2DCDC',bd:'#D9A6A6',tx:'#5a2d2d'},
+  {key:'green', label:'グリーン（2先）',bg:'#E2EFDA',bd:'#A9C98C',tx:'#2f4a1a'},
+  {key:'blue',  label:'ブルー',        bg:'#DCE7F5',bd:'#9DB9E0',tx:'#1e3a66'},
+  {key:'yellow',label:'イエロー',      bg:'#FBF0C9',bd:'#E6CF7A',tx:'#6b5510'},
+  {key:'purple',label:'パープル',      bg:'#E7DDF2',bd:'#BFA6DD',tx:'#432a63'},
+  {key:'orange',label:'オレンジ',      bg:'#FCE3CF',bd:'#EFB483',tx:'#7a3e12'},
+  {key:'teal',  label:'ティール',      bg:'#D2EDEA',bd:'#8FCFC7',tx:'#134e48'},
+  {key:'red',   label:'レッド',        bg:'#F6D4D2',bd:'#E59C97',tx:'#7a1f1a'},
+  {key:'indigo',label:'インディゴ',    bg:'#D9DCEC',bd:'#A3A9D1',tx:'#2a2e63'}
+];
+const SC_COLORS={};SC_PALETTE.forEach(p=>{SC_COLORS[p.key]={bg:p.bg,bd:p.bd,tx:p.tx};});
 function scEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function scCircled(n){const m=['','①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];return m[n]||('('+n+')');}
 function scColorOf(v){
   v=String(v||'').trim().toLowerCase();
-  if(['gray','grey','表裏','round2','g表','gy'].includes(v))return'gray';
-  if(['pink','red','3先','best3','3sen','p'].includes(v))return'pink';
-  if(['green','2先','best2','2sen','g'].includes(v))return'green';
+  const alias={'表裏':'gray','grey':'gray','round2':'gray','gy':'gray',
+    '3先':'pink','best3':'pink','3sen':'pink',
+    '2先':'green','best2':'green','2sen':'green',
+    '青':'blue','黄':'yellow','紫':'purple','橙':'orange','緑':'green','赤':'red','灰':'gray'};
+  if(SC_COLORS[v])return v;
+  if(alias[v])return alias[v];
   return'green';
 }
 function fmtToColor(f){return f==='best3'?'pink':f==='round2'?'gray':'green';}
+// 列名を2行対応のHTMLに（\n / <br> を改行に）
+function scNameHtml(name){return String(name==null?'':name).split(/\\n|<br\s*\/?>/i).map(scEsc).join('<br>');}
+// 列の実効色を解決（colorsマップ優先、なければ旧col.color、なければgreen）
+function scColData(ch,col){
+  const k=(ch&&ch.colors&&ch.colors[col.name])||col.color||'green';
+  return SC_COLORS[scColorOf(k)]||SC_COLORS.green;
+}
 
 // 大会ルール（試合区分×トーナメント種類×ラウンド名）から図のたたき台を自動生成
 function buildSystemChartFromRules(obj){
   const mr=obj.matchRules||[],tr=obj.tourneyRules||[],rr=obj.roundRules||[];
-  // ラウンド名設定に登場する試合区分＝トーナメントの「行」
   const usedMatch=[];rr.forEach(r=>{if(!usedMatch.includes(r.matchCode))usedMatch.push(r.matchCode);});
   const rowCodes=mr.map(m=>m.code).filter(c=>usedMatch.includes(c));
   usedMatch.forEach(c=>{if(!rowCodes.includes(c))rowCodes.push(c);});
   const rowLabels=rowCodes.map(c=>{const m=mr.find(x=>x.code===c);return(m&&m.name)?m.name:('第'+c+'試合');});
-  // ラウンド名設定に登場するトーナメント種類＝「列」
   const usedTour=[];rr.forEach(r=>{if(!usedTour.includes(r.tourneyCode))usedTour.push(r.tourneyCode);});
   const colCodes=tr.map(t=>t.code).filter(c=>usedTour.includes(c));
   usedTour.forEach(c=>{if(!colCodes.includes(c))colCodes.push(c);});
+  const colors={};
   const columns=colCodes.map(tc=>{
     const tRule=tr.find(t=>t.code===tc);
     const byRow=rowCodes.map(mc=>{const rule=rr.find(r=>r.matchCode===mc&&r.tourneyCode===tc);return rule?(rule.round||''):null;});
@@ -3746,15 +3793,17 @@ function buildSystemChartFromRules(obj){
     let cells=byRow.slice(start);
     while(cells.length&&cells[cells.length-1]==null)cells.pop();
     cells=cells.map(c=>c==null?'':c);
-    return{name:(tRule&&tRule.name)?tRule.name:('T'+tc),color:fmtToColor(tRule?tRule.fmt:''),startRow:start,note:'',cells};
+    const name=(tRule&&tRule.name)?tRule.name:('T'+tc);
+    colors[name]=fmtToColor(tRule?tRule.fmt:'');
+    return{name,startRow:start,note:'',cells};
   }).filter(c=>c.cells.length>0);
-  // ラウンド名に登場しない試合区分は「予選（横長バー）」として扱う
   const prelims=mr.filter(m=>!usedMatch.includes(m.code)).map(m=>m.name||('予選'+m.code));
   return{enabled:true,cornerLabel:'',prelims,rowLabels,
-    legend:[{label:'表裏',color:'gray'},{label:'3先',color:'pink'},{label:'2先',color:'green'}],columns};
+    legend:[{label:'表裏',color:'gray'},{label:'3先',color:'pink'},{label:'2先',color:'green'}],
+    columns,colors,loseArrows:{}};
 }
 
-// 図オブジェクト → 編集用テキスト
+// 図オブジェクト → 構成テキスト（※色・矢印は含めない＝別管理）
 function systemChartToText(ch){
   if(!ch)return'';
   const L=[];
@@ -3764,14 +3813,15 @@ function systemChartToText(ch){
   if(ch.legend&&ch.legend.length)L.push('凡例: '+ch.legend.map(x=>x.label+'='+x.color).join(' | '));
   L.push('');
   (ch.columns||[]).forEach(c=>{
-    L.push([c.name,c.color||'green',String((c.startRow||0)+1),c.note||'',(c.cells||[]).join(', ')].join(' | '));
+    L.push([c.name,String((c.startRow||0)+1),c.note||'',(c.cells||[]).join(', ')].join(' | '));
   });
   return L.join('\n');
 }
 
-// 編集用テキスト → 図オブジェクト
+// 構成テキスト → 図オブジェクト（色・矢印は含まない）
+// 列の書式: 新「名前 | 開始行 | 注記 | 回戦...」/ 旧「名前 | 色 | 開始行 | 注記 | 回戦...」両対応
 function systemChartFromText(txt){
-  const ch={enabled:true,cornerLabel:'',prelims:[],rowLabels:[],legend:[],columns:[]};
+  const ch={enabled:true,cornerLabel:'',prelims:[],rowLabels:[],legend:[],columns:[],colors:{},loseArrows:{}};
   (txt||'').split('\n').forEach(raw=>{
     const line=raw.trim();
     if(!line||line[0]==='#')return;
@@ -3787,40 +3837,74 @@ function systemChartFromText(txt){
     if(line.includes('|')){
       const f=line.split('|').map(x=>x.trim());
       const name=f[0]||'';
-      const color=scColorOf(f[1]);
-      let start=parseInt(f[2],10);if(isNaN(start)||start<1)start=1;
-      const note=f[3]||'';
-      const cells=(f[4]||'').split(/[,、]/).map(x=>x.trim());
+      let color=null,start,note,cellsRaw;
+      // f[1]が整数なら新書式(開始行)、そうでなければ旧書式(色)
+      if(/^\d+$/.test(f[1]||'')){
+        start=parseInt(f[1],10);note=f[2]||'';cellsRaw=f[3]||'';
+      }else{
+        color=f[1]||null;start=parseInt(f[2],10);note=f[3]||'';cellsRaw=f[4]||'';
+      }
+      if(isNaN(start)||start<1)start=1;
+      const cells=cellsRaw.split(/[,、]/).map(x=>x.trim());
       while(cells.length&&cells[cells.length-1]==='')cells.pop();
-      if(name&&cells.length)ch.columns.push({name,color,startRow:start-1,note,cells});
+      if(name&&cells.length){
+        const col={name,startRow:start-1,note,cells};
+        if(color){const ck=scColorOf(color);ch.colors[name]=ck;col.color=ck;}
+        ch.columns.push(col);
+      }
     }
   });
   return ch;
 }
 
-// 図オブジェクト → 表示HTML（スクリーンショット準拠）
-function renderSystemChart(ch){
+// 構成テキストを既存オブジェクトに適用（色・矢印は保持）
+function scApplyStructureText(obj,text){
+  const parsed=systemChartFromText(text);
+  const oldColors=(obj&&obj.colors)?obj.colors:{};
+  const oldArrows=(obj&&obj.loseArrows)?obj.loseArrows:{};
+  const colors={};
+  parsed.columns.forEach(c=>{
+    // 旧テキスト由来の色 < 既存colorsマップ を優先
+    if(oldColors[c.name])colors[c.name]=oldColors[c.name];
+    else if(c.color)colors[c.name]=c.color;
+  });
+  // 既存マップのうち現存列のものを引き継ぎ（テキストに色が無い新書式でも保持）
+  Object.keys(oldColors).forEach(n=>{if(!colors[n]&&parsed.columns.some(c=>c.name===n))colors[n]=oldColors[n];});
+  parsed.colors=colors;
+  // 矢印オーバーライドは現存する列に関係するものだけ残す
+  const arrows={};
+  Object.keys(oldArrows).forEach(k=>{const nm=k.split('@')[0];if(parsed.columns.some(c=>c.name===nm))arrows[k]=oldArrows[k];});
+  parsed.loseArrows=arrows;
+  return parsed;
+}
+
+function scIsConfigured(ch){return!!(ch&&((ch.columns&&ch.columns.length)||(ch.prelims&&ch.prelims.length)||ch.cornerLabel));}
+
+// 図オブジェクト → 表示HTML。editable=true で矢印クリック編集用の属性を付与。
+function renderSystemChart(ch,editable){
   if(!ch||!ch.columns||!ch.columns.length){
     return'<div style="font-size:13px;color:#9ca3af;padding:24px 12px;text-align:center;">試合システム図はまだ設定されていません。<br>管理者画面の「大会設定」または「ルールテンプレート」で登録してください。</div>';
   }
   const cols=ch.columns,nCols=cols.length;
   const cellOf=(c,r)=>{const col=cols[c];const i=r-(col.startRow||0);return(i>=0&&i<col.cells.length)?col.cells[i]:null;};
   const hasCell=(c,r)=>{const v=cellOf(c,r);return v!=null&&v!=='';};
+  const loseKey=(c,r)=>cols[c].name+'@'+r;
+  const loseAuto=(c,r)=>hasCell(c,r)&&(c+1<nCols)&&hasCell(c+1,r+1);
+  const loseActive=(c,r)=>{const ov=ch.loseArrows&&ch.loseArrows[loseKey(c,r)];if(ov===true)return true;if(ov===false)return false;return loseAuto(c,r);};
   let maxRows=0;cols.forEach(col=>{maxRows=Math.max(maxRows,(col.startRow||0)+col.cells.length);});
   const rowLabels=ch.rowLabels||[];
-  const totalGrid=nCols*2-1; // セル列＋矢印列の総数
-  const GAP=26; // 矢印列の幅
+  const totalGrid=nCols*2-1;
+  const GAP=26;
   let h='<table style="border-collapse:collapse;margin:0 auto;font-size:12px;">';
 
   // ── ヘッダ ──
   h+='<tr>';
-  h+=`<td style="background:${SC_COLORS.pink.bg};border:1px solid ${SC_COLORS.pink.bd};color:${SC_COLORS.pink.tx};font-weight:800;text-align:center;padding:7px 6px;min-width:58px;white-space:nowrap;">${scEsc(ch.cornerLabel||'')}</td>`;
+  h+=`<td style="background:${SC_COLORS.pink.bg};border:1px solid ${SC_COLORS.pink.bd};color:${SC_COLORS.pink.tx};font-weight:800;text-align:center;padding:7px 6px;min-width:58px;white-space:nowrap;">${scNameHtml(ch.cornerLabel||'')}</td>`;
   for(let c=0;c<nCols;c++){
-    h+=`<td style="border-bottom:2px solid #cfcfcf;font-weight:700;text-align:center;padding:7px 6px;white-space:nowrap;color:#333;">${scEsc(cols[c].name)}</td>`;
+    h+=`<td style="border-bottom:2px solid #cfcfcf;font-weight:700;text-align:center;padding:7px 5px;color:#333;white-space:normal;word-break:break-word;line-height:1.25;max-width:96px;">${scNameHtml(cols[c].name)}</td>`;
     if(c<nCols-1)h+=`<td style="border-bottom:2px solid #cfcfcf;width:${GAP}px;"></td>`;
   }
   h+='</tr>';
-  // ヘッダ下の余白
   h+=`<tr><td colspan="${totalGrid+1}" style="height:8px;"></td></tr>`;
 
   // ── 予選（横長バー）──
@@ -3835,7 +3919,6 @@ function renderSystemChart(ch){
   // ── トーナメント本体 ──
   let winLblShown=false,loseLblShown=false;
   for(let r=0;r<maxRows;r++){
-    // 注記行（この行から始まる列の※注記を上部に表示）
     if(cols.some(c=>(c.startRow||0)===r&&c.note)){
       h+='<tr><td></td>';
       for(let c=0;c<nCols;c++){
@@ -3845,20 +3928,18 @@ function renderSystemChart(ch){
       }
       h+='</tr>';
     }
-    // セル行
     h+='<tr>';
     h+=`<td style="text-align:center;padding:3px 2px;color:#444;white-space:nowrap;">${scEsc(rowLabels[r]||('[第'+(r+1)+'試合]'))}</td>`;
     for(let c=0;c<nCols;c++){
       if(hasCell(c,r)){
-        const cc=SC_COLORS[cols[c].color]||SC_COLORS.green;
-        h+=`<td style="background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};text-align:center;padding:8px 8px;font-weight:600;white-space:nowrap;min-width:74px;">${scEsc(cellOf(c,r))}</td>`;
+        const cc=scColData(ch,cols[c]);
+        h+=`<td style="background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};text-align:center;padding:8px 6px;font-weight:600;white-space:nowrap;min-width:72px;">${scEsc(cellOf(c,r))}</td>`;
       }else{
         h+='<td></td>';
       }
       if(c<nCols-1)h+=`<td style="width:${GAP}px;"></td>`;
     }
     h+='</tr>';
-    // 矢印行（r→r+1）
     if(r<maxRows-1){
       h+='<tr><td></td>';
       for(let c=0;c<nCols;c++){
@@ -3867,10 +3948,17 @@ function renderSystemChart(ch){
         if(win&&!winLblShown){winLbl=' <span style="font-size:10px;color:#E24B4A;font-weight:700;">※勝ち</span>';winLblShown=true;}
         h+=`<td style="text-align:center;padding:1px 0;height:20px;">${win?('<span style="color:#E24B4A;font-size:15px;font-weight:900;">↓</span>'+winLbl):''}</td>`;
         if(c<nCols-1){
-          const lose=hasCell(c,r)&&hasCell(c+1,r+1);
+          const active=loseActive(c,r);
+          const toggleable=hasCell(c,r)&&hasCell(c+1,r+1);
           let loseLbl='';
-          if(lose&&!loseLblShown){loseLbl='<span style="font-size:10px;color:#378ADD;font-weight:700;margin-left:1px;">※負け</span>';loseLblShown=true;}
-          h+=`<td style="text-align:center;padding:1px 0;vertical-align:middle;white-space:nowrap;">${lose?('<span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:5px;padding:0 4px;font-size:13px;font-weight:900;line-height:1.5;">↘</span>'+loseLbl):''}</td>`;
+          if(active&&!loseLblShown){loseLbl='<span style="font-size:10px;color:#378ADD;font-weight:700;margin-left:1px;">※負け</span>';loseLblShown=true;}
+          const arrow='<span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:5px;padding:0 4px;font-size:13px;font-weight:900;line-height:1.5;">↘</span>';
+          if(editable&&toggleable){
+            const auto=loseAuto(c,r)?1:0;
+            h+=`<td class="sc-arrow" data-k="${scEsc(loseKey(c,r))}" data-auto="${auto}" title="タップで負け矢印を表示／非表示" style="cursor:pointer;text-align:center;padding:1px 0;vertical-align:middle;white-space:nowrap;">${active?(arrow+loseLbl):'<span style="opacity:0.28;font-size:14px;color:#378ADD;font-weight:900;">↘</span>'}</td>`;
+          }else{
+            h+=`<td style="text-align:center;padding:1px 0;vertical-align:middle;white-space:nowrap;">${active?(arrow+loseLbl):''}</td>`;
+          }
         }
       }
       h+='</tr>';
@@ -3888,6 +3976,7 @@ function renderSystemChart(ch){
   }
   return legend+`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 2px 8px;">${h}</div>`;
 }
+
 
 // ===== 対戦コート検索画面 =====
 function rTournamentInfo(){
@@ -5598,10 +5687,10 @@ function bind(){
       };
       delete tour.courtLayout.labelCenter; // 旧フィールドは新フィールドに統合
     }
-    // 試合システム図
+    // 試合システム図（構成テキスト＋既存の色・矢印を保持）
     const scEditEl=document.getElementById('sc-edit');
     if(scEditEl){
-      const ch=systemChartFromText(scEditEl.value);
+      const ch=scApplyStructureText(tour.systemChart,scEditEl.value);
       tour.systemChart=(ch&&((ch.columns&&ch.columns.length)||(ch.prelims&&ch.prelims.length)||ch.cornerLabel))?ch:null;
     }
   }
@@ -5639,21 +5728,61 @@ function bind(){
   if(clCenterPosEl)clCenterPosEl.addEventListener('change',updateCourtMapPreview);
   // ===== 試合システム図エディタ =====
   function scNormalize(ch){return(ch&&((ch.columns&&ch.columns.length)||(ch.prelims&&ch.prelims.length)||ch.cornerLabel))?ch:null;}
+  // 矢印（負け）クリックで表示/非表示を切替
+  function bindScArrows(){
+    document.querySelectorAll('#sc-preview .sc-arrow').forEach(el=>{
+      el.onclick=()=>{
+        const _t=ruleEditTarget();if(!_t||!_t.obj||!_t.obj.systemChart)return;
+        const ch=_t.obj.systemChart;ch.loseArrows=ch.loseArrows||{};
+        const key=el.dataset.k;const auto=el.dataset.auto==='1';
+        const cur=(ch.loseArrows[key]!==undefined)?ch.loseArrows[key]:auto;
+        const next=!cur;
+        if(next===auto)delete ch.loseArrows[key];else ch.loseArrows[key]=next;
+        _t.save();renderAdminScPreview();
+      };
+    });
+  }
+  // 保存済みオブジェクトから編集用プレビュー（クリック可）を再描画
+  function renderAdminScPreview(){
+    const pv=document.getElementById('sc-preview');if(!pv)return;
+    const _t=ruleEditTarget();const ch=_t&&_t.obj?_t.obj.systemChart:null;
+    pv.innerHTML=renderSystemChart(ch,true);
+    bindScArrows();
+  }
+  // 入力中のライブプレビュー（構成テキスト＋既存の色・矢印をマージ／クリック不可）
   function updateSystemChartPreview(){
     const ta=document.getElementById('sc-edit');
     const pv=document.getElementById('sc-preview');
     if(!ta||!pv)return;
-    pv.innerHTML=renderSystemChart(scNormalize(systemChartFromText(ta.value)));
+    const _t=ruleEditTarget();
+    const merged=scApplyStructureText(_t&&_t.obj?_t.obj.systemChart:null,ta.value);
+    pv.innerHTML=renderSystemChart(scNormalize(merged),false);
   }
   const scEdit=document.getElementById('sc-edit');
   if(scEdit){
     scEdit.addEventListener('input',updateSystemChartPreview);
     scEdit.addEventListener('change',()=>{
       const _t=ruleEditTarget();if(!_t||!_t.obj)return;
-      _t.obj.systemChart=scNormalize(systemChartFromText(scEdit.value));
-      _t.save();
+      _t.obj.systemChart=scNormalize(scApplyStructureText(_t.obj.systemChart,scEdit.value));
+      _t.save();render(); // 色セレクト等を再構築
     });
   }
+  // 色セレクト（10色パレット）
+  document.querySelectorAll('.sc-color').forEach(sel=>{
+    sel.addEventListener('change',()=>{
+      const _t=ruleEditTarget();if(!_t||!_t.obj||!_t.obj.systemChart)return;
+      const ch=_t.obj.systemChart;ch.colors=ch.colors||{};
+      ch.colors[sel.dataset.col]=sel.value;
+      _t.save();
+      const cc=SC_COLORS[scColorOf(sel.value)]||SC_COLORS.green;
+      sel.style.background=cc.bg;
+      const sw=document.querySelector('.sc-color-sw[data-col="'+sel.dataset.col.replace(/"/g,'\\"')+'"]');
+      if(sw){sw.style.background=cc.bg;sw.style.borderColor=cc.bd;}
+      renderAdminScPreview();
+    });
+  });
+  // 初回：編集用プレビューにクリックを有効化
+  if(document.getElementById('sc-preview'))bindScArrows();
   const scAuto=document.getElementById('btn-sc-autogen');
   if(scAuto)scAuto.onclick=()=>{
     const _t=ruleEditTarget();if(!_t||!_t.obj)return;
@@ -5662,7 +5791,7 @@ function bind(){
       alert('先に「試合区分」「トーナメント種類」「ラウンド名」を登録してください。');return;
     }
     if(obj.systemChart&&obj.systemChart.columns&&obj.systemChart.columns.length){
-      if(!confirm('現在の図を、ルールから自動生成した内容で置き換えます。よろしいですか？'))return;
+      if(!confirm('現在の図を、ルールから自動生成した内容で置き換えます。\n（色・矢印の手動設定もリセットされます）よろしいですか？'))return;
     }
     obj.systemChart=buildSystemChartFromRules(obj);
     _t.save();render();
