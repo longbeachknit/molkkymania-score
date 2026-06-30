@@ -4072,91 +4072,189 @@ function rTournamentInfo(){
     const data=S._tiBracket;            // {rounds:[{name,matches:[{team1,team2,win1,win2}]}]}
     const side=S._tiBracketSide||'left';
 
-    // 安全にラウンド配列を取り出す（無ければ空）
     const rounds=(data&&Array.isArray(data.rounds))?data.rounds:[];
-    // 既定の6ラウンド名（データが欠けていても枠を出すため）
     const ROUND_NAMES=['1回戦','2回戦','3回戦','4回戦','準決勝','決勝'];
     const ROUND_SIZES=[32,16,8,4,2,1];
 
-    // ラウンドを名前で引く（無ければ空試合で埋めた枠を返す）
     function roundByIndex(i){
       const want=ROUND_NAMES[i];
       const found=rounds.find(r=>String(r.name).trim()===want)||rounds[i];
       const ms=(found&&Array.isArray(found.matches))?found.matches.slice():[];
       while(ms.length<ROUND_SIZES[i])ms.push({team1:'',team2:'',win1:false,win2:false});
-      ms.length=ROUND_SIZES[i];   // 多すぎる分は切る
+      ms.length=ROUND_SIZES[i];
       return ms;
     }
 
-    // 決勝（中央）と優勝チーム
-    const finalMatches=roundByIndex(5);
-    const finalMatch=finalMatches[0]||{team1:'',team2:'',win1:false,win2:false};
-    const champion = finalMatch.win1 ? finalMatch.team1
-                   : finalMatch.win2 ? finalMatch.team2 : '';
+    // HTMLエスケープ（SVGのtext内に出すので）
+    function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-    // 1チーム分のスロット（勝者は枠線＝赤、空欄はそのまま）
-    function slot(name, isWin){
-      const safe=(name==null?'':String(name)).trim();
-      const txt = safe!==''
-        ? `<span style="font-size:13px;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${safe}</span>`
-        : `<span style="font-size:13px;color:#cbd5e1;">　</span>`;
-      const border = isWin ? '2px solid #dc2626' : '1.5px solid #e5e7eb';
-      const bg     = isWin ? '#fef2f2' : '#fff';
-      const weight = isWin ? '700' : '400';
-      return `<div style="height:26px;display:flex;align-items:center;padding:0 8px;border:${border};border-radius:6px;background:${bg};font-weight:${weight};box-sizing:border-box;">${txt}</div>`;
-    }
+    // 決勝＋優勝
+    const finalMatch=roundByIndex(5)[0]||{team1:'',team2:'',win1:false,win2:false};
+    const champion=finalMatch.win1?finalMatch.team1:(finalMatch.win2?finalMatch.team2:'');
 
-    // 1試合カード（上下2スロット）
-    function matchCard(m){
-      m=m||{team1:'',team2:'',win1:false,win2:false};
-      return `<div style="display:flex;flex-direction:column;gap:3px;">
-        ${slot(m.team1,!!m.win1)}
-        ${slot(m.team2,!!m.win2)}
-      </div>`;
-    }
-
-    // 片側の山を描く。
-    //   side='left'  → 1回戦〜準決勝の「前半」を、左→右の順（外側=1回戦）で並べる
-    //   side='right' → 各ラウンドの「後半」を、左→右の順（内側=準決勝→外側=1回戦…ではなく
-    //                  スマホ縦タブなので両側とも同じ向きで描き、決勝は中央に別途表示）
-    function sideColumns(which){
-      const cols=[];
-      for(let i=0;i<5;i++){            // 0..4 = 1回戦〜準決勝
-        const all=roundByIndex(i);
+    /* ───────── 片側の山をSVGで描く ─────────
+       片側＝1回戦16試合(=32チーム) → 2回戦8 → 3回戦4 → 4回戦2 → 準決勝1
+       左の山: 箱は左、線は右へ伸びて決勝(中央)へ収束
+       右の山: 左右反転（箱は右、線は左へ） */
+    function buildSideSVG(which){
+      // この山が担当する各ラウンドの「試合スライス」
+      // round0(1回戦32試合)の左半分=16試合, round1(16)左半分=8 ... round4(準決勝2)左半分=1
+      const sideMatches=[];     // sideMatches[r] = この山の r ラウンド目の試合配列
+      for(let r=0;r<5;r++){
+        const all=roundByIndex(r);
         const half=all.length/2;
-        const part = which==='left' ? all.slice(0,half) : all.slice(half);
-        // 各ラウンドの試合を縦に等間隔。ラウンドが進むほど間隔を広げて山型に。
-        const gap = 6 + i*22;
-        const cards=part.map(m=>matchCard(m)).join(`<div style="height:${gap}px;"></div>`);
-        cols.push(`<div style="display:flex;flex-direction:column;justify-content:center;min-width:96px;">
-          <div style="font-size:11px;font-weight:700;color:#6b7280;text-align:center;margin-bottom:6px;">${ROUND_NAMES[i]}</div>
-          <div style="display:flex;flex-direction:column;justify-content:center;flex:1;">${cards}</div>
-        </div>`);
+        sideMatches.push(which==='left'?all.slice(0,half):all.slice(half));
       }
-      // 右側の山は内側（準決勝）が決勝に近づくよう、列の並びを反転
-      if(which==='right')cols.reverse();
-      return `<div style="display:flex;gap:10px;align-items:stretch;overflow-x:auto;padding:8px 4px;">${cols.join('')}</div>`;
+      // チーム数 = 1回戦試合数*2
+      const firstMatches=sideMatches[0];          // 16試合
+      const N=firstMatches.length*2;              // 32スロット
+
+      // レイアウト寸法
+      const BOX_W=120, BOX_H=22, ROW_GAP=6;       // 1回戦の箱の高さと隙間
+      const COL_GAP=26;                            // ラウンド列の横間隔（線の長さ）
+      const PAD_TOP=24, PAD_BOTTOM=10;
+      const cols=5;                                // 1回戦〜準決勝
+      const rowPitch=BOX_H+ROW_GAP;                // 1回戦の1スロット高
+      const innerH=N*rowPitch;                     // 全スロット縦
+      const svgH=PAD_TOP+innerH+PAD_BOTTOM;
+      const svgW=BOX_W*cols + COL_GAP*cols + 16;   // 箱5列分＋線＋余白
+
+      // round r, match m の「箱の中心Y」を返す（再帰的に親=子2つの中点）
+      // round0は等間隔。以降は子の中点。
+      function slotCenterY(r,m){
+        if(r===0){
+          // 1回戦: 試合mは スロット2m, 2m+1。箱は2つ別々。ここでは試合の中心ではなく
+          // 各スロットの中心を別途使うため、試合中心も用意
+          const top=PAD_TOP + (2*m)*rowPitch + BOX_H/2;
+          const bot=PAD_TOP + (2*m+1)*rowPitch + BOX_H/2;
+          return (top+bot)/2;
+        }
+        // r>=1: この試合の勝者2人 = 前ラウンドの試合 2m, 2m+1 の中心の中点
+        return (slotCenterY(r-1,2*m)+slotCenterY(r-1,2*m+1))/2;
+      }
+      // 1回戦の各スロット（チーム箱）の中心Y
+      function r0SlotY(slotIdx){
+        return PAD_TOP + slotIdx*rowPitch + BOX_H/2;
+      }
+
+      // ラウンド列の箱の左端X（左の山）。右の山は最後にtransformで反転。
+      function colX(r){ return r*(BOX_W+COL_GAP); }
+
+      // 勝者追跡：round r の試合mで勝った場合、その箱→次への枝を赤くする。
+      // ある試合の「勝者スロット」がどれか: win1ならteam1(上), win2ならteam2(下)
+      // 線を赤くする条件: その試合に勝者が確定している(win1||win2)
+      const parts=[];   // SVG片の配列
+
+      // 箱を描く（teamName, x, yCenter, isWinner, isFirstRound）
+      function drawBox(name,x,yc,isWin){
+        const y=yc-BOX_H/2;
+        const stroke=isWin?'#dc2626':'#111';
+        const sw=isWin?'2':'1';
+        const safe=esc(name);
+        const label=safe!==''
+          ? `<text x="${x+8}" y="${yc}" dominant-baseline="central" font-size="11" fill="#111" style="font-family:sans-serif;">${safe.length>9?safe.slice(0,9)+'…':safe}</text>`
+          : '';
+        return `<rect x="${x}" y="${y}" width="${BOX_W}" height="${BOX_H}" rx="3" fill="#fff" stroke="${stroke}" stroke-width="${sw}"/>${label}`;
+      }
+
+      // 連結線（コの字）。子2つの右端→合流→親の入口。redなら赤。
+      function drawConnector(x_childRight, yTop, yBot, x_parentLeft, redTop, redBot, redStem){
+        const xMid=x_childRight+COL_GAP/2;        // 縦線のX
+        const black='#111', red='#dc2626';
+        const segs=[];
+        // 上の子 → 縦線まで（横）
+        segs.push(`<line x1="${x_childRight}" y1="${yTop}" x2="${xMid}" y2="${yTop}" stroke="${redTop?red:black}" stroke-width="${redTop?2:1}"/>`);
+        // 下の子 → 縦線まで（横）
+        segs.push(`<line x1="${x_childRight}" y1="${yBot}" x2="${xMid}" y2="${yBot}" stroke="${redBot?red:black}" stroke-width="${redBot?2:1}"/>`);
+        // 縦線（合流）: 勝者側の枝だけ赤くしたいので、上下それぞれ親中心まで色分け
+        const yPar=(yTop+yBot)/2;
+        segs.push(`<line x1="${xMid}" y1="${yTop}" x2="${xMid}" y2="${yPar}" stroke="${redTop?red:black}" stroke-width="${redTop?2:1}"/>`);
+        segs.push(`<line x1="${xMid}" y1="${yPar}" x2="${xMid}" y2="${yBot}" stroke="${redBot?red:black}" stroke-width="${redBot?2:1}"/>`);
+        // 縦線中点 → 親の入口（横）: 勝者がいれば赤
+        segs.push(`<line x1="${xMid}" y1="${yPar}" x2="${x_parentLeft}" y2="${yPar}" stroke="${redStem?red:black}" stroke-width="${redStem?2:1}"/>`);
+        return segs.join('');
+      }
+
+      // ── 1回戦の箱（32スロット）を描画 ──
+      const x0=colX(0);
+      firstMatches.forEach((m,mi)=>{
+        const yTop=r0SlotY(2*mi);
+        const yBot=r0SlotY(2*mi+1);
+        parts.push(drawBox(m.team1,x0,yTop,!!m.win1));
+        parts.push(drawBox(m.team2,x0,yBot,!!m.win2));
+      });
+
+      // ── 2回戦〜準決勝の箱 ＋ 直前ラウンドからの連結線 ──
+      for(let r=1;r<cols;r++){
+        const xPar=colX(r);
+        const xChildRight=colX(r-1)+BOX_W;
+        const matchesPrev=sideMatches[r-1];   // 子ラウンドの試合（勝者が来る）
+        const matchesCur=sideMatches[r];      // このラウンドの試合
+        matchesCur.forEach((cm,cmi)=>{
+          // この試合に来る2チーム = 子ラウンドの試合 2cmi(上), 2cmi+1(下) の勝者
+          const childTop=matchesPrev[2*cmi]   ||{win1:false,win2:false,team1:'',team2:''};
+          const childBot=matchesPrev[2*cmi+1] ||{win1:false,win2:false,team1:'',team2:''};
+          const yTop=slotCenterY(r-1,2*cmi);
+          const yBot=slotCenterY(r-1,2*cmi+1);
+          const xPar0=colX(r);
+          // 子が勝者確定しているか（その枝を赤く）
+          const redTop=!!(childTop.win1||childTop.win2);
+          const redBot=!!(childBot.win1||childBot.win2);
+          // 親の箱に名前が入る（=この試合のスロット）。redStemは「この親の箱に誰か来た」=どちらか勝者
+          const redStem=redTop||redBot;
+          parts.push(drawConnector(xChildRight,yTop,yBot,xPar,redTop,redBot,redStem));
+          // 親の箱（このラウンドの試合の勝者表示用に2スロット…ではなく、
+          // トーナメント図では各ラウンドは「勝ち上がった1チーム名」を箱に出す）
+          const yc=slotCenterY(r,cmi);
+          // このラウンドの試合 cm の勝者名（無ければ空）
+          const cmWinner=cm.win1?cm.team1:(cm.win2?cm.team2:'');
+          parts.push(drawBox(cmWinner,xPar0,yc,!!(cm.win1||cm.win2)));
+        });
+      }
+
+      // 準決勝の勝者 → 決勝への引き出し線（右端へ）
+      const semi=sideMatches[4][0]||{win1:false,win2:false};
+      const semiWinnerExists=!!(semi.win1||semi.win2);
+      const xSemiRight=colX(4)+BOX_W;
+      const ySemi=slotCenterY(4,0);
+      parts.push(`<line x1="${xSemiRight}" y1="${ySemi}" x2="${xSemiRight+COL_GAP/2}" y2="${ySemi}" stroke="${semiWinnerExists?'#dc2626':'#111'}" stroke-width="${semiWinnerExists?2:1}"/>`);
+
+      const inner=parts.join('');
+      // 右の山は左右反転
+      const groupTransform = which==='right' ? `transform="translate(${svgW},0) scale(-1,1)"` : '';
+      // 反転すると文字も鏡像になるので、右の山はtext部分だけ別途…が複雑なため、
+      // 右の山はSVG全体を反転せず「列順を反転」する方式に切替（下のbuildSideSVG_rightで対応）
+      return {svg:`<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="display:block;">${inner}</svg>`, w:svgW, h:svgH};
     }
 
-    // 中央：決勝＋優勝
-    const centerBlock=`<div style="margin:18px auto 8px;max-width:280px;">
-      <div style="font-size:12px;font-weight:700;color:#b91c1c;text-align:center;margin-bottom:6px;">決勝</div>
-      <div style="border:2px solid #dc2626;border-radius:10px;padding:10px;background:#fff;">
-        ${matchCard(finalMatch)}
-      </div>
-      <div style="text-align:center;margin-top:12px;">
-        <div style="font-size:12px;color:#92400e;font-weight:700;">🏆 優勝</div>
-        <div style="font-size:18px;font-weight:800;color:#b45309;margin-top:2px;min-height:24px;">${champion?champion:'<span style=\"color:#d1d5db;font-size:14px;\">未確定</span>'}</div>
-      </div>
-    </div>`;
-
-    const sideTabs=`<div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px;">
+    const sideTabs=`<div style="display:flex;gap:8px;justify-content:center;margin:14px 0 12px;">
       <button id="ti-bracket-left" style="padding:8px 18px;border-radius:20px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:${side==='left'?'#1d4ed8':'#e5e7eb'};color:${side==='left'?'#fff':'#374151'};">◀ 左の山</button>
       <button id="ti-bracket-right" style="padding:8px 18px;border-radius:20px;border:none;cursor:pointer;font-size:14px;font-weight:700;background:${side==='right'?'#1d4ed8':'#e5e7eb'};color:${side==='right'?'#fff':'#374151'};">右の山 ▶</button>
     </div>`;
 
-    return`<div style="padding:16px;max-width:760px;margin:0 auto;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+    // 中央：決勝＋王冠＋優勝
+    function finalSlot(name,isWin){
+      const safe=esc(name);
+      const txt=safe!==''?`<span style="font-size:13px;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${safe}</span>`:`<span style="color:#cbd5e1;">　</span>`;
+      return `<div style="height:28px;display:flex;align-items:center;padding:0 10px;border:2px solid ${isWin?'#dc2626':'#9ca3af'};border-radius:6px;background:#fff;box-sizing:border-box;font-weight:${isWin?'700':'400'};">${txt}</div>`;
+    }
+    const centerBlock=`<div style="margin:0 auto;max-width:260px;text-align:center;">
+      <div style="font-size:30px;line-height:1;margin-bottom:2px;">👑</div>
+      <div style="font-size:12px;font-weight:700;color:#b91c1c;margin-bottom:6px;">決勝</div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        ${finalSlot(finalMatch.team1,!!finalMatch.win1)}
+        ${finalSlot(finalMatch.team2,!!finalMatch.win2)}
+      </div>
+      <div style="margin-top:14px;">
+        <div style="font-size:12px;color:#92400e;font-weight:700;">🏆 優勝</div>
+        <div style="font-size:20px;font-weight:800;color:#b45309;margin-top:2px;min-height:26px;">${champion?esc(champion):'<span style=\"color:#d1d5db;font-size:14px;\">未確定</span>'}</div>
+      </div>
+    </div>`;
+
+    const built = rounds.length===0 ? null : buildSideSVG(side);
+
+    return`<div style="padding:16px;max-width:820px;margin:0 auto;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
         <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
         <div style="font-size:17px;font-weight:700;color:#111;">🏆 決勝トーナメント表</div>
       </div>
@@ -4166,10 +4264,12 @@ function rTournamentInfo(){
       :`${centerBlock}
         <div style="border-top:1px solid #e5e7eb;margin:14px 0;"></div>
         ${sideTabs}
-        ${sideColumns(side)}
+        <div style="overflow-x:auto;padding:4px 0;-webkit-overflow-scrolling:touch;${side==='right'?'direction:rtl;':''}">
+          <div style="display:inline-block;direction:ltr;">${built?built.svg:''}</div>
+        </div>
         <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:10px;line-height:1.6;">
-          勝ち上がったチームは<span style="color:#dc2626;font-weight:700;">赤枠</span>で表示されます。<br>
-          試合結果が未確定の枠は空欄のままです。
+          勝ち上がったチームへ向かう線が<span style="color:#dc2626;font-weight:700;">赤</span>で表示されます。<br>
+          結果が未確定の試合は空欄のままです。横にスクロールできます。
         </div>`}
     </div>`;
   }
