@@ -363,11 +363,13 @@ async function checkAdminPw(pw){
 
 
 
-// ===== GitHub Pages からリアルタイム対戦データ取得 =====
-// 【変更】読み取りは GitHub Pages（github.io）から直接行う。
-//   api.github.com は未認証だと60回/時のレート制限があり、会場の多人数アクセスで
-//   全員が403になるため。Pagesはレート制限が無く、生JSONをそのまま返す（base64不要）。
-const GITHUB_PAGES_BASE='https://longbeachknit.github.io/molkkymania-deta';
+// ===== GitHub から リアルタイム対戦データ取得 =====
+// 【変更】読み取りは raw.githubusercontent.com から行う。
+//   ・api.github.com … 未認証60回/時の制限があり多人数で403になるため使わない
+//   ・github.io(Pages) … レート制限は無いがCDNキャッシュで反映が数十秒〜遅れる
+//   ・raw … レート制限が実質問題にならず、反映も速い（即時性とのバランスが最良）
+//   raw は生JSONをそのまま返す（base64デコード不要）。
+const GITHUB_RAW_BASE='https://raw.githubusercontent.com/longbeachknit/molkkymania-deta/main';
 const GITHUB_DATA_BASE='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents'; // 書き込み(PUT)用に残す
 const CACHE_TTL=20000; // 20秒キャッシュ
 const _jsonCache={};
@@ -425,7 +427,7 @@ async function fetchMatchesJson(eventCode){
   }
   try{
     const fileCode=toJsonFileCode(eventCode);
-    const url=GITHUB_PAGES_BASE+'/'+fileCode+'.json?t='+Date.now();
+    const url=GITHUB_RAW_BASE+'/'+fileCode+'.json?t='+Date.now();
     const res=await fetch(url,{cache:'no-store'});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();   // Pagesは生JSONを返す（base64デコード不要）
@@ -446,7 +448,7 @@ async function fetchSettingsJson(eventCode){
   }
   try{
     const fileCode=toJsonFileCode(eventCode);
-    const url=GITHUB_PAGES_BASE+'/'+fileCode+'_settings.json?t='+Date.now();
+    const url=GITHUB_RAW_BASE+'/'+fileCode+'_settings.json?t='+Date.now();
     const res=await fetch(url,{cache:'no-store'});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();   // Pagesは生JSONを返す（base64デコード不要）
@@ -579,7 +581,7 @@ async function fetchTournamentInfo(action){
     throw new Error('未知のaction: '+action);
   }
 
-  const url=GITHUB_PAGES_BASE+'/'+fileCode+fileName+'?t='+Date.now();
+  const url=GITHUB_RAW_BASE+'/'+fileCode+fileName+'?t='+Date.now();
 
   const doFetch=async()=>{
     const res=await fetch(url,{cache:'no-store'});
@@ -3501,7 +3503,7 @@ async function publishActiveEvent(eventCode){
 async function fetchActiveEvent(){
   // 1回の取得処理（毎回URLを変えてSafari等の強いキャッシュをバイパス）
   const doFetch=async()=>{
-    const url=GITHUB_PAGES_BASE+'/active.json?t='+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const url=GITHUB_RAW_BASE+'/active.json?t='+Date.now()+'_'+Math.random().toString(36).slice(2);
     const res=await fetch(url,{cache:'no-store'});
     if(!res.ok)throw new Error('HTTP '+res.status);
     return await res.json();   // Pagesは生JSONを返す（base64デコード不要）
