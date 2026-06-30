@@ -558,32 +558,54 @@ function parseCombinedId(id){
 }
 
 async function fetchTournamentInfo(action){
-  // 組み合わせ取得（fetchCombinedIds）と同じ解決方法に揃える。
-  // activeTourId で見つからない場合も activeTour() がフォールバックするため、参加者端末で tour=null になるのを防ぐ。
+  // 【変更】GAS直叩き → GitHub上のJSONを読む方式に変更。
+  //   既存 fetchMatchesJson と同じく api.github.com/.../contents 経由でbase64デコードする。
+  //   ファイル: {fileCode}_info.json   … schedule / regulation（GAS側のonEditで自動更新）
+  //            {fileCode}_prelim.json … teams（GAS側のメニューで手動更新）
+  //   返り値の形は旧GASと同じ（{schedule} / {sections} / {teams}）に保つので呼び出し側は無変更。
   const tour=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):activeTour();
-  const fetchUrl=tour&&tour.gasUrl&&tour.gasUrl.trim();
-  if(!fetchUrl||!fetchUrl.startsWith('https://script.google.com/')){
-    throw new Error('GAS URLが設定されていません。');
+  if(!tour){ throw new Error('対象の大会が見つかりません。'); }
+
+  const fileCode=toJsonFileCode(tour.eventCode||'');
+  if(!fileCode){ throw new Error('大会コードが設定されていません。'); }
+
+  // action に応じて、読むファイルと返り値への変換を切り替える
+  let fileName, transform;
+  if(action==='getSchedule'){
+    fileName='_info.json';
+    transform=d=>({ schedule:(d&&d.schedule)||[] });
+  }else if(action==='getRegulation'){
+    fileName='_info.json';
+    // 旧GASは {sections} を返していたので、それに合わせる
+    transform=d=>({ sections:(d&&d.regulation)||[] });
+  }else if(action==='getPrelim'){
+    fileName='_prelim.json';
+    transform=d=>({ teams:(d&&d.teams)||[] });
+  }else{
+    throw new Error('未知のaction: '+action);
   }
-  // ① キャッシュ回避：URLを毎回変える（GASに対し安全＝プリフライトを発生させない方法のみ使用）
-  //    ※ Cache-Control 等のヘッダは付けない（付けるとCORSプリフライトOPTIONSが発生し、GASが非対応のため全滅する）
-  // ② 失敗時は0.5秒待って1回だけ自動リトライ
+
+  const url=GITHUB_DATA_BASE+'/'+fileCode+fileName+'?t='+Date.now();
+
   const doFetch=async()=>{
-    const url=fetchUrl+'?action='+action+'&t='+Date.now()+'_'+Math.random().toString(36).slice(2);
-    const res=await fetch(url,{mode:'cors',cache:'no-store',credentials:'omit',redirect:'follow'});
+    const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
+    if(res.status===404){ throw new Error('まだ配信されていません'); }
     if(!res.ok)throw new Error('HTTP '+res.status);
-    return await res.json();
+    const apiData=await res.json();
+    const b64=apiData.content.replace(/\s/g,'');
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const data=JSON.parse(new TextDecoder('utf-8').decode(bytes));
+    return transform(data);
   };
+
+  // 既存と同様、失敗時は0.5秒待って1回だけ自動リトライ
   try{
     return await doFetch();
   }catch(e1){
-    // 1回目失敗 → 0.5秒待って再試行
     await new Promise(r=>setTimeout(r,500));
-    try{
-      return await doFetch();
-    }catch(e2){
-      throw e2;
-    }
+    return await doFetch();
   }
 }
 
