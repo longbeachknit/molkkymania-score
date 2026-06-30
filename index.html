@@ -427,10 +427,16 @@ async function fetchMatchesJson(eventCode){
   }
   try{
     const fileCode=toJsonFileCode(eventCode);
-    const url=GITHUB_RAW_BASE+'/'+fileCode+'.json?t='+Date.now();
-    const res=await fetch(url,{cache:'no-store'});
+    // 【API経由】対戦表は api.github.com 経由で取得（各端末60回/時の制限あり）
+    const url=GITHUB_DATA_BASE+'/'+fileCode+'.json?t='+Date.now();
+    const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
-    const data=await res.json();   // Pagesは生JSONを返す（base64デコード不要）
+    const apiData=await res.json();
+    const b64=apiData.content.replace(/\s/g,'');
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const data=JSON.parse(new TextDecoder('utf-8').decode(bytes));
     _jsonCache[eventCode]={ts:now,data};
     return data;
   }catch(e){
@@ -555,9 +561,8 @@ function parseCombinedId(id){
 
 async function fetchTournamentInfo(action){
   // 【変更】GAS直叩き → GitHub上のJSONを読む方式に変更。
-  //   GitHub Pages（github.io）から生JSONを読む（レート制限なし）。
-  //   ファイル: {fileCode}_info.json   … schedule / regulation（GAS側のonEditで自動更新）
-  //            {fileCode}_prelim.json … teams（GAS側のメニューで手動更新）
+  //   ・スケジュール/レギュ(_info.json) … raw.githubusercontent から読む（レート制限実質なし）
+  //   ・予選結果(_prelim.json) ………… api.github.com から読む（各端末60回/時の制限あり・即時性重視）
   //   返り値の形は旧GASと同じ（{schedule} / {sections} / {teams}）に保つので呼び出し側は無変更。
   const tour=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):activeTour();
   if(!tour){ throw new Error('対象の大会が見つかりません。'); }
@@ -565,8 +570,8 @@ async function fetchTournamentInfo(action){
   const fileCode=toJsonFileCode(tour.eventCode||'');
   if(!fileCode){ throw new Error('大会コードが設定されていません。'); }
 
-  // action に応じて、読むファイルと返り値への変換を切り替える
-  let fileName, transform;
+  // action に応じて、読むファイル・取得方式・返り値への変換を切り替える
+  let fileName, transform, useApi=false;
   if(action==='getSchedule'){
     fileName='_info.json';
     transform=d=>({ schedule:(d&&d.schedule)||[] });
@@ -577,18 +582,34 @@ async function fetchTournamentInfo(action){
   }else if(action==='getPrelim'){
     fileName='_prelim.json';
     transform=d=>({ teams:(d&&d.teams)||[] });
+    useApi=true;   // ★予選結果はAPI経由
   }else{
     throw new Error('未知のaction: '+action);
   }
 
-  const url=GITHUB_RAW_BASE+'/'+fileCode+fileName+'?t='+Date.now();
+  const url=(useApi?GITHUB_DATA_BASE:GITHUB_RAW_BASE)+'/'+fileCode+fileName+'?t='+Date.now();
 
   const doFetch=async()=>{
-    const res=await fetch(url,{cache:'no-store'});
+    const opt=useApi
+      ? {cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}}
+      : {cache:'no-store'};
+    const res=await fetch(url,opt);
     if(res.status===404){ throw new Error('まだ配信されていません'); }
     if(!res.ok)throw new Error('HTTP '+res.status);
-    const data=await res.json();   // Pagesは生JSONを返す（base64デコード不要）
-    return transform(data);
+    if(useApi){
+      // API経由はbase64でcontentが返るのでデコードする
+      const apiData=await res.json();
+      const b64=apiData.content.replace(/\s/g,'');
+      const binary=atob(b64);
+      const bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      const data=JSON.parse(new TextDecoder('utf-8').decode(bytes));
+      return transform(data);
+    }else{
+      // raw経由は生JSONをそのまま返す
+      const data=await res.json();
+      return transform(data);
+    }
   };
 
   // 既存と同様、失敗時は0.5秒待って1回だけ自動リトライ
