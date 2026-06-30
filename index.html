@@ -3937,15 +3937,23 @@ function renderSystemChart(ch,editable){
   let maxRows=0;cols.forEach(col=>{maxRows=Math.max(maxRows,(col.startRow||0)+col.cells.length);});
   const rowLabels=ch.rowLabels||[];
   const totalGrid=nCols*2-1;
-  const GAP=26;
-  let h='<table style="border-collapse:collapse;margin:0 auto;font-size:12px;">';
+  // 横スクロール不要で全体が収まるよう、幅を100%に固定し列幅を％配分する
+  const labelPct=nCols>=5?9:11;
+  const gapPct=nCols>=5?2.5:3;
+  const cellPct=Math.max(6,(100-labelPct-(nCols-1)*gapPct)/nCols);
+  const fs=nCols>=5?10:(nCols>=4?11:12);
+  let cg='<colgroup>';
+  cg+=`<col style="width:${labelPct}%">`;
+  for(let c=0;c<nCols;c++){cg+=`<col style="width:${cellPct}%">`;if(c<nCols-1)cg+=`<col style="width:${gapPct}%">`;}
+  cg+='</colgroup>';
+  let h=`<table style="border-collapse:collapse;width:100%;table-layout:fixed;font-size:${fs}px;">`+cg;
 
   // ── ヘッダ ──
   h+='<tr>';
-  h+=`<td style="background:${SC_COLORS.pink.bg};border:1px solid ${SC_COLORS.pink.bd};color:${SC_COLORS.pink.tx};font-weight:800;text-align:center;padding:7px 6px;min-width:58px;white-space:nowrap;">${scNameHtml(ch.cornerLabel||'')}</td>`;
+  h+=`<td style="background:${SC_COLORS.pink.bg};border:1px solid ${SC_COLORS.pink.bd};color:${SC_COLORS.pink.tx};font-weight:800;text-align:center;padding:6px 3px;white-space:normal;word-break:break-word;line-height:1.2;">${scNameHtml(ch.cornerLabel||'')}</td>`;
   for(let c=0;c<nCols;c++){
-    h+=`<td style="border-bottom:2px solid #cfcfcf;font-weight:700;text-align:center;padding:7px 5px;color:#333;white-space:normal;word-break:break-word;line-height:1.25;max-width:96px;">${scNameHtml(cols[c].name)}</td>`;
-    if(c<nCols-1)h+=`<td style="border-bottom:2px solid #cfcfcf;width:${GAP}px;"></td>`;
+    h+=`<td style="border-bottom:2px solid #cfcfcf;font-weight:700;text-align:center;padding:6px 3px;color:#333;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.2;">${scNameHtml(cols[c].name)}</td>`;
+    if(c<nCols-1)h+=`<td style="border-bottom:2px solid #cfcfcf;"></td>`;
   }
   h+='</tr>';
   h+=`<tr><td colspan="${totalGrid+1}" style="height:8px;"></td></tr>`;
@@ -3953,54 +3961,49 @@ function renderSystemChart(ch,editable){
   // ── 予選（横長バー）──
   (ch.prelims||[]).forEach((p,i)=>{
     h+='<tr>';
-    h+=`<td style="text-align:center;padding:4px 2px;color:#444;white-space:nowrap;">予選${scCircled(i+1)}</td>`;
-    h+=`<td colspan="${totalGrid}" style="background:${SC_COLORS.gray.bg};border:1px solid ${SC_COLORS.gray.bd};text-align:center;padding:9px;color:#333;font-weight:600;">${scEsc(p)}</td>`;
+    h+=`<td style="text-align:center;padding:4px 1px;color:#444;white-space:normal;word-break:break-word;line-height:1.2;">予選${scCircled(i+1)}</td>`;
+    h+=`<td colspan="${totalGrid}" style="background:${SC_COLORS.gray.bg};border:1px solid ${SC_COLORS.gray.bd};text-align:center;padding:8px;color:#333;font-weight:600;">${scEsc(p)}</td>`;
     h+='</tr>';
     h+=`<tr><td colspan="${totalGrid+1}" style="height:7px;"></td></tr>`;
   });
 
   // ── トーナメント本体 ──
-  let winLblShown=false,loseLblShown=false;
   for(let r=0;r<maxRows;r++){
     if(cols.some(c=>(c.startRow||0)===r&&c.note)){
       h+='<tr><td></td>';
       for(let c=0;c<nCols;c++){
-        const note=((cols[c].startRow||0)===r&&cols[c].note)?`<span style="font-size:11px;color:#555;white-space:nowrap;">※${scEsc(cols[c].note)}</span>`:'';
+        const note=((cols[c].startRow||0)===r&&cols[c].note)?`<span style="font-size:9px;color:#555;white-space:normal;word-break:break-word;line-height:1.15;display:inline-block;">※${scEsc(cols[c].note)}</span>`:'';
         h+=`<td style="text-align:center;padding:2px 0;">${note}</td>`;
         if(c<nCols-1)h+='<td></td>';
       }
       h+='</tr>';
     }
     h+='<tr>';
-    h+=`<td style="text-align:center;padding:3px 2px;color:#444;white-space:nowrap;">${scEsc(rowLabels[r]||('[第'+(r+1)+'試合]'))}</td>`;
+    h+=`<td style="text-align:center;padding:3px 1px;color:#444;white-space:normal;word-break:break-word;line-height:1.2;">${scEsc(rowLabels[r]||('[第'+(r+1)+'試合]'))}</td>`;
     for(let c=0;c<nCols;c++){
       if(hasCell(c,r)){
         const cc=scColData(ch,cols[c]);
-        h+=`<td style="background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};text-align:center;padding:8px 6px;font-weight:600;white-space:nowrap;min-width:72px;">${scEsc(cellOf(c,r))}</td>`;
+        h+=`<td style="background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};text-align:center;padding:7px 3px;font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.25;">${scEsc(cellOf(c,r))}</td>`;
       }else{
         h+='<td></td>';
       }
-      if(c<nCols-1)h+=`<td style="width:${GAP}px;"></td>`;
+      if(c<nCols-1)h+=`<td></td>`;
     }
     h+='</tr>';
     if(r<maxRows-1){
       h+='<tr><td></td>';
       for(let c=0;c<nCols;c++){
         const win=hasCell(c,r)&&hasCell(c,r+1);
-        let winLbl='';
-        if(win&&!winLblShown){winLbl=' <span style="font-size:10px;color:#E24B4A;font-weight:700;">※勝ち</span>';winLblShown=true;}
-        h+=`<td style="text-align:center;padding:1px 0;height:20px;">${win?('<span style="color:#E24B4A;font-size:15px;font-weight:900;">↓</span>'+winLbl):''}</td>`;
+        h+=`<td style="text-align:center;padding:0;height:16px;">${win?'<span style="color:#E24B4A;font-size:13px;font-weight:900;">↓</span>':''}</td>`;
         if(c<nCols-1){
           const active=loseActive(c,r);
           const toggleable=hasCell(c,r)&&hasCell(c+1,r+1);
-          let loseLbl='';
-          if(active&&!loseLblShown){loseLbl='<span style="font-size:10px;color:#378ADD;font-weight:700;margin-left:1px;">※負け</span>';loseLblShown=true;}
-          const arrow='<span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:5px;padding:0 4px;font-size:13px;font-weight:900;line-height:1.5;">↘</span>';
+          const arrow='<span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:4px;padding:0 2px;font-size:11px;font-weight:900;line-height:1.4;">↘</span>';
           if(editable&&toggleable){
             const auto=loseAuto(c,r)?1:0;
-            h+=`<td class="sc-arrow" data-k="${scEsc(loseKey(c,r))}" data-auto="${auto}" title="タップで負け矢印を表示／非表示" style="cursor:pointer;text-align:center;padding:1px 0;vertical-align:middle;white-space:nowrap;">${active?(arrow+loseLbl):'<span style="opacity:0.28;font-size:14px;color:#378ADD;font-weight:900;">↘</span>'}</td>`;
+            h+=`<td class="sc-arrow" data-k="${scEsc(loseKey(c,r))}" data-auto="${auto}" title="タップで負け矢印を表示／非表示" style="cursor:pointer;text-align:center;padding:0;vertical-align:middle;">${active?arrow:'<span style="opacity:0.28;font-size:12px;color:#378ADD;font-weight:900;">↘</span>'}</td>`;
           }else{
-            h+=`<td style="text-align:center;padding:1px 0;vertical-align:middle;white-space:nowrap;">${active?(arrow+loseLbl):''}</td>`;
+            h+=`<td style="text-align:center;padding:0;vertical-align:middle;">${active?arrow:''}</td>`;
           }
         }
       }
@@ -4012,12 +4015,17 @@ function renderSystemChart(ch,editable){
   // ── 凡例 ──
   let legend='';
   if(ch.legend&&ch.legend.length){
-    legend='<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:12px;">'+
+    legend='<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:8px;">'+
       ch.legend.map(x=>{const cc=SC_COLORS[scColorOf(x.color)]||SC_COLORS.green;
         return`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:26px;height:14px;background:${cc.bg};border:1px solid ${cc.bd};border-radius:3px;"></span><span style="font-size:12px;color:#374151;">${scEsc(x.label)}</span></div>`;
       }).join('')+'</div>';
   }
-  return legend+`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 2px 8px;">${h}</div>`;
+  // 矢印の凡例
+  const arrowLegend='<div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-bottom:10px;">'+
+    '<span style="font-size:11px;color:#374151;"><span style="color:#E24B4A;font-weight:900;">↓</span> 勝ち（次の回戦へ）</span>'+
+    '<span style="font-size:11px;color:#374151;"><span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:4px;padding:0 3px;font-weight:900;">↘</span> 負け（右のトーナメントへ）</span>'+
+    '</div>';
+  return legend+arrowLegend+`<div style="width:100%;padding:2px 0 6px;">${h}</div>`;
 }
 
 
@@ -4166,8 +4174,7 @@ function rTournamentInfo(){
       <div style="font-size:12px;color:#6b7280;margin-bottom:12px;">一度負けると右のトーナメントへ移動します。今いるトーナメント・回戦から、残りの試合数を確認できます。</div>
       ${loading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`
       :err?`<div style="padding:16px;background:#fee2e2;border-radius:10px;color:#dc2626;font-size:13px;">${err}</div>`
-      :`<div id="sc-view-wrap" style="background:#fff;border:1px solid #eee;border-radius:12px;padding:12px 6px;">${renderSystemChart(chart)}</div>
-        ${chart&&chart.columns&&chart.columns.length?`<button id="btn-sc-save-img" class="btn btn-gray btn-sm" style="width:100%;margin-top:12px;padding:10px;">📷 画像で保存</button>`:''}`}
+      :`<div id="sc-view-wrap" style="background:#fff;border:1px solid #eee;border-radius:12px;padding:12px 8px;">${renderSystemChart(chart)}</div>`}
     </div>`;
   }
 
@@ -6683,17 +6690,6 @@ function bind(){
   // 試合システム図（残り試合数）：ローカル同期済み設定から表示
   const btisys=document.getElementById('btn-ti-system');
   if(btisys)btisys.onclick=()=>{S._tiView='system';S._tiLoading=false;S._tiError=null;render();};
-  // 試合システム図：画像で保存
-  const btiscimg=document.getElementById('btn-sc-save-img');
-  if(btiscimg)btiscimg.onclick=()=>{
-    const node=document.getElementById('sc-view-wrap');
-    if(!node||typeof html2canvas==='undefined'){alert('画像の生成に対応していません。');return;}
-    const old=btiscimg.textContent;btiscimg.disabled=true;btiscimg.textContent='生成中...';
-    html2canvas(node,{backgroundColor:'#ffffff',scale:2}).then(canvas=>{
-      const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download='試合システム.png';a.click();
-      btiscimg.disabled=false;btiscimg.textContent=old;
-    }).catch(()=>{btiscimg.disabled=false;btiscimg.textContent=old;alert('画像の生成に失敗しました。');});
-  };
   // 予選結果 - 検索
   const tpi=document.getElementById('ti-prelim-input');
   const tps=document.getElementById('ti-prelim-search');
