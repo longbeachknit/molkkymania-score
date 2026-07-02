@@ -454,10 +454,17 @@ async function fetchSettingsJson(eventCode){
   }
   try{
     const fileCode=toJsonFileCode(eventCode);
-    const url=GITHUB_RAW_BASE+'/'+fileCode+'_settings.json?t='+Date.now();
-    const res=await fetch(url,{cache:'no-store'});
+    // 【API経由】開催期間・ルール等の設定は即時反映が必要なため api.github.com から取得
+    //   （raw はCDNキャッシュで最大約5分遅れるため、設定変更の反映が遅くなる）
+    const url=GITHUB_DATA_BASE+'/'+fileCode+'_settings.json?t='+Date.now();
+    const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
-    const data=await res.json();   // Pagesは生JSONを返す（base64デコード不要）
+    const apiData=await res.json();
+    const b64=apiData.content.replace(/\s/g,'');
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const data=JSON.parse(new TextDecoder('utf-8').decode(bytes));
     _jsonCache[cacheKey]={ts:now,data};
     return data;
   }catch(e){
@@ -3528,10 +3535,17 @@ async function publishActiveEvent(eventCode){
 async function fetchActiveEvent(){
   // 1回の取得処理（毎回URLを変えてSafari等の強いキャッシュをバイパス）
   const doFetch=async()=>{
-    const url=GITHUB_RAW_BASE+'/active.json?t='+Date.now()+'_'+Math.random().toString(36).slice(2);
-    const res=await fetch(url,{cache:'no-store'});
+    // 【API経由】稼働状態(開催中かどうか)は即時反映が必要なため api.github.com から取得
+    //   （raw はCDNキャッシュで最大約5分遅れるため、大会の開始/停止の反映が遅くなる）
+    const url=GITHUB_DATA_BASE+'/active.json?t='+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
     if(!res.ok)throw new Error('HTTP '+res.status);
-    return await res.json();   // Pagesは生JSONを返す（base64デコード不要）
+    const apiData=await res.json();
+    const b64=apiData.content.replace(/\s/g,'');
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    return JSON.parse(new TextDecoder('utf-8').decode(bytes));
   };
   try{
     return await doFetch();
