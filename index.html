@@ -496,6 +496,7 @@ async function syncSettingsFromGitHub(eventCode){
     if(data.eventPeriodStart!==undefined)tour.eventPeriodStart=data.eventPeriodStart;
     if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
     if(data.receptionPw!==undefined)tour.receptionPw=data.receptionPw;
+    if(data.sheetUrl!==undefined)tour.sheetUrl=data.sheetUrl;
     if(data.systemChart!==undefined)tour.systemChart=data.systemChart;
     if(data.courtLayout!==undefined)tour.courtLayout=data.courtLayout;
     saveActiveTour(tour);
@@ -506,6 +507,7 @@ async function syncSettingsFromGitHub(eventCode){
       eventCode:normEvent,
       eventName:data.eventName||'',
       gasUrl:data.gasUrl||'',
+      sheetUrl:data.sheetUrl||'',
       priority:data.priority||'tournament',
       matchRules:data.matchRules||[],
       tourneyRules:data.tourneyRules||[],
@@ -748,6 +750,7 @@ function makeTournament(overrides){
     id:'tour_'+Date.now(),
     venueCode:'',eventCode:'',eventName:'',
     gasUrl:'',
+    sheetUrl:'',
     priority:'tournament',
     matchRules:[],tourneyRules:[],roundRules:[],
     teams:[],matches:[],
@@ -1607,6 +1610,14 @@ function rSetup(){
         <span style="font-size:22px;">🏆</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">決勝<br>トーナメント表</div>
       </button>
+      <button id="btn-go-teamsearch" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+        <span style="font-size:22px;">🪪</span>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">チームNo<br>を検索</div>
+      </button>
+      <button id="btn-go-spreadsheet" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+        <span style="font-size:22px;">📑</span>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">大会<br>スプレッドシート</div>
+      </button>
     </div>
     <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">成績・記録</div>
     <div style="display:flex;gap:8px;">
@@ -2335,6 +2346,8 @@ function rAdminTourEdit(){
           <input type="text" id="te-name" value="${tour.eventName}" placeholder="例: 6月川崎大会"/></div>
         <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">組み合わせ取得URL（この大会専用GAS）</div>
           <input type="text" id="te-gasurl" value="${tour.gasUrl||''}" placeholder="https://script.google.com/macros/s/.../exec （必須）"/></div>
+        <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">対戦表スプレッドシートURL（ホームの「大会スプレッドシート」ボタンのリンク先）</div>
+          <input type="text" id="te-sheeturl" value="${tour.sheetUrl||''}" placeholder="https://docs.google.com/spreadsheets/d/..."/></div>
         <div style="border-top:1px solid #e5e7eb;margin-top:4px;padding-top:12px;">
           <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🗓 試合開催期間</div>
           <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">この期間中のみ「試合IDで開始する」ボタンが使用できます。未設定の場合は常に使用不可となります。</div>
@@ -3587,6 +3600,7 @@ async function publishSettings(tour,opts){
     eventCode: tour.eventCode,
     eventName: tour.eventName||'',
     gasUrl: tour.gasUrl||'',
+    sheetUrl: tour.sheetUrl||'',
     priority: tour.priority||'tournament',
     matchRules: tour.matchRules||[],
     tourneyRules: tour.tourneyRules||[],
@@ -4047,6 +4061,25 @@ function renderSystemChart(ch,editable){
 }
 
 
+// ===== チームNo検索：一覧HTML生成（キーワードでチーム名を部分一致絞り込み） =====
+function buildTeamSearchList(query){
+  const tour=activeTour()||{teams:[]};
+  const teams=(tour.teams||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
+  const q=String(query||'').trim().toLowerCase();
+  const filtered=q?teams.filter(t=>String(t.name||'').toLowerCase().includes(q)||String(t.id||'').includes(q)):teams;
+  if(teams.length===0){
+    return`<div style="text-align:center;padding:24px;color:#9ca3af;font-size:14px;">参加チームが登録されていません</div>`;
+  }
+  if(filtered.length===0){
+    return`<div style="text-align:center;padding:24px;color:#9ca3af;font-size:14px;">「${query}」に一致するチームが見つかりませんでした</div>`;
+  }
+  return`<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">${filtered.length}チーム${q?'が一致':'を表示中'}</div>`
+    +filtered.map(t=>`<div style="display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+      <div style="background:#EEF2FF;color:#1d4ed8;border-radius:8px;padding:6px 10px;font-size:14px;font-weight:800;min-width:64px;text-align:center;">No.${t.id}</div>
+      <div style="flex:1;font-size:15px;font-weight:700;color:#111;">${t.name||''}</div>
+    </div>`).join('');
+}
+
 // ===== 対戦コート検索画面 =====
 function rTournamentInfo(){
   const tour=AD.tournaments&&AD.activeTourId?AD.tournaments.find(t=>t.id===AD.activeTourId):null;
@@ -4246,13 +4279,29 @@ function rTournamentInfo(){
     const q=(S._tiPrelimQuery||'').trim();
     const sel=S._tiPrelimSelected||null;
 
-    // 検索ボックス＋結果表示
+    // 検索ボックス＋結果表示（チーム名プルダウン／チームNo入力のタブ切替）
+    const pMode=S._tiPrelimMode||'select';
+    const pModeTab=(mv,l)=>`<button class="ti-prelim-mode-tab" data-mode="${mv}" style="flex:1;padding:9px 4px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:${pMode===mv?'#1D9E75':'#f3f4f6'};color:${pMode===mv?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
+    const pTeamsSorted=teams.slice().sort((a,b)=>parseInt(a.teamNo,10)-parseInt(b.teamNo,10));
+    const pSelectedNo=sel?String(sel.teamNo):'';
+    const pInputBlock=pMode==='select'
+      ?(pTeamsSorted.length>0
+        ?`<select id="ti-prelim-select" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;background:#fff;">
+            <option value="">-- チームを選択 --</option>
+            ${pTeamsSorted.map(t=>`<option value="${t.teamNo}" ${pSelectedNo===String(t.teamNo)?'selected':''}>No.${t.teamNo}　${t.teamName||''}</option>`).join('')}
+          </select>`
+        :`<div style="font-size:13px;color:#9ca3af;padding:8px 0;">チームデータがありません</div>`)
+      :`<div style="display:flex;gap:8px;">
+          <input type="text" id="ti-prelim-input" value="${q}" placeholder="チームNo（例: 001）" inputmode="numeric"
+            style="flex:1;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;"/>
+          <button id="ti-prelim-search" style="padding:10px 18px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">検索</button>
+        </div>`;
     const searchBox=`<div style="margin-bottom:16px;">
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="ti-prelim-input" value="${q}" placeholder="チームNo（例: 001）" inputmode="numeric"
-          style="flex:1;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;"/>
-        <button id="ti-prelim-search" style="padding:10px 18px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">検索</button>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        ${pModeTab('select','チーム名から選ぶ')}
+        ${pModeTab('no','チームNoで入力')}
       </div>
+      ${pInputBlock}
     </div>`;
 
     let body='';
@@ -4288,7 +4337,7 @@ function rTournamentInfo(){
       body=`<div style="text-align:center;padding:24px;color:#9ca3af;">「${q}」のチームが見つかりませんでした</div>`;
     }
     else{
-      body=`<div style="text-align:center;padding:24px;color:#9ca3af;">チームNoを入力して検索してください</div>`;
+      body=`<div style="text-align:center;padding:24px;color:#9ca3af;">${pMode==='select'?'チームを選択してください':'チームNoを入力して検索してください'}</div>`;
     }
 
     return`<div style="padding:16px;max-width:480px;margin:0 auto;">
@@ -4298,6 +4347,22 @@ function rTournamentInfo(){
       </div>
       ${searchBox}
       ${body}
+    </div>`;
+  }
+
+  // ── サブ画面：チームNo検索（チーム名キーワード → チームNo一覧） ──
+  if(v==='teamsearch'){
+    const q=S._tsQuery||'';
+    return`<div style="padding:16px;max-width:480px;margin:0 auto;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+        <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
+        <div style="font-size:17px;font-weight:700;color:#111;">🪪 チームNoを検索</div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <input type="text" id="ts-input" value="${q}" placeholder="チーム名のキーワードを入力"
+          style="width:100%;padding:11px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;"/>
+      </div>
+      <div id="ts-list">${buildTeamSearchList(q)}</div>
     </div>`;
   }
 
@@ -4715,13 +4780,31 @@ function rCourtSearch(){
   const myCs=getValidMyTeam();
   const personalized=!!myCs;
   const expanded=!!S._courtSearchExpanded;
-  // 検索フォーム本体
+  // 検索フォーム本体（チーム名プルダウン／チームNo入力のタブ切替）
+  const csMode=S._csMode||'select';
+  const csModeTab=(v,l)=>`<button class="cs-mode-tab" data-mode="${v}" style="flex:1;padding:9px 4px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:${csMode===v?'#1D9E75':'#f3f4f6'};color:${csMode===v?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
+  const csTeamsSorted=(tourSrc.teams||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
+  const csTeamBlock=csMode==='select'
+    ?`<div>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チーム名を選択</div>
+        ${csTeamsSorted.length>0
+          ?`<select id="cs-team-select" style="font-size:16px;">
+              <option value="">-- チームを選択 --</option>
+              ${csTeamsSorted.map(t=>`<option value="${t.id}" ${String(q.teamNo)===String(t.id)?'selected':''}>No.${t.id}　${t.name}</option>`).join('')}
+            </select>`
+          :`<div style="font-size:13px;color:#9ca3af;padding:8px 0;">参加チームが登録されていません</div>`}
+      </div>`
+    :`<div>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チームNo</div>
+        <input type="text" id="cs-team-no" value="${q.teamNo}" placeholder="例: 073" style="font-size:18px;letter-spacing:2px;text-align:center;"/>
+      </div>`;
   const searchForm=`<div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        ${csModeTab('select','チーム名から選ぶ')}
+        ${csModeTab('no','チームNoで入力')}
+      </div>
       <div style="display:grid;gap:10px;">
-        <div>
-          <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チームNo</div>
-          <input type="text" id="cs-team-no" value="${q.teamNo}" placeholder="例: 073" style="font-size:18px;letter-spacing:2px;text-align:center;"/>
-        </div>
+        ${csTeamBlock}
         <div>
           <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">試合区分</div>
           ${tourMatchRules.length>0?`<select id="cs-match-code" style="font-size:16px;">
@@ -5857,6 +5940,7 @@ function bind(){
     const co=document.getElementById('te-code');if(co)tour.eventCode=co.value.trim();
     const na=document.getElementById('te-name');if(na)tour.eventName=na.value.trim();
     const gu=document.getElementById('te-gasurl');if(gu)tour.gasUrl=gu.value.trim();
+    const su=document.getElementById('te-sheeturl');if(su)tour.sheetUrl=su.value.trim();
     const psEl=document.getElementById('te-period-start');if(psEl)tour.eventPeriodStart=psEl.value;
     const peEl=document.getElementById('te-period-end');if(peEl)tour.eventPeriodEnd=peEl.value;
     const rpwEl=document.getElementById('te-reception-pw');if(rpwEl)tour.receptionPw=rpwEl.value.trim();
@@ -5885,7 +5969,7 @@ function bind(){
     }
   }
   // 各入力欄を自動保存（途中で他操作をしても入力が消えないように）
-  ['te-venue','te-code','te-name','te-gasurl','te-period-start','te-period-end','te-reception-pw','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
+  ['te-venue','te-code','te-name','te-gasurl','te-sheeturl','te-period-start','te-period-end','te-reception-pw','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.addEventListener('change',()=>{
       const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
@@ -6367,6 +6451,8 @@ function bind(){
           S._tiPrelimQuery=q;
           S._tiPrelimSelected=S._tiPrelim.find(t=>t.teamNo===q||String(parseInt(t.teamNo,10))===String(parseInt(q,10)))||null;
         }
+      } else if(view==='teamsearch'){
+        S._tsQuery='';
       } else if(view==='bracket'){
         S._tiBracket=null;S._tiBracketSide='left';
         const json=await fetchTournamentInfo('getBracket');
@@ -6405,6 +6491,26 @@ function bind(){
   };
   const bgrem=document.getElementById('btn-go-remaining');if(bgrem)bgrem.onclick=()=>openTournamentInfoView('system');
   const bgbr=document.getElementById('btn-go-bracket');if(bgbr)bgbr.onclick=()=>openTournamentInfoView('bracket');
+  // ホーム：チームNoを検索
+  const bgts=document.getElementById('btn-go-teamsearch');if(bgts)bgts.onclick=()=>openTournamentInfoView('teamsearch');
+  // ホーム：大会スプレッドシート（大会設定のsheetUrlを開く）
+  const bgssheet=document.getElementById('btn-go-spreadsheet');
+  if(bgssheet)bgssheet.onclick=async()=>{
+    const eventCode=await resolveActiveEventCode();
+    if(!eventCode){
+      alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+      return;
+    }
+    await syncAllFromGitHub(eventCode);
+    const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
+    if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+    const url=tour&&tour.sheetUrl&&tour.sheetUrl.trim();
+    if(!url){
+      alert('この大会の対戦表スプレッドシートURLがまだ設定されていません。\n管理者にお問い合わせください。');
+      return;
+    }
+    window.open(url,'_blank');
+  };
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
   // 対戦コート：他チーム検索の折りたたみトグル
   const bcst=document.getElementById('btn-cs-toggle');
@@ -6452,11 +6558,23 @@ function bind(){
     await syncAllFromGitHub(atour.eventCode);
     render();
   };
+  // 対戦コート検索：チーム名／チームNoのタブ切替（入力中の試合区分・チームは保持）
+  document.querySelectorAll('.cs-mode-tab').forEach(el=>el.addEventListener('click',()=>{
+    const cur=S._courtSearchQuery||{teamNo:'',matchCode:''};
+    const selEl=document.getElementById('cs-team-select');
+    const noEl=document.getElementById('cs-team-no');
+    const teamNo=selEl?selEl.value:(noEl?noEl.value.trim():cur.teamNo);
+    const mcEl=document.getElementById('cs-match-code');
+    S._courtSearchQuery={teamNo,matchCode:mcEl?mcEl.value.trim():cur.matchCode};
+    S._csMode=el.dataset.mode;
+    render();
+  }));
   const bcss=document.getElementById('btn-cs-search');
   if(bcss)bcss.onclick=async()=>{
-    const teamNo=(document.getElementById('cs-team-no')||{value:''}).value.trim();
+    const csSel=document.getElementById('cs-team-select');
+    const teamNo=csSel?csSel.value:(document.getElementById('cs-team-no')||{value:''}).value.trim();
     const matchCode=(document.getElementById('cs-match-code')||{value:''}).value.trim();
-    if(!teamNo&&!matchCode){alert('チームNoまたは試合区分を選択・入力してください');return;}
+    if(!teamNo&&!matchCode){alert('チームを選択するか、チームNoまたは試合区分を入力してください');return;}
     S._courtSearchQuery={teamNo,matchCode};
     // GitHubから最新データを取得してから検索
     const activeDataCs=await fetchActiveEvent().catch(()=>null);
@@ -6849,6 +6967,26 @@ function bind(){
   };
   if(tps)tps.onclick=doPrelimSearch;
   if(tpi)tpi.addEventListener('keydown',e=>{if(e.key==='Enter')doPrelimSearch();});
+  // 予選結果 - チーム名／チームNoのタブ切替
+  document.querySelectorAll('.ti-prelim-mode-tab').forEach(el=>el.addEventListener('click',()=>{
+    S._tiPrelimMode=el.dataset.mode;
+    render();
+  }));
+  // 予選結果 - チーム名プルダウンで選択 → 即結果表示
+  const tpsel=document.getElementById('ti-prelim-select');
+  if(tpsel)tpsel.addEventListener('change',()=>{
+    const v=tpsel.value;
+    S._tiPrelimQuery=v;
+    S._tiPrelimSelected=v?(S._tiPrelim.find(t=>String(t.teamNo)===v||String(parseInt(t.teamNo,10))===String(parseInt(v,10)))||null):null;
+    render();
+  });
+  // チームNo検索 - キーワード入力でリアルタイム絞り込み（一覧のみ差し替えてフォーカス維持）
+  const tsi=document.getElementById('ts-input');
+  if(tsi)tsi.addEventListener('input',()=>{
+    S._tsQuery=tsi.value;
+    const list=document.getElementById('ts-list');
+    if(list)list.innerHTML=buildTeamSearchList(S._tsQuery);
+  });
 }
 // ===== カメラアプリ等からのディープリンク起動 =====
 // QRに埋め込まれたURL（…/#/m/＜試合ID＞）を起動時に解釈し、
