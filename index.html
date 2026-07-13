@@ -4403,7 +4403,7 @@ function rTournamentInfo(){
         <input type="text" id="ts-input" value="${q}" placeholder="チーム名のキーワードを入力"
           style="width:100%;padding:11px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;"/>
       </div>
-      <div id="ts-list">${buildTeamSearchList(q)}</div>
+      <div id="ts-list">${S._tiLoading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`:buildTeamSearchList(q)}</div>
     </div>`;
   }
 
@@ -4771,6 +4771,17 @@ function rCourtSearch(){
   const q=S._courtSearchQuery||{teamNo:'',matchCode:''};
   const results=S._courtSearchResults||null;
   const tourSrc=activeTour()||{teams:[],matchRules:[]};
+
+  // データ同期中はローディング表示（先に画面遷移して裏で通信するため）
+  if(S._csLoading){
+    return`<div style="padding:16px;max-width:480px;margin:0 auto;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button id="btn-bk-court-search" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
+        <div style="font-size:17px;font-weight:700;color:#111;">🔍 対戦コートを検索</div>
+      </div>
+      <div style="text-align:center;padding:48px 0;color:#9ca3af;">最新の対戦データを読み込み中...</div>
+    </div>`;
+  }
 
   let resultHtml='';
   if(results!==null){
@@ -6256,15 +6267,21 @@ function bind(){
   }));
 
   const bgrc=document.getElementById('btn-go-reception');if(bgrc)bgrc.onclick=async()=>{
+    // 【体感速度改善】先に受付画面へ遷移し、通信は裏で実行する
+    resetReception();S.phase='reception';render();
     const eventCode=await resolveActiveEventCode();
     if(!eventCode){
-      alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+      if(S.phase==='reception'){
+        alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+        resetReception();S.phase='setup';render();
+      }
       return;
     }
     await syncAllFromGitHub(eventCode);
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
-    resetReception();S.phase='reception';render();
+    // 同期で最新のチーム一覧に更新されるため、受付画面にいる間だけ再描画
+    if(S.phase==='reception')render();
   };
   // ===== 大会受付フロー =====
   // ログイン画面：チームNo入力でチーム名をライブ表示
@@ -6404,8 +6421,15 @@ function bind(){
   const brch=document.getElementById('btn-rcp-home');
   if(brch)brch.onclick=()=>{resetReception();S.phase='setup';render();};
   const bgmi=document.getElementById('btn-go-matchid');if(bgmi)bgmi.onclick=async()=>{
+    // 【体感速度改善】カメラ起動前に通信＋開催期間チェックが必須のため画面遷移はできないが、
+    // 押した瞬間にボタン表示を変えて反応を返す
+    const miOrig=bgmi.innerHTML;
+    bgmi.disabled=true;bgmi.style.opacity='0.6';
+    bgmi.innerHTML='<span style="font-size:22px;">⏳</span><div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">確認中...</div>';
+    const miRestore=()=>{bgmi.disabled=false;bgmi.style.opacity='';bgmi.innerHTML=miOrig;};
     const eventCode=await resolveActiveEventCode();
     if(!eventCode){
+      miRestore();
       alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
       return;
     }
@@ -6417,6 +6441,7 @@ function bind(){
     const ps=tour&&tour.eventPeriodStart;
     const pe=tour&&tour.eventPeriodEnd;
     if(!ps||!pe){
+      miRestore();
       alert('試合開催期間が設定されていません。\n管理者にお問い合わせください。');
       return;
     }
@@ -6424,16 +6449,25 @@ function bind(){
     const start=new Date(ps);
     const end=new Date(pe);
     const fmt=d=>`${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    if(now<start){alert(`試合開催期間は${fmt(start)}からです。`);return;}
-    if(now>end){alert('今大会の試合開催期間は終了しました。');return;}
+    if(now<start){miRestore();alert(`試合開催期間は${fmt(start)}からです。`);return;}
+    if(now>end){miRestore();alert('今大会の試合開催期間は終了しました。');return;}
+    miRestore();
     S._matchIdInput='';S._matchIdError='';startQRScan();
   };
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
   const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{const m=S._matchConfirmMode;S._matchConfirmMode=null;S.phase=S._matchConfirmFrom||(m==='resultOnly'?'resultOnlyMatchId':'matchId');S._matchConfirmFrom=null;render();};
   const bgcs=document.getElementById('btn-go-court-search');if(bgcs)bgcs.onclick=async()=>{
+    // 【体感速度改善】先に画面遷移してローディング表示し、通信は裏で実行する
+    S._courtSearchExpanded=false;
+    S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;
+    S._csLoading=true;S.phase='courtSearch';render();
     const eventCode=await resolveActiveEventCode();
     if(!eventCode){
-      alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+      S._csLoading=false;
+      if(S.phase==='courtSearch'){
+        alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+        S.phase='setup';render();
+      }
       return;
     }
     // 配信中の大会コードでデータを同期（失敗してもローカルデータで続行）
@@ -6441,47 +6475,54 @@ function bind(){
     // ローカルのactiveTourも更新
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+    if(S.phase!=='courtSearch'){S._csLoading=false;return;}
     // 受付済みチームが今の大会と一致していれば、自動でそのチームの結果を表示
     const my=getValidMyTeam(eventCode);
     if(my&&my.teamId){
-      S._courtSearchExpanded=false;
       S._courtSearchQuery={teamNo:String(my.teamId),matchCode:''};
       S._courtSearchResults=runCourtSearch(String(my.teamId),'');
-      S.phase='courtSearch';render();
-      return;
     }
-    S._courtSearchExpanded=false;
-    S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;S.phase='courtSearch';render();
+    S._csLoading=false;render();
   };
   // ホーム：パーソナライズ解除
   const bcmt=document.getElementById('btn-clear-myteam');
   if(bcmt)bcmt.onclick=()=>{clearMyTeam();render();};
   // 大会情報サブ画面へのショートカット共通処理
   async function openTournamentInfoView(view){
+    // 【体感速度改善】先に画面遷移してローディング表示し、通信は裏で実行する
+    S._tiView=view;S._tiLoading=true;S._tiError=null;
+    if(view==='schedule')S._tiSchedule=[];
+    else if(view==='regulation'){S._tiRegulation='';S._tiSections=null;}
+    else if(view==='prelim'){S._tiPrelim=[];S._tiPrelimQuery='';S._tiPrelimSelected=null;}
+    else if(view==='teamsearch')S._tsQuery='';
+    else if(view==='bracket'){S._tiBracket=null;S._tiBracketSide='left';}
+    S.phase='tournamentInfo';render();
+
     const eventCode=await resolveActiveEventCode();
+    // 通信中にユーザーが「戻る」等で画面を離れた場合は結果を反映しない
+    const stillHere=()=>S.phase==='tournamentInfo'&&S._tiView===view;
     if(!eventCode){
-      alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+      if(stillHere()){
+        alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
+        S._tiView=null;S._tiLoading=false;S.phase='setup';render();
+      }
       return;
     }
     await syncAllFromGitHub(eventCode);
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
-    S._tiView=view;S._tiLoading=true;S._tiError=null;
-    S.phase='tournamentInfo';render();
+    if(!stillHere())return;
     try{
       if(view==='schedule'){
-        S._tiSchedule=[];
         const json=await fetchTournamentInfo('getSchedule');
         if(json.error)throw new Error('GAS: '+json.error);
         S._tiSchedule=json.schedule||[];
       } else if(view==='regulation'){
-        S._tiRegulation='';
         const json=await fetchTournamentInfo('getRegulation');
         if(json.error)throw new Error('GAS: '+json.error);
         S._tiSections=json.sections||null;
         S._tiRegulation=json.regulation||'';
       } else if(view==='prelim'){
-        S._tiPrelim=[];S._tiPrelimQuery='';S._tiPrelimSelected=null;
         const json=await fetchTournamentInfo('getPrelim');
         if(json.error)throw new Error('GAS: '+json.error);
         S._tiPrelim=json.teams||[];
@@ -6492,15 +6533,13 @@ function bind(){
           S._tiPrelimQuery=q;
           S._tiPrelimSelected=S._tiPrelim.find(t=>t.teamNo===q||String(parseInt(t.teamNo,10))===String(parseInt(q,10)))||null;
         }
-      } else if(view==='teamsearch'){
-        S._tsQuery='';
       } else if(view==='bracket'){
-        S._tiBracket=null;S._tiBracketSide='left';
         const json=await fetchTournamentInfo('getBracket');
         if(json.error)throw new Error('GAS: '+json.error);
         S._tiBracket={rounds:json.rounds||[]};
       }
     }catch(e){S._tiError='取得に失敗しました: '+e.message;}
+    if(!stillHere())return;
     S._tiLoading=false;render();
   }
 
@@ -6509,8 +6548,15 @@ function bind(){
   const bgpre=document.getElementById('btn-go-prelim');if(bgpre)bgpre.onclick=()=>openTournamentInfoView('prelim');
   // 「試合結果のみを送信」→ QRスキャン（結果のみモード）。配信中・開催期間中のみ
   const bgro=document.getElementById('btn-go-result-only');if(bgro)bgro.onclick=async()=>{
+    // 【体感速度改善】カメラ起動前に通信＋開催期間チェックが必須のため画面遷移はできないが、
+    // 押した瞬間にボタン表示を変えて反応を返す
+    const roOrig=bgro.innerHTML;
+    bgro.disabled=true;bgro.style.opacity='0.6';
+    bgro.innerHTML='<span style="font-size:22px;">⏳</span><div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">確認中...</div>';
+    const roRestore=()=>{bgro.disabled=false;bgro.style.opacity='';bgro.innerHTML=roOrig;};
     const eventCode=await resolveActiveEventCode();
     if(!eventCode){
+      roRestore();
       alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
       return;
     }
@@ -6520,6 +6566,7 @@ function bind(){
     const ps=tour&&tour.eventPeriodStart;
     const pe=tour&&tour.eventPeriodEnd;
     if(!ps||!pe){
+      roRestore();
       alert('試合開催期間が設定されていません。\n管理者にお問い合わせください。');
       return;
     }
@@ -6527,8 +6574,9 @@ function bind(){
     const start=new Date(ps);
     const end=new Date(pe);
     const fmt=d=>`${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    if(now<start){alert(`試合開催期間は${fmt(start)}からです。`);return;}
-    if(now>end){alert('今大会の試合開催期間は終了しました。');return;}
+    if(now<start){roRestore();alert(`試合開催期間は${fmt(start)}からです。`);return;}
+    if(now>end){roRestore();alert('今大会の試合開催期間は終了しました。');return;}
+    roRestore();
     S._matchIdInput='';S._matchIdError='';startQRScan('resultOnly');
   };
   const bgrem=document.getElementById('btn-go-remaining');if(bgrem)bgrem.onclick=()=>openTournamentInfoView('system');
