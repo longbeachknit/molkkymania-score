@@ -6586,12 +6586,8 @@ function bind(){
   // ホーム：大会スプレッドシート（大会設定のsheetUrlを開く）
   const bgssheet=document.getElementById('btn-go-spreadsheet');
   if(bgssheet)bgssheet.onclick=async()=>{
-    // 【体感速度改善＋ポップアップブロック対策】ユーザー操作の直後に空タブを開き、
-    // 通信完了後にURLを流し込む（awaitの後のwindow.openはブロックされやすいため）
-    const w=window.open('about:blank','_blank');
     const eventCode=await resolveActiveEventCode();
     if(!eventCode){
-      if(w)w.close();
       alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
       return;
     }
@@ -6600,11 +6596,10 @@ function bind(){
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
     const url=tour&&tour.sheetUrl&&tour.sheetUrl.trim();
     if(!url){
-      if(w)w.close();
       alert('この大会の対戦表スプレッドシートURLがまだ設定されていません。\n管理者にお問い合わせください。');
       return;
     }
-    if(w)w.location=url;else window.open(url,'_blank');
+    window.open(url,'_blank');
   };
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
   // 対戦コート：他チーム検索の折りたたみトグル
