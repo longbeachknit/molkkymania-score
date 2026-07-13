@@ -1245,6 +1245,12 @@ async function submitResult(){
   })});
   const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
   const json=await res.json();
+  // 他端末が既に同じ試合を送信済み → エラーではなく「送信済み」として扱う
+  if(json.status==='duplicate'){
+    const err=new Error(json.message||'この試合は既に送信済みです');
+    err.isDuplicate=true;
+    throw err;
+  }
   if(json.status!=='ok')throw new Error(json.message||'送信エラー');
   return {teamRows,personalRows,summaryRows};
 }
@@ -1342,6 +1348,12 @@ async function submitResultOnly(){
   })});
   const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
   const json=await res.json();
+  // 他端末が既に同じ試合を送信済み → エラーではなく「送信済み」として扱う
+  if(json.status==='duplicate'){
+    const err=new Error(json.message||'この試合は既に送信済みです');
+    err.isDuplicate=true;
+    throw err;
+  }
   if(json.status!=='ok')throw new Error(json.message||'送信エラー');
   return {teamRows};
 }
@@ -1349,20 +1361,25 @@ async function submitResultOnly(){
 async function handleResultOnlySubmit(){
   S._roSubmitting=true;S._roSubmitError='';render();
   let result=null;
+  let isDup=false;
   try{
     result=await submitResultOnly();
   }catch(e){
     console.error(e);
-    S._roSubmitError=e.message||'送信に失敗しました';
+    isDup=e.isDuplicate===true;
+    if(!isDup) S._roSubmitError=e.message||'送信に失敗しました';
   }
   S._roSubmitting=false;
+  // 結果のみ用のリセット：試合状態をクリアして最初の画面へ
+  const resetRO=()=>{
+    S._roScores=null;S._roEarly=false;S._roMolkoutWinner=null;S._matchConfirmMode=null;S._savedMatchIdData=null;
+    S._matchId='';S._teamNos=['',''];S.matchIdData=null;
+    S.phase='setup';render();
+  };
   if(result){
-    showSubmitConfirm(result.teamRows,[],()=>{
-      // 結果のみ用のリセット：試合状態をクリアして最初の画面へ
-      S._roScores=null;S._roEarly=false;S._roMolkoutWinner=null;S._matchConfirmMode=null;S._savedMatchIdData=null;
-      S._matchId='';S._teamNos=['',''];S.matchIdData=null;
-      S.phase='setup';render();
-    });
+    showSubmitConfirm(result.teamRows,[],resetRO);
+  }else if(isDup){
+    showDuplicateNotice(resetRO);
   }else{
     render();
   }
@@ -1372,20 +1389,44 @@ async function handleSubmitAndReset(){
   const btn=document.getElementById('btn-submit-reset');
   if(btn){btn.disabled=true;btn.textContent='送信中...';}
   let result=null;
-  let errMsg=null;
+  let isDup=false;
   try{
     result=await submitResult();
   }catch(e){
     console.error(e);
-    errMsg=e.message||'送信に失敗しました';
+    isDup=e.isDuplicate===true;
+    // 重複以外のエラー時のみ、再送信ボタンを表示する
+    if(!isDup && btn){
+      btn.disabled=false;btn.textContent='⚠️ 失敗 - もう一度送信する';btn.style.background='#E24B4A';
+    }
   }
-  // 送信確認モーダル表示
   if(result){
     showSubmitConfirm(result.teamRows,result.personalRows,()=>doReset());
-  } else {
-    // エラー時：再送信ボタンのみ表示
-    if(btn){btn.disabled=false;btn.textContent='⚠️ 失敗 - もう一度送信する';btn.style.background='#E24B4A';}
+  } else if(isDup){
+    // 他端末が既に送信済み：エラーではないので、確認後リセットして最初へ戻す
+    showDuplicateNotice(()=>doReset());
   }
+}
+
+// 他端末が既に同じ試合を送信済みだった場合の通知モーダル
+function showDuplicateNotice(onClose){
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML=`
+    <div style="background:#fff;border-radius:12px;max-width:400px;width:100%;padding:24px;text-align:center;">
+      <div style="font-size:40px;margin-bottom:12px;">✅</div>
+      <div style="font-size:17px;font-weight:700;color:#111;margin-bottom:10px;">この試合は送信済みです</div>
+      <div style="font-size:14px;color:#6b7280;line-height:1.6;margin-bottom:20px;">
+        同じ試合の結果が、既に他の端末から送信されています。<br>
+        あなたの端末からの送信は不要です。
+      </div>
+      <button id="dup-ok" style="width:100%;padding:12px;font-size:15px;font-weight:700;background:#1D9E75;color:#fff;border:none;border-radius:8px;">OK</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#dup-ok').onclick=()=>{
+    overlay.remove();
+    if(onClose)onClose();
+  };
 }
 
 function showSubmitConfirm(teamRows,personalRows,onClose){
