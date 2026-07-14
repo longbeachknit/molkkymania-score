@@ -496,6 +496,7 @@ async function syncSettingsFromGitHub(eventCode){
     if(data.eventPeriodStart!==undefined)tour.eventPeriodStart=data.eventPeriodStart;
     if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
     if(data.receptionPw!==undefined)tour.receptionPw=data.receptionPw;
+    if(data.bracketTeamCount!==undefined)tour.bracketTeamCount=Number(data.bracketTeamCount)||64;
     if(data.sheetUrl!==undefined)tour.sheetUrl=data.sheetUrl;
     if(data.systemChart!==undefined)tour.systemChart=data.systemChart;
     if(data.courtLayout!==undefined)tour.courtLayout=data.courtLayout;
@@ -517,6 +518,7 @@ async function syncSettingsFromGitHub(eventCode){
       eventPeriodStart:data.eventPeriodStart||'',
       eventPeriodEnd:data.eventPeriodEnd||'',
       receptionPw:data.receptionPw||'',
+      bracketTeamCount:Number(data.bracketTeamCount)||64,
       systemChart:data.systemChart||null,
       courtLayout:data.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}}
     });
@@ -756,6 +758,7 @@ function makeTournament(overrides){
     teams:[],matches:[],
     eventPeriodStart:'',eventPeriodEnd:'',
     receptionPw:'',
+    bracketTeamCount:64,
     systemChart:null,
     courtLayout:{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}}
   },overrides);
@@ -2404,6 +2407,13 @@ function rAdminTourEdit(){
           <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">大会受付の際に参加者が入力するパスワードです。会場で掲示してください。</div>
           <input type="text" id="te-reception-pw" value="${tour.receptionPw||''}" placeholder="例: 1234" maxlength="4" inputmode="numeric" style="font-size:18px;letter-spacing:4px;text-align:center;"/>
         </div>
+        <div style="border-top:1px solid #e5e7eb;margin-top:4px;padding-top:12px;">
+          <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🏆 決勝トーナメントのチーム数</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">決勝トーナメント表の形（ラウンド数・シードの有無）が自動で切り替わります。24・48チームでは上位チームが1回戦免除（シード）になります。</div>
+          <select id="te-bracket-count" style="font-size:14px;">
+            ${[16,24,32,48,64].map(n=>`<option value="${n}" ${Number(tour.bracketTeamCount||64)===n?'selected':''}>${n}チーム</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div style="font-size:11px;color:#9ca3af;margin-top:10px;">入力内容は自動で保存されます。「保存して戻る」を押すと全端末に配信されます。</div>
     </div>
@@ -3650,6 +3660,7 @@ async function publishSettings(tour,opts){
     eventPeriodStart: tour.eventPeriodStart||'',
     eventPeriodEnd: tour.eventPeriodEnd||'',
     receptionPw: tour.receptionPw||'',
+    bracketTeamCount: Number(tour.bracketTeamCount)||64,
     systemChart: tour.systemChart||null,
     courtLayout: tour.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}},
     publishedAt: new Date().toISOString()
@@ -4153,105 +4164,181 @@ function rTournamentInfo(){
     </div>`;
   }
 
-  // ── サブ画面：決勝トーナメント表（縦型・右へ収束） ──
+  // ── サブ画面：決勝トーナメント表（縦型・右へ収束／可変チーム数・シード対応） ──
   if(v==='bracket'){
     const loading=S._tiLoading;
     const err=S._tiError;
-    const data=S._tiBracket;            // {rounds:[{name,matches:[{team1,team2,win1,win2}]}]}
+    const data=S._tiBracket;      // {rounds:[{name,matches:[{team1,team2,win1,win2}]}]}
 
-    const rounds=(data&&Array.isArray(data.rounds))?data.rounds:[];
-    const ROUND_NAMES=['1回戦','2回戦','3回戦','4回戦','準決勝','決勝'];
-    const ROUND_SIZES=[32,16,8,4,2,1];   // 各ラウンドの試合数
+    // 対象大会の決勝Tチーム数（管理者画面で設定 → _settings.json 経由で配信）
+    const _tourB=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):activeTour();
+    const teamCount=Number(_tourB&&_tourB.bracketTeamCount)||64;
 
-    function roundByIndex(i){
-      const want=ROUND_NAMES[i];
-      const found=rounds.find(r=>String(r.name).trim()===want)||rounds[i];
-      const ms=(found&&Array.isArray(found.matches))?found.matches.slice():[];
-      while(ms.length<ROUND_SIZES[i])ms.push({team1:'',team2:'',win1:false,win2:false});
-      ms.length=ROUND_SIZES[i];
-      return ms;
-    }
+    const rawRounds=(data&&Array.isArray(data.rounds))?data.rounds:[];
     function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-    // 優勝チーム
-    const finalMatch=roundByIndex(5)[0]||{team1:'',team2:'',win1:false,win2:false};
-    const champion=finalMatch.win1?finalMatch.team1:(finalMatch.win2?finalMatch.team2:'');
+    /* チーム数から構造を導出。
+       ・2の累乗（16/32/64）… シードなし
+       ・それ以外（24/48）  … 上位がシード（1回戦免除）。シードは常にペアの上側。
+       例) 24チーム: シード8 + 1回戦8試合 → 2回戦16人 → 8→4→2→1（5ラウンド） */
+    function bracketStructure(N){
+      let B=1; while(B<N) B*=2;
+      const half=B/2;
+      let seeds,r1Matches,r2Entrants;
+      if(N===B){ seeds=0; r1Matches=N/2; r2Entrants=N/2; }
+      else { r2Entrants=half; const r1Players=2*(N-half); r1Matches=r1Players/2; seeds=N-r1Players; }
+      const roundSizes=[];
+      if(r1Matches) roundSizes.push(r1Matches);
+      let e=r2Entrants;
+      while(e>=2){ roundSizes.push(e/2); e/=2; }
+      return {seeds:seeds,r1Matches:r1Matches,r2Entrants:r2Entrants,roundSizes:roundSizes,hasSeeds:seeds>0};
+    }
+    const ST=bracketStructure(teamCount);
 
-    /* 縦型トーナメントSVGを組み立てる。
-       64チームを縦一列の起点（最左）にし、6ラウンドかけて右へ収束。
-       ・途中の箱は描かず、線のみ。
-       ・チーム名は最左列だけに表示。
-       ・勝ち上がったチームのラインを赤くする。
-       ・最右に王冠＋優勝枠。 */
+    // ラウンドr（0始まり）の試合配列を、必要数ぴったりに整えて返す（ヘッダー名に依存しない）
+    function roundMatches(r){
+      const want=ST.roundSizes[r]||0;
+      const src=rawRounds[r];
+      const ms=(src&&Array.isArray(src.matches))?src.matches.slice():[];
+      while(ms.length<want)ms.push({team1:'',team2:'',win1:false,win2:false});
+      ms.length=want;
+      return ms;
+    }
+    const R=[];
+    for(let r=0;r<ST.roundSizes.length;r++)R.push(roundMatches(r));
+
+    // 優勝
+    const finalM=(R[ST.roundSizes.length-1]||[])[0]||{team1:'',team2:'',win1:false,win2:false};
+    const champion=finalM.win1?finalM.team1:(finalM.win2?finalM.team2:'');
+
     function buildVerticalSVG(){
-      const LEAVES=64, ROUNDS=6;
-      const ROW_H=20, PAD_TOP=16, PAD_BOTTOM=16;
-      const LABEL_W=150;          // 最左：チーム名の列幅
-      const COL_W=44;             // 1ラウンドあたりの横幅（線の長さ）
-      const CROWN_W=120;          // 最右：王冠＋優勝枠の幅
-      const svgH=PAD_TOP+LEAVES*ROW_H+PAD_BOTTOM;
-      const svgW=LABEL_W+ROUNDS*COL_W+CROWN_W;
+      const ROW_H=22, PAD_TOP=16, PAD_BOTTOM=16;
+      const LABEL_W=140, COL_W=46, CROWN_W=120;
       const BLACK='#111', RED='#dc2626';
 
-      function leafY(i){return PAD_TOP+i*ROW_H+ROW_H/2;}
-      function nodeY(r,m){ if(r===0)return leafY(m); return (nodeY(r-1,2*m)+nodeY(r-1,2*m+1))/2; }
-      function roundX(r){ return LABEL_W + r*COL_W; }
-
-      // ラウンド r（1..6）の試合 m の勝者サイド: 0=未確定, 1=上(team1), 2=下(team2)
-      function matchWinnerSide(r,m){
-        const ms=roundByIndex(r-1);          // ROUND_NAMES index = r-1
-        const mm=ms[m];
-        if(!mm)return 0;
-        return mm.win1?1:(mm.win2?2:0);
-      }
-
-      const parts=[];
-
-      // 最左：チーム名（1回戦32試合 × 上下 = 64スロット）
-      const first=roundByIndex(0);
-      for(let m=0;m<first.length;m++){
-        const t1=esc(String(first[m].team1||'').trim());
-        const t2=esc(String(first[m].team2||'').trim());
-        const yTop=leafY(2*m), yBot=leafY(2*m+1);
-        if(t1!=='')parts.push(`<text x="6" y="${yTop}" dominant-baseline="central" font-size="10" fill="#111">${t1.length>13?t1.slice(0,13)+'…':t1}</text>`);
-        if(t2!=='')parts.push(`<text x="6" y="${yBot}" dominant-baseline="central" font-size="10" fill="#111">${t2.length>13?t2.slice(0,13)+'…':t2}</text>`);
-      }
-
-      // 連結線をラウンドごとに描く
-      for(let r=1;r<=ROUNDS;r++){
-        const cnt=LEAVES>>r;                 // このラウンドの試合数
-        const xChildStart=roundX(r-1);
-        const xMerge=roundX(r);
-        for(let m=0;m<cnt;m++){
-          const yTop=nodeY(r-1,2*m);
-          const yBot=nodeY(r-1,2*m+1);
-          const yPar=nodeY(r,m);
-          const ws=matchWinnerSide(r,m);     // 0/1/2
-          const redTop=ws===1, redBot=ws===2, redOut=ws!==0;
-          // 子→合流（横）
-          parts.push(`<line x1="${xChildStart}" y1="${yTop}" x2="${xMerge}" y2="${yTop}" stroke="${redTop?RED:BLACK}" stroke-width="${redTop?2.5:1}"/>`);
-          parts.push(`<line x1="${xChildStart}" y1="${yBot}" x2="${xMerge}" y2="${yBot}" stroke="${redBot?RED:BLACK}" stroke-width="${redBot?2.5:1}"/>`);
-          // 合流（縦・親中心で分割）
-          parts.push(`<line x1="${xMerge}" y1="${yTop}" x2="${xMerge}" y2="${yPar}" stroke="${redTop?RED:BLACK}" stroke-width="${redTop?2.5:1}"/>`);
-          parts.push(`<line x1="${xMerge}" y1="${yPar}" x2="${xMerge}" y2="${yBot}" stroke="${redBot?RED:BLACK}" stroke-width="${redBot?2.5:1}"/>`);
-          // 親→次ラウンド（横）
-          parts.push(`<line x1="${xMerge}" y1="${yPar}" x2="${roundX(r)+COL_W}" y2="${yPar}" stroke="${redOut?RED:BLACK}" stroke-width="${redOut?2.5:1}"/>`);
+      /* 最左のリーフを作る。
+         シードあり: 2回戦の各試合について「シード(単独1行)」＋「1回戦ペア(2行)」を交互に置く
+         シードなし: 1回戦の各試合＝ペア(2行) */
+      const leaves=[];
+      if(ST.hasSeeds){
+        const r2=R[1]||[];
+        for(let m=0;m<(ST.roundSizes[1]||0);m++){
+          leaves.push({type:'seed', name:(r2[m]&&r2[m].team1)||''});
+          const p=(R[0]||[])[m]||{team1:'',team2:''};
+          leaves.push({type:'pair', m:m, names:[p.team1||'', p.team2||'']});
+        }
+      }else{
+        const r1=R[0]||[];
+        for(let m=0;m<(ST.roundSizes[0]||0);m++){
+          const p=r1[m]||{team1:'',team2:''};
+          leaves.push({type:'pair', m:m, names:[p.team1||'', p.team2||'']});
         }
       }
 
+      // 各リーフのY座標
+      let rows=0; leaves.forEach(l=>{rows+=(l.type==='seed'?1:2);});
+      const svgH=PAD_TOP+rows*ROW_H+PAD_BOTTOM;
+      const nRounds=ST.roundSizes.length;
+      const svgW=LABEL_W+nRounds*COL_W+CROWN_W;
+
+      let yc=PAD_TOP; const LY=[];
+      leaves.forEach(l=>{
+        if(l.type==='seed'){ LY.push({el:l,y:yc+ROW_H/2}); yc+=ROW_H; }
+        else{
+          const y1=yc+ROW_H/2, y2=yc+ROW_H+ROW_H/2;
+          LY.push({el:l,y1:y1,y2:y2,y:(y1+y2)/2}); yc+=2*ROW_H;
+        }
+      });
+
+      const parts=[];
+      const x0=LABEL_W;
+      function nameText(t,x,y){
+        const s=esc(String(t||'').trim());
+        if(s==='')return '';
+        return `<text x="${x}" y="${y}" dominant-baseline="central" font-size="10" fill="#111">${s.length>12?s.slice(0,12)+'…':s}</text>`;
+      }
+      function seg(x1,y1,x2,y2,red){
+        return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${red?RED:BLACK}" stroke-width="${red?2.5:1}"/>`;
+      }
+      function winSide(m){ if(!m)return 0; return m.win1?1:(m.win2?2:0); }
+
+      // 最左：チーム名 ＋ 1回戦（ペア）の合流線
+      LY.forEach(e=>{
+        const l=e.el;
+        if(l.type==='seed'){
+          parts.push(nameText(l.name,4,e.y));
+        }else{
+          parts.push(nameText(l.names[0],4,e.y1));
+          parts.push(nameText(l.names[1],4,e.y2));
+          const mm=(R[0]||[])[l.m]||{};
+          const ws=winSide(mm), rT=ws===1, rB=ws===2, rO=ws!==0;
+          const xM=x0+COL_W;
+          parts.push(seg(x0,e.y1,xM,e.y1,rT));
+          parts.push(seg(x0,e.y2,xM,e.y2,rB));
+          parts.push(seg(xM,e.y1,xM,e.y,rT));
+          parts.push(seg(xM,e.y,xM,e.y2,rB));
+          parts.push(seg(xM,e.y,xM+COL_W,e.y,rO));   // 次ラウンドへ
+        }
+      });
+
+      // ノード（次ラウンド以降の合流点）を作る
+      let nodes=[], colBase;
+      if(ST.hasSeeds){
+        // 2回戦: (シード, 1回戦勝者) のペアで合流
+        const r2=R[1]||[];
+        const xM=x0+2*COL_W;
+        for(let m=0;m<(ST.roundSizes[1]||0);m++){
+          const top=LY[2*m], bot=LY[2*m+1];
+          if(!top||!bot)continue;
+          const yT=top.y, yB=bot.y, yP=(yT+yB)/2;
+          const ws=winSide(r2[m]), rT=ws===1, rB=ws===2, rO=ws!==0;
+          // シードは最左からこの列まで一直線
+          parts.push(seg(x0,yT,xM,yT,rT));
+          parts.push(seg(xM,yT,xM,yP,rT));
+          parts.push(seg(xM,yP,xM,yB,rB));
+          parts.push(seg(xM,yP,xM+COL_W,yP,rO));
+          nodes.push({y:yP});
+        }
+        colBase=xM;
+      }else{
+        LY.forEach(e=>nodes.push({y:e.y}));
+        colBase=x0+COL_W;
+      }
+
+      // 残りのラウンド
+      const startR=ST.hasSeeds?2:1;
+      for(let r=startR;r<ST.roundSizes.length;r++){
+        const md=R[r]||[];
+        const xM=colBase+COL_W;
+        const next=[];
+        for(let m=0;m<ST.roundSizes[r];m++){
+          const a=nodes[2*m], b=nodes[2*m+1];
+          if(!a||!b)continue;
+          const yT=a.y, yB=b.y, yP=(yT+yB)/2;
+          const ws=winSide(md[m]), rT=ws===1, rB=ws===2, rO=ws!==0;
+          parts.push(seg(xM,yT,xM,yP,rT));
+          parts.push(seg(xM,yP,xM,yB,rB));
+          parts.push(seg(xM,yP,xM+COL_W,yP,rO));
+          next.push({y:yP});
+        }
+        nodes=next; colBase=xM;
+      }
+
       // 最右：王冠＋優勝枠
-      const yFinal=nodeY(ROUNDS,0);
-      const xCrown=roundX(ROUNDS)+COL_W;
-      const champWon=matchWinnerSide(ROUNDS,0)!==0 && champion!=='';
-      const cName=esc(String(champion||'').trim());
-      parts.push(`<text x="${xCrown+CROWN_W/2-22}" y="${yFinal-16}" font-size="22">👑</text>`);
-      parts.push(`<rect x="${xCrown}" y="${yFinal-12}" width="${CROWN_W-8}" height="24" rx="4" fill="#fff" stroke="${champWon?RED:'#9ca3af'}" stroke-width="${champWon?2.5:1.5}"/>`);
-      if(cName!=='')parts.push(`<text x="${xCrown+8}" y="${yFinal}" dominant-baseline="central" font-size="11" font-weight="700" fill="#b45309">${cName.length>9?cName.slice(0,9)+'…':cName}</text>`);
+      const yF=nodes[0]?nodes[0].y:PAD_TOP;
+      const xC=colBase+COL_W;
+      const cN=esc(String(champion||'').trim());
+      parts.push(`<text x="${xC+CROWN_W/2-24}" y="${yF-16}" font-size="22">👑</text>`);
+      parts.push(`<rect x="${xC}" y="${yF-12}" width="${CROWN_W-10}" height="24" rx="4" fill="#fff" stroke="${cN?RED:'#9ca3af'}" stroke-width="${cN?2.5:1.5}"/>`);
+      if(cN!=='')parts.push(`<text x="${xC+7}" y="${yF}" dominant-baseline="central" font-size="11" font-weight="700" fill="#b45309">${cN.length>9?cN.slice(0,9)+'…':cN}</text>`);
 
       return `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="display:block;font-family:inherit;">${parts.join('')}</svg>`;
     }
 
-    const svg = rounds.length===0 ? '' : buildVerticalSVG();
+    const svg = rawRounds.length===0 ? '' : buildVerticalSVG();
+    const seedNote = ST.hasSeeds
+      ? `${teamCount}チーム（上位${ST.seeds}チームは1回戦免除のシード）`
+      : `${teamCount}チーム`;
 
     return`<div style="padding:16px;max-width:820px;margin:0 auto;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
@@ -4260,10 +4347,11 @@ function rTournamentInfo(){
       </div>
       ${loading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`
       :err?`<div style="padding:16px;background:#fee2e2;border-radius:10px;color:#dc2626;font-size:13px;">${err}</div>`
-      :rounds.length===0?`<div style="text-align:center;padding:32px;color:#9ca3af;">まだ配信されていません</div>`
+      :rawRounds.length===0?`<div style="text-align:center;padding:32px;color:#9ca3af;">まだ配信されていません</div>`
       :`<div style="text-align:center;margin-bottom:10px;">
           <div style="font-size:12px;color:#92400e;font-weight:700;">🏆 優勝</div>
           <div style="font-size:20px;font-weight:800;color:#b45309;margin-top:2px;min-height:26px;">${champion?esc(champion):'<span style=\"color:#d1d5db;font-size:14px;\">未確定</span>'}</div>
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px;">${seedNote}</div>
         </div>
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #f3f4f6;border-radius:10px;padding:6px;">
           <div style="display:inline-block;">${svg}</div>
@@ -5996,6 +6084,7 @@ function bind(){
     const psEl=document.getElementById('te-period-start');if(psEl)tour.eventPeriodStart=psEl.value;
     const peEl=document.getElementById('te-period-end');if(peEl)tour.eventPeriodEnd=peEl.value;
     const rpwEl=document.getElementById('te-reception-pw');if(rpwEl)tour.receptionPw=rpwEl.value.trim();
+    const btcEl=document.getElementById('te-bracket-count');if(btcEl)tour.bracketTeamCount=Number(btcEl.value)||64;
     // コート図
     const clGrid=document.getElementById('cl-grid');
     if(clGrid){
@@ -6021,7 +6110,7 @@ function bind(){
     }
   }
   // 各入力欄を自動保存（途中で他操作をしても入力が消えないように）
-  ['te-venue','te-code','te-name','te-gasurl','te-sheeturl','te-period-start','te-period-end','te-reception-pw','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
+  ['te-venue','te-code','te-name','te-gasurl','te-sheeturl','te-period-start','te-period-end','te-reception-pw','te-bracket-count','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.addEventListener('change',()=>{
       const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
