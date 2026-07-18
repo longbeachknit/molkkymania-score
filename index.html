@@ -75,7 +75,7 @@ const MAX=50,RST=25,MM=3,TURN_LIMIT=12;
 // ===== アプリのバージョン表記 =====
 // ファイル名（例: molkky_final_7_10.html）から自動でバージョン番号を取り出します。
 // 「7_10」や「7-10」→「7_10」と表示。読み取れないときは下の値を使います。
-const APP_VERSION_FALLBACK='7_10';
+const APP_VERSION_FALLBACK='7_11';
 const APP_VERSION=(function(){
   try{
     const m=(location.pathname||'').match(/molkky_final_(\d+)[_-](\d+)/i);
@@ -6513,20 +6513,10 @@ function bind(){
       _rcpState.selectedTeamId=team.id;
     }
     _rcpState.loginError='';
-    // 受付済みか照会（2台目以降はパスワード・質問をスキップ）
-    _rcpState.checking=true;render();
-    let already=null;
-    try{ already=await checkReception(team.id); }catch(e){ already=null; }
-    _rcpState.checking=false;
-    if(already&&already.found){
-      _rcpState.alreadyRegistered=true;
-      _rcpState.alreadyNeedsDesk=!!already.needsDesk;
-    } else {
-      _rcpState.alreadyRegistered=false;
-      _rcpState.alreadyNeedsDesk=false;
-    }
-    // 受付済み・未受付いずれもパスワード入力へ
-    S.phase='rcpPw';render();
+    // 合言葉・質問・送信はすべてスキップ。選んだチームでパーソナライズしてホームへ戻る
+    if(team)saveMyTeam((activeTour()||{}).eventCode||'',team.id);
+    resetReception();
+    S.phase='setup';render();
   };
   // ステップ2：パスワード確定 → 質問へ
   const brcpn=document.getElementById('btn-rcp-pw-next');
@@ -6539,16 +6529,11 @@ function bind(){
     if(!pw){_rcpState.pwError='受付パスワードを入力してください。';render();return;}
     if(pw!==correct){_rcpState.pwError='受付パスワードが正しくありません。';render();return;}
     _rcpState.pwError='';
-    // 受付済みチームの別端末ログイン：質問・本部案内を出さず、ホームをパーソナライズして遷移
-    if(_rcpState.alreadyRegistered){
-      const t=rcpTeam();
-      if(t)saveMyTeam((activeTour()||{}).eventCode||'',t.id);
-      resetReception();
-      S.phase='setup';render();
-      return;
-    }
-    // 未受付：1人目として質問へ
-    S.phase='rcpQ1';render();
+    // 質問とスプレッドシート送信はスキップ。選んだチームでパーソナライズしてホームへ戻る
+    const t=rcpTeam();
+    if(t)saveMyTeam((activeTour()||{}).eventCode||'',t.id);
+    resetReception();
+    S.phase='setup';render();
   };
   // 質問画面：選択肢
   document.querySelectorAll('.rcp-choice').forEach(el=>el.addEventListener('click',()=>{
