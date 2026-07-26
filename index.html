@@ -75,7 +75,7 @@ const MAX=50,RST=25,MM=3,TURN_LIMIT=12;
 // ===== アプリのバージョン表記 =====
 // ファイル名（例: molkky_final_7_10.html）から自動でバージョン番号を取り出します。
 // 「7_10」や「7-10」→「7_10」と表示。読み取れないときは下の値を使います。
-const APP_VERSION_FALLBACK='7_10';
+const APP_VERSION_FALLBACK='7_12';
 const APP_VERSION=(function(){
   try{
     const m=(location.pathname||'').match(/molkky_final_(\d+)[_-](\d+)/i);
@@ -513,6 +513,7 @@ async function syncSettingsFromGitHub(eventCode){
     if(data.bracketTeamCount!==undefined)tour.bracketTeamCount=Number(data.bracketTeamCount)||64;
     if(data.sheetUrl!==undefined)tour.sheetUrl=data.sheetUrl;
     if(data.systemChart!==undefined)tour.systemChart=data.systemChart;
+    if(data.venue!==undefined)tour.venue=data.venue;
     if(data.courtLayout!==undefined)tour.courtLayout=data.courtLayout;
     saveActiveTour(tour);
   } else {
@@ -534,6 +535,7 @@ async function syncSettingsFromGitHub(eventCode){
       receptionPw:data.receptionPw||'',
       bracketTeamCount:Number(data.bracketTeamCount)||64,
       systemChart:data.systemChart||null,
+      venue:data.venue||null,
       courtLayout:data.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}}
     });
     if(!AD.tournaments)AD.tournaments=[];
@@ -774,6 +776,7 @@ function makeTournament(overrides){
     receptionPw:'',
     bracketTeamCount:64,
     systemChart:null,
+    venue:null, // 会場の詳細（{code,name,detail}）。配信JSONに同梱して参加者へ届く
     courtLayout:{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}}
   },overrides);
 }
@@ -795,6 +798,7 @@ function loadAdmin(){
         d.activeTourId=d.activeTourId||'tour_default';
       }
       if(!d.ruleTemplates)d.ruleTemplates=[];
+      if(!d.venueTemplates)d.venueTemplates=[]; // 会場詳細のテンプレート保存用
       if(!d.githubPat)d.githubPat='';
       return d;
     }
@@ -1098,6 +1102,47 @@ function saveActiveTour(tour){
   const idx=AD.tournaments.findIndex(t=>t.id===tour.id);
   if(idx>=0)AD.tournaments[idx]=tour;
   saveAdmin(AD);
+}
+
+// ===== 会場（場所）情報の解決 =====
+// 参加者側は配信で届いた tour.venue を優先、管理者側は AD.venues から補完する。
+function resolveVenue(tour){
+  if(!tour)return null;
+  if(tour.venue&&(tour.venue.name||tour.venue.detail))return tour.venue;
+  const v=(AD.venues||[]).find(x=>x.code===tour.venueCode);
+  return v||null;
+}
+// 会場に「詳細」が1つでも入っているか（＝「詳細を見る」を出すか判定）
+function venueHasDetail(v){
+  if(!v||!v.detail)return false;
+  const d=v.detail;
+  if(d.locationName||d.address||d.mapUrl||d.access||d.parking||d.toilet||d.smoking||d.garbage||d.rules)return true;
+  if(Array.isArray(d.notes)&&d.notes.length)return true;
+  if(Array.isArray(d.sections)&&d.sections.length)return true;
+  return false;
+}
+// 日付の表示用（日本語表記。例: 2026年7月18日 9:00〜18:00）
+// datetime-local 形式（YYYY-MM-DDTHH:MM）を想定。月・時の先頭0は外す。
+function fmtEventPeriod(tour){
+  const parse=str=>{
+    str=String(str||'').trim();if(!str)return null;
+    const m=str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2}))?/);
+    if(!m)return null;
+    return{y:+m[1],mo:+m[2],d:+m[3],hasT:m[4]!=null,h:m[4]!=null?+m[4]:0,mi:m[5]!=null?m[5]:'00'};
+  };
+  const dateJa=p=>p.y+'年'+p.mo+'月'+p.d+'日';
+  const timeJa=p=>p.hasT?(p.h+':'+p.mi):'';
+  const s=parse(tour&&tour.eventPeriodStart);
+  const e=parse(tour&&tour.eventPeriodEnd);
+  if(!s&&!e)return'';
+  if(s&&!e)return dateJa(s)+(timeJa(s)?' '+timeJa(s):'');
+  if(!s&&e)return dateJa(e)+(timeJa(e)?' '+timeJa(e):'');
+  const sameDay=(s.y===e.y&&s.mo===e.mo&&s.d===e.d);
+  if(sameDay){
+    const ts=timeJa(s),te=timeJa(e);
+    return dateJa(s)+((ts||te)?(' '+ts+'〜'+te):'');
+  }
+  return dateJa(s)+(timeJa(s)?' '+timeJa(s):'')+' 〜 '+dateJa(e)+(timeJa(e)?' '+timeJa(e):'');
 }
 
 function sendRowViaImage(params){
@@ -1640,8 +1685,17 @@ function rSetup(){
   const courtIcon=_my?'📍':'🔍';
   const scoreLabel=_my?'スコアシート<br>を見る':'スコアシート<br>を検索';
 
-  // パーソナライズ時：受付ボタンの代わりに「表示中チーム＋解除」バーを表示
-  const topBlock=_my
+  const escH=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // 配信中の大会情報（大会名・会場・日付）。参加者にも管理者にも表示する。
+  const _at=activeTour();
+  const _venue=resolveVenue(_at);
+  const _evName=String(_at&&_at.eventName||'').trim();
+  const _venueName=_venue?String((_venue.detail&&_venue.detail.locationName)||_venue.name||'').trim():'';
+  const _period=fmtEventPeriod(_at);
+  const _showVenueDetail=venueHasDetail(_venue);
+
+  // 従来の表示（配信中の大会名が無いときのフォールバック）
+  const _fallbackBlock=_my
     ?`<div style="margin-bottom:20px;padding:14px 16px;background:#E1F5EE;border-radius:14px;display:flex;align-items:center;gap:12px;">
         <span style="font-size:26px;">👤</span>
         <div style="flex:1;">
@@ -1655,6 +1709,35 @@ function rSetup(){
         <span style="font-size:32px;">📝</span>
         <div style="text-align:left;font-size:20px;font-weight:700;">大会受付（チーム登録）</div>
       </button>`;
+
+  // 開催中（大会名あり）：左＝大会情報／右＝縦長の受付 or 受付済み、下＝詳細を見る
+  // 大会名は「\n」または改行で任意の位置に改行できる
+  const _nameHtml=escH(_evName).replace(/\\n/g,'<br>').replace(/\n/g,'<br>');
+  const _rightSide=_my
+    ?`<div style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#E1F5EE;border-radius:12px;padding:12px 8px;">
+        <div style="font-size:12px;color:#0a6e57;font-weight:800;text-align:center;line-height:1.35;">👤<br>受付済み</div>
+        <button id="btn-clear-myteam" style="font-size:12px;font-weight:700;color:#085041;background:#fff;border:1px solid #9FE1CB;border-radius:9px;padding:6px 12px;cursor:pointer;white-space:nowrap;">解除</button>
+      </div>`
+    :`<button id="btn-go-reception" style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 8px;background:#1D9E75;color:#fff;border:none;border-radius:12px;cursor:pointer;text-align:center;line-height:1.3;">
+        <span style="font-size:30px;">📝</span>
+        <span style="font-size:15px;font-weight:800;">受付<br><span style="font-size:11px;font-weight:700;">（チーム登録）</span></span>
+      </button>`;
+
+  const _eventCard=`<div style="margin-bottom:20px;padding:14px 16px;background:#F0FBF7;border:1.5px solid #C9EBDD;border-radius:14px;">
+    <div style="display:flex;align-items:stretch;gap:12px;">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
+        <div style="font-size:11px;color:#9ca3af;font-weight:700;letter-spacing:0.04em;">📣 開催中の大会</div>
+        <div style="font-size:18px;font-weight:800;color:#111;line-height:1.35;margin-top:3px;">${_nameHtml}</div>
+        ${_venueName?`<div style="font-size:13px;color:#6b7280;margin-top:7px;line-height:1.5;">📍 ${escH(_venueName)}</div>`:''}
+        ${_period?`<div style="font-size:13px;color:#6b7280;margin-top:2px;line-height:1.5;">🗓 ${escH(_period)}</div>`:''}
+        ${(_my&&_myTeamObj)?`<div style="font-size:12px;color:#0a6e57;margin-top:7px;font-weight:700;">${escH(_myTeamObj.name)}</div>`:''}
+      </div>
+      ${_rightSide}
+    </div>
+    ${_showVenueDetail?`<button id="btn-go-venue" style="width:100%;margin-top:12px;padding:10px;font-size:14px;font-weight:700;background:#fff;border:1.5px solid #C9EBDD;border-radius:10px;color:#0a6e57;cursor:pointer;">📍 会場の詳細を見る ▸</button>`:''}
+  </div>`;
+
+  const topBlock=_evName?_eventCard:_fallbackBlock;
 
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;">
@@ -3735,6 +3818,7 @@ async function publishSettings(tour,opts){
     receptionPw: tour.receptionPw||'',
     bracketTeamCount: Number(tour.bracketTeamCount)||64,
     systemChart: tour.systemChart||null,
+    venue: resolveVenue(tour), // 会場（場所）情報＋詳細を同梱して参加者へ配信
     courtLayout: tour.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}},
     publishedAt: new Date().toISOString()
   };
@@ -3783,30 +3867,106 @@ async function publishSettings(tour,opts){
 
 function showVenueModal(idx){
   if(!AD.venues)AD.venues=[];
+  if(!AD.venueTemplates)AD.venueTemplates=[];
   const v=idx!=null?{...AD.venues[idx]}:{code:'',name:''};
+  const d=v.detail||{};
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const notesText=Array.isArray(d.notes)?d.notes.join('\n'):'';
+  const sectionsText=Array.isArray(d.sections)?d.sections.map(s=>((s.title||'')+' | '+(s.body||''))).join('\n'):'';
+  const tplOpts='<option value="">テンプレートから読み込む…</option>'+
+    (AD.venueTemplates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+  const fieldRow=(id,label,val,ph)=>`<div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">${label}</div>
+    <input type="text" id="${id}" value="${esc(val)}" placeholder="${esc(ph||'')}"/></div>`;
+  const areaRow=(id,label,val,ph,rows)=>`<div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">${label}</div>
+    <textarea id="${id}" rows="${rows||2}" placeholder="${esc(ph||'')}" style="width:100%;">${esc(val)}</textarea></div>`;
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;';
-  overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:420px;">
+  overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:460px;max-height:88vh;overflow:auto;">
     <div style="font-size:16px;font-weight:700;margin-bottom:14px;">場所${idx!=null?'を編集':'を追加'}</div>
     <div style="display:grid;gap:10px;">
-      <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">場所コード（試合IDの1番目・2桁）</div>
-        <input type="text" id="v-code" value="${v.code}" placeholder="例: 01"/></div>
-      <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">場所名</div>
-        <input type="text" id="v-name" value="${v.name}" placeholder="例: 川崎"/></div>
+      ${fieldRow('v-code','場所コード（試合IDの1番目・2桁）',v.code,'例: 01')}
+      ${fieldRow('v-name','場所名',v.name,'例: 川崎')}
+
+      <div style="border-top:1px solid #eee;margin-top:6px;padding-top:10px;display:flex;gap:8px;align-items:center;">
+        <select id="v-tpl-select" style="flex:1;font-size:13px;">${tplOpts}</select>
+        <button id="v-tpl-load" class="btn btn-gray btn-xs" style="padding:6px 10px;white-space:nowrap;">読込</button>
+      </div>
+      <div style="font-size:12px;color:#9ca3af;">── ここから会場の詳細（すべて任意）──</div>
+
+      ${fieldRow('v-locationName','開催場所の案内',d.locationName,'例: 川崎〇〇広場')}
+      ${fieldRow('v-address','住所',d.address,'例: 神奈川県川崎市…')}
+      ${fieldRow('v-mapUrl','地図リンク（URL）',d.mapUrl,'例: https://maps.app.goo.gl/…')}
+      ${fieldRow('v-access','最寄り駅・アクセス',d.access,'例: JR川崎駅 東口より徒歩8分')}
+      ${fieldRow('v-parking','駐車場',d.parking,'例: 会場に駐車場はありません…')}
+      ${fieldRow('v-toilet','トイレ',d.toilet,'例: 広場北側の公衆トイレ…')}
+      ${fieldRow('v-smoking','喫煙ルール',d.smoking,'例: 会場内は全面禁煙…')}
+      ${fieldRow('v-garbage','ゴミのルール',d.garbage,'例: ゴミは各自お持ち帰り…')}
+      ${areaRow('v-notes','注意事項（1行＝1項目）',notesText,'例:\n受付は開始30分前から\n雨天中止は連絡します',3)}
+      ${areaRow('v-rules','大会規約',d.rules,'大会規約の本文…',3)}
+      ${areaRow('v-sections','自由項目（1行＝「見出し | 本文」）',sectionsText,'例:\n更衣室 | 会場にはありません\nクローク | 受付横で預かります',3)}
     </div>
-    <div style="display:flex;gap:8px;margin-top:14px;">
+    <div style="margin-top:12px;">
+      <button id="v-tpl-save" class="btn btn-gray btn-xs" style="width:100%;padding:8px;">この詳細をテンプレートとして保存</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;">
       <button id="v-cancel" class="btn btn-gray" style="flex:1;">キャンセル</button>
       <button id="v-save" class="btn btn-green" style="flex:2;">保存</button>
     </div>
   </div>`;
   document.body.appendChild(overlay);
+
+  const gv=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
+  // 入力欄から detail オブジェクトを組み立てる
+  const buildDetail=()=>{
+    const notes=gv('v-notes').split('\n').map(s=>s.trim()).filter(Boolean);
+    const sections=gv('v-sections').split('\n').map(line=>{
+      const t=line.trim();if(!t)return null;
+      const p=t.split('|');
+      if(p.length>=2)return{title:p[0].trim(),body:p.slice(1).join('|').trim()};
+      return{title:'',body:t};
+    }).filter(Boolean);
+    return{
+      locationName:gv('v-locationName'),address:gv('v-address'),mapUrl:gv('v-mapUrl'),
+      access:gv('v-access'),parking:gv('v-parking'),toilet:gv('v-toilet'),
+      smoking:gv('v-smoking'),garbage:gv('v-garbage'),rules:gv('v-rules'),
+      notes,sections
+    };
+  };
+  // 入力欄に detail を流し込む（テンプレ読込用）
+  const fillDetail=det=>{
+    det=det||{};
+    const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val||'';};
+    set('v-locationName',det.locationName);set('v-address',det.address);set('v-mapUrl',det.mapUrl);
+    set('v-access',det.access);set('v-parking',det.parking);set('v-toilet',det.toilet);
+    set('v-smoking',det.smoking);set('v-garbage',det.garbage);set('v-rules',det.rules);
+    set('v-notes',Array.isArray(det.notes)?det.notes.join('\n'):'');
+    set('v-sections',Array.isArray(det.sections)?det.sections.map(s=>((s.title||'')+' | '+(s.body||''))).join('\n'):'');
+  };
+
   document.getElementById('v-cancel').onclick=()=>document.body.removeChild(overlay);
+  document.getElementById('v-tpl-load').onclick=()=>{
+    const id=document.getElementById('v-tpl-select').value;
+    if(!id)return;
+    const tpl=(AD.venueTemplates||[]).find(t=>String(t.id)===String(id));
+    if(tpl){fillDetail(tpl.detail);}
+  };
+  document.getElementById('v-tpl-save').onclick=()=>{
+    const nm=prompt('テンプレート名を入力してください（例: 川崎広場セット）:');
+    if(nm==null)return;
+    const name=nm.trim();if(!name){alert('名前を入力してください');return;}
+    if(!AD.venueTemplates)AD.venueTemplates=[];
+    AD.venueTemplates.push({id:'vt_'+Date.now(),name,detail:buildDetail()});
+    saveAdmin(AD);
+    const sel=document.getElementById('v-tpl-select');
+    if(sel){const o=document.createElement('option');o.value=AD.venueTemplates[AD.venueTemplates.length-1].id;o.textContent=name;sel.appendChild(o);}
+    alert('✅ テンプレートとして保存しました');
+  };
   document.getElementById('v-save').onclick=()=>{
-    const code=document.getElementById('v-code').value.trim();
-    const name=document.getElementById('v-name').value.trim();
-    if(!code||!name){alert('コードと名称を入力してください');return;}
+    const code=gv('v-code');
+    const name=gv('v-name');
+    if(!code||!name){alert('場所コードと場所名を入力してください');return;}
     if(!AD.venues)AD.venues=[];
-    const newV={code,name};
+    const newV={code,name,detail:buildDetail()};
     if(idx!=null)AD.venues[idx]=newV;else AD.venues.push(newV);
     saveAdmin(AD);document.body.removeChild(overlay);render();
   };
@@ -4209,7 +4369,55 @@ function buildTeamSearchList(query){
 function rTournamentInfo(){
   const tour=AD.tournaments&&AD.activeTourId?AD.tournaments.find(t=>t.id===AD.activeTourId):null;
   const tname=tour?tour.name:'';
-  const v=S._tiView; // null=メニュー / 'schedule' / 'regulation' / 'prelim'
+  const v=S._tiView; // null=メニュー / 'schedule' / 'regulation' / 'prelim' / 'venue'
+
+  // ── サブ画面：会場のご案内（場所IDの詳細） ──
+  if(v==='venue'){
+    const vtour=tour||activeTour();
+    const venue=resolveVenue(vtour);
+    const d=(venue&&venue.detail)||{};
+    const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const hasAny=venueHasDetail(venue);
+    const title=(d.locationName||(venue&&venue.name)||'会場');
+    const safeMap=(d.mapUrl&&/^https?:\/\//i.test(d.mapUrl))?d.mapUrl:'';
+    const row=(icon,label,text)=> (text&&String(text).trim())
+      ? `<div style="display:flex;gap:10px;padding:12px 2px;border-bottom:1px solid #f3f4f6;">
+           <div style="font-size:20px;flex-shrink:0;width:26px;text-align:center;">${icon}</div>
+           <div style="flex:1;min-width:0;"><div style="font-size:12px;color:#9ca3af;font-weight:700;margin-bottom:2px;">${esc(label)}</div>
+           <div style="font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap;">${esc(text)}</div></div>
+         </div>` : '';
+    const notesArr=Array.isArray(d.notes)?d.notes.filter(Boolean):[];
+    const notesHtml=notesArr.length
+      ? `<div style="display:flex;gap:10px;padding:12px 2px;border-bottom:1px solid #f3f4f6;">
+           <div style="font-size:20px;flex-shrink:0;width:26px;text-align:center;">⚠️</div>
+           <div style="flex:1;min-width:0;"><div style="font-size:12px;color:#9ca3af;font-weight:700;margin-bottom:4px;">注意事項</div>
+           ${notesArr.map(n=>`<div style="display:flex;gap:6px;font-size:14px;color:#374151;line-height:1.6;margin-bottom:3px;"><span>・</span><span style="flex:1;">${esc(n)}</span></div>`).join('')}
+           </div></div>` : '';
+    const sectionsHtml=(Array.isArray(d.sections)?d.sections:[]).map(s=>row(s.icon||'📌',(s.title||'その他'),s.body)).join('');
+    return`<div style="padding:16px;max-width:480px;margin:0 auto;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
+        <div style="font-size:17px;font-weight:700;color:#111;">📍 会場のご案内</div>
+      </div>
+      ${!hasAny
+        ? `<div style="text-align:center;padding:32px;color:#9ca3af;font-size:14px;">会場の詳細はまだ登録されていません。</div>`
+        : `<div>
+            <div style="padding:2px 2px 12px;border-bottom:2px solid #e5e7eb;margin-bottom:4px;">
+              <div style="font-size:18px;font-weight:800;color:#111;line-height:1.3;">${esc(title)}</div>
+              ${d.address?`<div style="font-size:13px;color:#6b7280;margin-top:5px;">${esc(d.address)}</div>`:''}
+              ${safeMap?`<a href="${esc(safeMap)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;font-size:13px;font-weight:700;color:#1d4ed8;text-decoration:none;">🗺 地図を開く ▸</a>`:''}
+            </div>
+            ${row('🚉','アクセス',d.access)}
+            ${row('🅿','駐車場',d.parking)}
+            ${row('🚻','トイレ',d.toilet)}
+            ${row('🚭','喫煙ルール',d.smoking)}
+            ${row('🗑','ゴミのルール',d.garbage)}
+            ${notesHtml}
+            ${row('📜','大会規約',d.rules)}
+            ${sectionsHtml}
+          </div>`}
+    </div>`;
+  }
 
   // ── サブ画面：タイムスケジュール ──
   if(v==='schedule'){
@@ -6724,6 +6932,7 @@ function bind(){
   const bgreg=document.getElementById('btn-go-regulation');if(bgreg)bgreg.onclick=()=>openTournamentInfoView('regulation');
   const bgsch=document.getElementById('btn-go-schedule');if(bgsch)bgsch.onclick=()=>openTournamentInfoView('schedule');
   const bgpre=document.getElementById('btn-go-prelim');if(bgpre)bgpre.onclick=()=>openTournamentInfoView('prelim');
+  const bgven=document.getElementById('btn-go-venue');if(bgven)bgven.onclick=()=>openTournamentInfoView('venue');
   // 「試合結果のみを送信」→ QRスキャン（結果のみモード）。配信中・開催期間中のみ
   const bgro=document.getElementById('btn-go-result-only');if(bgro)bgro.onclick=async()=>{
     // 【体感速度改善】カメラ起動前に通信＋開催期間チェックが必須のため画面遷移はできないが、
