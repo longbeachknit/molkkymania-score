@@ -779,6 +779,7 @@ function makeTournament(overrides){
     bracketTeamCount:64,
     systemChart:null,
     venue:null, // 会場の詳細（{code,name,detail}）。配信JSONに同梱して参加者へ届く
+    folderId:null,lastUsedAt:0, // 管理者の整理用（フォルダ分け・最近使った順）
     courtLayout:{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}}
   },overrides);
 }
@@ -801,6 +802,7 @@ function loadAdmin(){
       }
       if(!d.ruleTemplates)d.ruleTemplates=[];
       if(!d.venueTemplates)d.venueTemplates=[]; // 会場詳細のテンプレート保存用
+      if(!d.folders)d.folders=[]; // 大会整理用フォルダ
       if(!d.githubPat)d.githubPat='';
       return d;
     }
@@ -2313,8 +2315,34 @@ function rAdmin(){
   return rAdminTop();
 }
 
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// 大会1件の管理行（フォルダ移動ドロップダウン付き）
+function adminTourRowHtml(t,ad){
+  const venue=(ad.venues||[]).find(v=>v.code===t.venueCode);
+  const folderOpts='<option value="">未分類</option>'+(ad.folders||[]).map(f=>`<option value="${f.id}" ${String(t.folderId||'')===String(f.id)?'selected':''}>${escHtml(f.name)}</option>`).join('');
+  return`<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:600;color:#111;">${t.eventName||'（大会名未設定）'}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px;">${venue?venue.name:'場所未設定'} / コード: ${t.eventCode||'未設定'}</div>
+        <div style="font-size:12px;color:#9ca3af;">チーム${(t.teams||[]).length}件 / 対戦${(t.matches||[]).length}件</div>
+      </div>
+      <button class="btn btn-gray btn-xs admin-edit-tour" data-id="${t.id}" style="padding:3px 8px;">編集</button>
+      <button class="btn btn-red-o btn-xs admin-del-tour" data-id="${t.id}" style="padding:3px 8px;">削除</button>
+      ${(ad.activeEventCode&&t.eventCode&&ad.activeEventCode===t.eventCode)?
+        '<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:99px;">📡 配信中</span>':
+        `<button class="btn btn-gray btn-xs admin-set-active" data-code="${t.eventCode}" style="padding:3px 8px;">📡 配信中にする</button>`}
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+      <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">📁 フォルダ</span>
+      <select class="admin-move-folder" data-id="${t.id}" style="flex:1;font-size:12px;padding:4px 6px;">${folderOpts}</select>
+    </div>
+  </div>`;
+}
+
 function rAdminTop(){
   const ad=AD;
+  if(!ad.folders)ad.folders=[];
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
       <button class="btn btn-gray btn-sm" id="btn-bk-admin">← 戻る</button>
@@ -2344,30 +2372,40 @@ function rAdminTop(){
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
         <div style="flex:1;font-size:14px;font-weight:600;color:#111;">大会の管理</div>
+        <button class="btn btn-gray btn-xs" id="btn-add-folder" style="padding:4px 10px;">＋ フォルダ</button>
         <button class="btn btn-green btn-xs" id="btn-add-tournament" style="padding:4px 10px;">＋ 大会を追加</button>
       </div>
       ${ad.activeEventCode?`<div style="margin-bottom:10px;padding:8px;background:#FEF3C7;border-radius:8px;display:flex;align-items:center;justify-content:space-between;">
         <div style="font-size:13px;color:#92400E;">📡 配信中: <strong>${(ad.tournaments||[]).find(t=>t.eventCode===ad.activeEventCode)?.eventName||ad.activeEventCode}</strong></div>
         <button class="btn btn-red-o btn-xs" id="btn-stop-broadcast" style="padding:3px 10px;">⏹ 停止</button>
       </div>`:''}
-      ${(ad.tournaments||[]).length===0?'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>':
-        (ad.tournaments||[]).map((t,i)=>{
-          const venue=(ad.venues||[]).find(v=>v.code===t.venueCode);
-          return`<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <div style="flex:1;">
-                <div style="font-size:14px;font-weight:600;color:#111;">${t.eventName||'（大会名未設定）'}</div>
-                <div style="font-size:12px;color:#6b7280;margin-top:2px;">${venue?venue.name:'場所未設定'} / コード: ${t.eventCode||'未設定'}</div>
-                <div style="font-size:12px;color:#9ca3af;">チーム${(t.teams||[]).length}件 / 対戦${(t.matches||[]).length}件</div>
-              </div>
-              <button class="btn btn-gray btn-xs admin-edit-tour" data-id="${t.id}" style="padding:3px 8px;">編集</button>
-              <button class="btn btn-red-o btn-xs admin-del-tour" data-id="${t.id}" style="padding:3px 8px;">削除</button>
-              ${(ad.activeEventCode&&t.eventCode&&ad.activeEventCode===t.eventCode)?
-                '<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:99px;">📡 配信中</span>':
-                `<button class="btn btn-gray btn-xs admin-set-active" data-code="${t.eventCode}" style="padding:3px 8px;">📡 配信中にする</button>`}
+      ${(()=>{
+        const tours=ad.tournaments||[];
+        if(!tours.length)return'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>';
+        const folders=ad.folders||[];
+        const recent=tours.filter(t=>t.lastUsedAt).slice().sort((a,b)=>(b.lastUsedAt||0)-(a.lastUsedAt||0)).slice(0,5);
+        const recentHtml=recent.length?`<details open style="margin-bottom:10px;">
+          <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#374151;">🕐 最近使った大会（${recent.length}）</summary>
+          <div style="margin-top:4px;">${recent.map(t=>adminTourRowHtml(t,ad)).join('')}</div>
+        </details>`:'';
+        const foldersHtml=folders.map(f=>{
+          const inF=tours.filter(t=>String(t.folderId||'')===String(f.id));
+          return`<details style="margin-bottom:8px;border:1px solid #eee;border-radius:8px;padding:6px 10px;">
+            <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#111;">📁 ${escHtml(f.name)} <span style="font-size:11px;color:#9ca3af;font-weight:400;">(${inF.length})</span></summary>
+            <div style="display:flex;gap:6px;margin:6px 0 4px;">
+              <button class="btn btn-gray btn-xs admin-rename-folder" data-id="${f.id}" style="padding:2px 8px;">名前変更</button>
+              <button class="btn btn-red-o btn-xs admin-del-folder" data-id="${f.id}" style="padding:2px 8px;">フォルダ削除</button>
             </div>
-          </div>`;
-        }).join('')}
+            ${inF.length?inF.map(t=>adminTourRowHtml(t,ad)).join(''):'<div style="font-size:12px;color:#9ca3af;padding:4px 0;">この中に大会はありません</div>'}
+          </details>`;
+        }).join('');
+        const un=tours.filter(t=>!t.folderId);
+        const unHtml=`<details open style="margin-bottom:4px;">
+          <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#111;">📄 未分類 <span style="font-size:11px;color:#9ca3af;font-weight:400;">(${un.length})</span></summary>
+          <div style="margin-top:4px;">${un.length?un.map(t=>adminTourRowHtml(t,ad)).join(''):'<div style="font-size:12px;color:#9ca3af;padding:4px 0;">未分類の大会はありません</div>'}</div>
+        </details>`;
+        return recentHtml+foldersHtml+unHtml;
+      })()}
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;background:#f0f9ff;">
@@ -6312,13 +6350,41 @@ function bind(){
     if(confirm('この場所を削除しますか？')){AD.venues.splice(parseInt(btn.dataset.idx),1);saveAdmin(AD);render();}
   }));
   const bat2=document.getElementById('btn-add-tournament');if(bat2)bat2.onclick=()=>{
-    const t=makeTournament();AD.tournaments.push(t);saveAdmin(AD);S._editingTourId=t.id;render();
+    const t=makeTournament();t.lastUsedAt=Date.now();AD.tournaments.push(t);saveAdmin(AD);S._editingTourId=t.id;render();
   };
   document.querySelectorAll('.admin-edit-tour').forEach(btn=>btn.addEventListener('click',()=>{
+    const t=(AD.tournaments||[]).find(x=>x.id===btn.dataset.id);if(t){t.lastUsedAt=Date.now();saveAdmin(AD);}
     S._editingTourId=btn.dataset.id;render();
   }));
   document.querySelectorAll('.admin-del-tour').forEach(btn=>btn.addEventListener('click',()=>{
     if(confirm('この大会を削除しますか？')){AD.tournaments=AD.tournaments.filter(t=>t.id!==btn.dataset.id);saveAdmin(AD);render();}
+  }));
+  // フォルダ：追加
+  const baf=document.getElementById('btn-add-folder');if(baf)baf.onclick=()=>{
+    const nm=prompt('フォルダ名を入力してください（例: 2026年 大阪シリーズ）:');
+    if(nm==null)return;const name=nm.trim();if(!name){alert('名前を入力してください');return;}
+    if(!AD.folders)AD.folders=[];
+    AD.folders.push({id:'fld_'+Date.now(),name});saveAdmin(AD);render();
+  };
+  // フォルダ：名前変更
+  document.querySelectorAll('.admin-rename-folder').forEach(btn=>btn.addEventListener('click',(e)=>{
+    e.stopPropagation();
+    const f=(AD.folders||[]).find(x=>x.id===btn.dataset.id);if(!f)return;
+    const nm=prompt('フォルダ名を変更:',f.name);if(nm==null)return;const name=nm.trim();if(!name)return;
+    f.name=name;saveAdmin(AD);render();
+  }));
+  // フォルダ：削除（中の大会は消さず「未分類」へ移す）
+  document.querySelectorAll('.admin-del-folder').forEach(btn=>btn.addEventListener('click',(e)=>{
+    e.stopPropagation();
+    const id=btn.dataset.id;
+    if(!confirm('このフォルダを削除しますか？\n（中の大会は削除されず「未分類」に移動します）'))return;
+    (AD.tournaments||[]).forEach(t=>{if(String(t.folderId||'')===String(id))t.folderId=null;});
+    AD.folders=(AD.folders||[]).filter(f=>f.id!==id);saveAdmin(AD);render();
+  }));
+  // 大会：フォルダ移動（ドロップダウン）
+  document.querySelectorAll('.admin-move-folder').forEach(sel=>sel.addEventListener('change',()=>{
+    const t=(AD.tournaments||[]).find(x=>x.id===sel.dataset.id);if(!t)return;
+    t.folderId=sel.value||null;saveAdmin(AD);render();
   }));
 
   // 配信停止ボタン
@@ -6345,8 +6411,8 @@ function bind(){
         // ② 稼働中フラグ(active.json)を配信
         const ok=await publishActiveEvent(code);
         btn.disabled=false;btn.textContent=orig;
-        if(ok&&settingsOk){AD.activeEventCode=code;if(tour)AD.activeTourId=tour.id;saveAdmin(AD);S._liveEventCode=code;_liveEvtTs=Date.now();render();alert('✅ 配信を開始しました\n（大会設定もあわせて配信しました）');}
-        else if(ok&&!settingsOk){AD.activeEventCode=code;if(tour)AD.activeTourId=tour.id;saveAdmin(AD);S._liveEventCode=code;_liveEvtTs=Date.now();render();alert('⚠️ 稼働中フラグは配信できましたが、大会設定の配信に失敗しました。\n大会編集画面の「設定を配信する」を手動でお試しください。');}
+        if(ok&&settingsOk){AD.activeEventCode=code;if(tour){AD.activeTourId=tour.id;tour.lastUsedAt=Date.now();}saveAdmin(AD);S._liveEventCode=code;_liveEvtTs=Date.now();render();alert('✅ 配信を開始しました\n（大会設定もあわせて配信しました）');}
+        else if(ok&&!settingsOk){AD.activeEventCode=code;if(tour){AD.activeTourId=tour.id;tour.lastUsedAt=Date.now();}saveAdmin(AD);S._liveEventCode=code;_liveEvtTs=Date.now();render();alert('⚠️ 稼働中フラグは配信できましたが、大会設定の配信に失敗しました。\n大会編集画面の「設定を配信する」を手動でお試しください。');}
         else alert('❌ 配信に失敗しました。GitHub Tokenを確認してください。');
       }
     });
