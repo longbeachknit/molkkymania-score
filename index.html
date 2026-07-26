@@ -502,6 +502,7 @@ async function syncSettingsFromGitHub(eventCode){
   );
   if(tour){
     if(data.eventName!==undefined)tour.eventName=data.eventName;
+    if(data.displayName!==undefined)tour.displayName=data.displayName;
     if(data.priority!==undefined)tour.priority=data.priority;
     if(data.matchRules!==undefined)tour.matchRules=data.matchRules;
     if(data.tourneyRules!==undefined)tour.tourneyRules=data.tourneyRules;
@@ -522,6 +523,7 @@ async function syncSettingsFromGitHub(eventCode){
       venueCode:data.venueCode||normVenue,
       eventCode:normEvent,
       eventName:data.eventName||'',
+      displayName:data.displayName||'',
       gasUrl:data.gasUrl||'',
       sheetUrl:data.sheetUrl||'',
       priority:data.priority||'tournament',
@@ -766,7 +768,7 @@ const LS_KEY='molkky_admin_v1';
 function makeTournament(overrides){
   return Object.assign({
     id:'tour_'+Date.now(),
-    venueCode:'',eventCode:'',eventName:'',
+    venueCode:'',eventCode:'',eventName:'',displayName:'',
     gasUrl:'',
     sheetUrl:'',
     priority:'tournament',
@@ -1143,6 +1145,35 @@ function fmtEventPeriod(tour){
     return dateJa(s)+((ts||te)?(' '+ts+'〜'+te):'');
   }
   return dateJa(s)+(timeJa(s)?' '+timeJa(s):'')+' 〜 '+dateJa(e)+(timeJa(e)?' '+timeJa(e):'');
+}
+
+// ===== 「今まさに開催中（配信中）の大会」をAPIで解決してホームに反映 =====
+// active.json は api.github.com 直・キャッシュ無しで取得するためラグはほぼ無い。
+let _liveEvtTs=0,_liveEvtBusy=false;
+async function refreshLiveEvent(){
+  if(_liveEvtBusy)return;
+  _liveEvtBusy=true;
+  try{
+    const code=await resolveActiveEventCode();
+    if(code){
+      await syncAllFromGitHub(code);
+      const t=(AD.tournaments||[]).find(x=>x.eventCode===code);
+      if(t){AD.activeTourId=t.id;saveAdmin(AD);}
+      S._liveEventCode=code;
+    }else{
+      S._liveEventCode=''; // 開催中の大会なし
+    }
+  }catch(e){/* 取得失敗時は前回の値を維持 */}
+  finally{
+    _liveEvtTs=Date.now();_liveEvtBusy=false;
+    if(S.phase==='setup')render();
+  }
+}
+// ホーム表示時に呼ぶ：未取得なら即時、取得済みでも15秒経過後に再取得（過剰取得を防ぐ）
+function maybeRefreshLiveEvent(){
+  if(_liveEvtBusy)return;
+  if(S._liveEventCode===undefined){refreshLiveEvent();return;}
+  if(Date.now()-_liveEvtTs>15000)refreshLiveEvent();
 }
 
 function sendRowViaImage(params){
@@ -1674,24 +1705,26 @@ function render(){
 }
 
 function rSetup(){
-  // 受付済みチームの保持状態（ローカルのアクティブ大会で照合）
-  const _my=getValidMyTeam();
+  // 「今まさに開催中（配信中）の大会」をAPIで解決してから表示する
+  maybeRefreshLiveEvent();
+  const _liveCode=S._liveEventCode; // undefined=取得中 / ''=開催なし / コード=開催中
+  const _liveTour=(_liveCode&&_liveCode!=='')?((AD.tournaments||[]).find(t=>t.eventCode===_liveCode)||null):null;
+
+  // 受付済みチームの保持状態（開催中の大会に対して照合）
+  const _my=_liveTour?getValidMyTeam(_liveTour.eventCode):null;
   let _myTeamObj=null;
-  if(_my){
-    const _at=activeTour()||{teams:[]};
-    _myTeamObj=(_at.teams||[]).find(t=>String(t.id)===String(_my.teamId))||null;
+  if(_my&&_liveTour){
+    _myTeamObj=(_liveTour.teams||[]).find(t=>String(t.id)===String(_my.teamId))||null;
   }
   const courtLabel=_my?'対戦コート<br>を見る':'対戦コート<br>を検索';
   const courtIcon=_my?'📍':'🔍';
   const scoreLabel=_my?'スコアシート<br>を見る':'スコアシート<br>を検索';
 
   const escH=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  // 配信中の大会情報（大会名・会場・日付）。参加者にも管理者にも表示する。
-  const _at=activeTour();
-  const _venue=resolveVenue(_at);
-  const _evName=String(_at&&_at.eventName||'').trim();
+  // 開催中の大会情報（大会名・会場・日付）
+  const _venue=resolveVenue(_liveTour);
   const _venueName=_venue?String((_venue.detail&&_venue.detail.locationName)||_venue.name||'').trim():'';
-  const _period=fmtEventPeriod(_at);
+  const _period=fmtEventPeriod(_liveTour);
   const _showVenueDetail=venueHasDetail(_venue);
 
   // 従来の表示（配信中の大会名が無いときのフォールバック）
@@ -1710,9 +1743,10 @@ function rSetup(){
         <div style="text-align:left;font-size:20px;font-weight:700;">大会受付（チーム登録）</div>
       </button>`;
 
-  // 開催中（大会名あり）：左＝大会情報／右＝縦長の受付 or 受付済み、下＝詳細を見る
-  // 大会名は「\n」または改行で任意の位置に改行できる
-  const _nameHtml=escH(_evName).replace(/\\n/g,'<br>').replace(/\n/g,'<br>');
+  // 開催中：左＝大会情報／右＝縦長の受付 or 受付済み、下＝詳細を見る
+  // 表示名（displayName）があればそれを使い、改行位置で折り返す（無ければ大会名）
+  const _rawName=(_liveTour&&_liveTour.displayName&&_liveTour.displayName.trim())?_liveTour.displayName:(_liveTour?_liveTour.eventName:'');
+  const _nameHtml=escH(_rawName).replace(/\\n/g,'<br>').replace(/\n/g,'<br>');
   const _rightSide=_my
     ?`<div style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#E1F5EE;border-radius:12px;padding:12px 8px;">
         <div style="font-size:12px;color:#0a6e57;font-weight:800;text-align:center;line-height:1.35;">👤<br>受付済み</div>
@@ -1737,7 +1771,12 @@ function rSetup(){
     ${_showVenueDetail?`<button id="btn-go-venue" style="width:100%;margin-top:12px;padding:10px;font-size:14px;font-weight:700;background:#fff;border:1.5px solid #C9EBDD;border-radius:10px;color:#0a6e57;cursor:pointer;">📍 会場の詳細を見る ▸</button>`:''}
   </div>`;
 
-  const topBlock=_evName?_eventCard:_fallbackBlock;
+  // 開催中の大会があるときだけカードを出す。無ければテンプレは表示しない。
+  const topBlock=_liveTour
+    ?_eventCard
+    :(_liveCode===''
+      ?`<div style="margin-bottom:20px;padding:18px 16px;background:#f9fafb;border:1px solid #eee;border-radius:14px;text-align:center;color:#9ca3af;font-size:13px;">現在、開催中の大会はありません。</div>`
+      :`<div style="margin-bottom:20px;padding:18px 16px;color:#c9c9c9;font-size:13px;text-align:center;">読み込み中…</div>`);
 
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;">
@@ -2517,6 +2556,9 @@ function rAdminTourEdit(){
           <div id="te-code-status" style="font-size:12px;margin-top:5px;min-height:16px;"></div></div>
         <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">大会名</div>
           <input type="text" id="te-name" value="${tour.eventName}" placeholder="例: 6月川崎大会"/></div>
+        <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">表示名（ホームのカード用・改行できます／空欄なら大会名を表示）</div>
+          <textarea id="te-display-name" rows="3" placeholder="例:&#10;モルックマニア&#10;大阪オープン&#10;シーズン1-4" style="width:100%;">${(tour.displayName||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
+          <div style="font-size:11px;color:#9ca3af;margin-top:3px;">改行したい位置で「Enter（改行）」を押してください。</div></div>
         <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">組み合わせ取得URL（この大会専用GAS）</div>
           <input type="text" id="te-gasurl" value="${tour.gasUrl||''}" placeholder="https://script.google.com/macros/s/.../exec （必須）"/></div>
         <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">対戦表スプレッドシートURL（ホームの「大会スプレッドシート」ボタンのリンク先）</div>
@@ -3806,6 +3848,7 @@ async function publishSettings(tour,opts){
     venueCode: tour.venueCode||'',
     eventCode: tour.eventCode,
     eventName: tour.eventName||'',
+    displayName: tour.displayName||'',
     gasUrl: tour.gasUrl||'',
     sheetUrl: tour.sheetUrl||'',
     priority: tour.priority||'tournament',
@@ -6283,7 +6326,7 @@ function bind(){
   if(bsb)bsb.onclick=async()=>{
     if(confirm('配信を停止しますか？\n参加者は試合開始やコート検索ができなくなります。')){
       const ok=await publishActiveEvent('');
-      if(ok){AD.activeEventCode='';saveAdmin(AD);render();alert('✅ 配信を停止しました');}
+      if(ok){AD.activeEventCode='';saveAdmin(AD);S._liveEventCode='';_liveEvtTs=Date.now();render();alert('✅ 配信を停止しました');}
       else alert('❌ 停止に失敗しました。GitHub Tokenを確認してください。');
     }
   };
@@ -6302,8 +6345,8 @@ function bind(){
         // ② 稼働中フラグ(active.json)を配信
         const ok=await publishActiveEvent(code);
         btn.disabled=false;btn.textContent=orig;
-        if(ok&&settingsOk){AD.activeEventCode=code;saveAdmin(AD);render();alert('✅ 配信を開始しました\n（大会設定もあわせて配信しました）');}
-        else if(ok&&!settingsOk){AD.activeEventCode=code;saveAdmin(AD);render();alert('⚠️ 稼働中フラグは配信できましたが、大会設定の配信に失敗しました。\n大会編集画面の「設定を配信する」を手動でお試しください。');}
+        if(ok&&settingsOk){AD.activeEventCode=code;if(tour)AD.activeTourId=tour.id;saveAdmin(AD);S._liveEventCode=code;_liveEvtTs=Date.now();render();alert('✅ 配信を開始しました\n（大会設定もあわせて配信しました）');}
+        else if(ok&&!settingsOk){AD.activeEventCode=code;if(tour)AD.activeTourId=tour.id;saveAdmin(AD);S._liveEventCode=code;_liveEvtTs=Date.now();render();alert('⚠️ 稼働中フラグは配信できましたが、大会設定の配信に失敗しました。\n大会編集画面の「設定を配信する」を手動でお試しください。');}
         else alert('❌ 配信に失敗しました。GitHub Tokenを確認してください。');
       }
     });
@@ -6376,6 +6419,7 @@ function bind(){
     const ve=document.getElementById('te-venue');if(ve)tour.venueCode=ve.value;
     const co=document.getElementById('te-code');if(co)tour.eventCode=co.value.trim();
     const na=document.getElementById('te-name');if(na)tour.eventName=na.value.trim();
+    const dn=document.getElementById('te-display-name');if(dn)tour.displayName=dn.value.replace(/\s+$/,'');
     const gu=document.getElementById('te-gasurl');if(gu)tour.gasUrl=gu.value.trim();
     const su=document.getElementById('te-sheeturl');if(su)tour.sheetUrl=su.value.trim();
     const psEl=document.getElementById('te-period-start');if(psEl)tour.eventPeriodStart=psEl.value;
