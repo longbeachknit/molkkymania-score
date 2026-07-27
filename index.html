@@ -16,7 +16,7 @@ body{background:#f5f5f5;}
 .app{padding:10px;max-width:480px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
 .btn{padding:8px 16px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#111;cursor:pointer;font-size:14px;font-family:inherit;transition:background 0.15s;}
 .btn:hover{background:#f3f4f6;}.btn:active{transform:scale(0.97);}
-.btn-green{background:#1D9E75;color:#fff;border-color:#1D9E75;}.btn-green:hover{background:#178a64;}
+.btn-green{background:#EAA100;color:#2b2100;border-color:#EAA100;}.btn-green:hover{background:#cf8f00;}
 .btn-blue{background:#378ADD;color:#fff;border-color:#378ADD;}.btn-blue:hover{background:#2e72c4;}
 .btn-red-o{background:#FEE2E2;color:#b91c1c;border-color:#fca5a5;}.btn-red-o:hover{background:#fecaca;}
 .btn-orange{background:#FFF7ED;color:#92400e;border-color:#fed7aa;}.btn-orange:hover{background:#fef3c7;}
@@ -66,7 +66,18 @@ textarea:focus{outline:none;border-color:#1D9E75;background:#fff;}
 <div class="app" id="app"></div>
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
-const C=['#1D9E75','#E24B4A'];
+const C=['#1D9E75','#2563EB'];
+// 場所（会場）ごとのテーマカラー候補（モルマニ会場カラー）。管理者が場所ごとに1色選ぶ。
+const VENUE_PALETTE=[
+  {hex:'#F5B301',label:'サンイエロー'},{hex:'#F59E0B',label:'アンバー'},
+  {hex:'#F57C00',label:'オレンジ'},{hex:'#EF5350',label:'コーラルレッド'},
+  {hex:'#EC407A',label:'ピンク'},{hex:'#AB47BC',label:'パープル'},
+  {hex:'#7E57C2',label:'バイオレット'},{hex:'#5C6BC0',label:'インディゴ'},
+  {hex:'#1E88E5',label:'ブルー'},{hex:'#039BE5',label:'スカイ'},
+  {hex:'#00ACC1',label:'シアン'},{hex:'#009688',label:'ティール'},
+  {hex:'#2E9E5B',label:'グリーン'},{hex:'#7CB342',label:'ライム'},
+  {hex:'#8D6E63',label:'ブラウン'},{hex:'#546E7A',label:'スレート'}
+];
 const LB=['#E1F5EE','#FCEBEB'];
 const LBR=['#9FE1CB','#F7C1C1'];
 const LT=['#085041','#A32D2D'];
@@ -1548,7 +1559,7 @@ function showDuplicateNotice(onClose){
         同じ試合の結果が、既に他の端末から送信されています。<br>
         あなたの端末からの送信は不要です。
       </div>
-      <button id="dup-ok" style="width:100%;padding:12px;font-size:15px;font-weight:700;background:#1D9E75;color:#fff;border:none;border-radius:8px;">OK</button>
+      <button id="dup-ok" style="width:100%;padding:12px;font-size:15px;font-weight:700;background:#EAA100;color:#2b2100;border:none;border-radius:8px;">OK</button>
     </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#dup-ok').onclick=()=>{
@@ -1731,6 +1742,10 @@ function rSetup(){
   const _venue=resolveVenue(_liveTour);
   const _venueName=_venue?String((_venue.detail&&_venue.detail.locationName)||_venue.name||'').trim():'';
   const _period=fmtEventPeriod(_liveTour);
+  // 大会カードのテーマ色：場所に設定があればその色、無ければ既定のゴールド
+  const _theme=(_venue&&_venue.themeColor)?_venue.themeColor:'#EAA100';
+  const _themeBg=_theme+'1F';   // 背景ハイライト（薄め）
+  const _themeSoft=_theme+'33'; // 受付済みボックス（やや濃いめ）
   const _showVenueDetail=venueHasDetail(_venue);
 
   // 従来の表示（配信中の大会名が無いときのフォールバック）
@@ -1744,7 +1759,7 @@ function rSetup(){
         </div>
         <button id="btn-clear-myteam" style="font-size:13px;font-weight:700;color:#085041;background:#fff;border:1px solid #9FE1CB;border-radius:10px;padding:8px 14px;cursor:pointer;white-space:nowrap;">解除</button>
       </div>`
-    :`<button id="btn-go-reception" style="width:100%;padding:24px 20px;font-size:20px;font-weight:700;margin-bottom:20px;background:#1D9E75;color:#fff;border:none;border-radius:14px;display:flex;align-items:center;gap:14px;cursor:pointer;">
+    :`<button id="btn-go-reception" style="width:100%;padding:24px 20px;font-size:20px;font-weight:700;margin-bottom:20px;background:#EAA100;color:#2b2100;border:none;border-radius:14px;display:flex;align-items:center;gap:14px;cursor:pointer;">
         <span style="font-size:32px;">📝</span>
         <div style="text-align:left;font-size:20px;font-weight:700;">大会受付（チーム登録）</div>
       </button>`;
@@ -1754,19 +1769,19 @@ function rSetup(){
   const _rawName=(_liveTour&&_liveTour.displayName&&_liveTour.displayName.trim())?_liveTour.displayName:(_liveTour?_liveTour.eventName:'');
   const _nameHtml=escH(_rawName).replace(/\\n/g,'<br>').replace(/\n/g,'<br>');
   const _rightSide=_my
-    ?`<div style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#E1F5EE;border-radius:12px;padding:12px 8px;">
-        <div style="font-size:12px;color:#0a6e57;font-weight:800;text-align:center;line-height:1.35;">👤<br>受付済み</div>
-        <button id="btn-clear-myteam" style="font-size:12px;font-weight:700;color:#085041;background:#fff;border:1px solid #9FE1CB;border-radius:9px;padding:6px 12px;cursor:pointer;white-space:nowrap;">解除</button>
+    ?`<div style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:${_themeSoft};border:1px solid ${_theme};border-radius:12px;padding:12px 8px;">
+        <div style="font-size:12px;color:#1a1a1a;font-weight:800;text-align:center;line-height:1.35;">👤<br>受付済み</div>
+        <button id="btn-clear-myteam" style="font-size:12px;font-weight:700;color:#1a1a1a;background:#fff;border:1px solid ${_theme};border-radius:9px;padding:6px 12px;cursor:pointer;white-space:nowrap;">解除</button>
       </div>`
-    :`<button id="btn-go-reception" style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 8px;background:#1D9E75;color:#fff;border:none;border-radius:12px;cursor:pointer;text-align:center;line-height:1.3;">
+    :`<button id="btn-go-reception" style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 8px;background:#EAA100;color:#2b2100;border:none;border-radius:12px;cursor:pointer;text-align:center;line-height:1.3;">
         <span style="font-size:30px;">📝</span>
         <span style="font-size:15px;font-weight:800;">受付<br><span style="font-size:11px;font-weight:700;">（チーム登録）</span></span>
       </button>`;
 
-  const _eventCard=`<div style="margin-bottom:20px;padding:14px 16px;background:#F0FBF7;border:1.5px solid #C9EBDD;border-radius:14px;">
+  const _eventCard=`<div style="margin-bottom:20px;padding:14px 16px;background:${_themeBg};border:1.5px solid ${_theme};border-radius:14px;">
     <div style="display:flex;align-items:stretch;gap:12px;">
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-        <div style="font-size:11px;color:#f84f65;font-weight:800;letter-spacing:0.04em;">📣 開催中の大会</div>
+        <div style="font-size:11px;color:#8a6d00;font-weight:800;letter-spacing:0.04em;">📣 開催中の大会</div>
         <div style="font-size:18px;font-weight:800;color:#1a1a1a;line-height:1.35;margin-top:3px;">${_nameHtml}</div>
         ${_venueName?`<div style="font-size:13px;color:#6b7280;margin-top:7px;line-height:1.5;">📍 ${escH(_venueName)}</div>`:''}
         ${_period?`<div style="font-size:13px;color:#6b7280;margin-top:2px;line-height:1.5;">🗓 ${escH(_period)}</div>`:''}
@@ -1774,7 +1789,7 @@ function rSetup(){
       </div>
       ${_rightSide}
     </div>
-    ${_showVenueDetail?`<button id="btn-go-venue" style="width:100%;margin-top:12px;padding:10px;font-size:14px;font-weight:700;background:#fff;border:1.5px solid #C9EBDD;border-radius:10px;color:#0a6e57;cursor:pointer;">📍 会場の詳細を見る ▸</button>`:''}
+    ${_showVenueDetail?`<button id="btn-go-venue" style="width:100%;margin-top:12px;padding:10px;font-size:14px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">📍 会場の詳細を見る ▸</button>`:''}
   </div>`;
 
   // 開催中の大会があるときだけカードを出す。無ければテンプレは表示しない。
@@ -1790,60 +1805,60 @@ function rSetup(){
       <div style="flex:1;font-size:11.5px;font-weight:700;color:#9ca3af;letter-spacing:0.12em;line-height:15px;height:54px;display:flex;flex-direction:column;justify-content:center;"><span><span style="font-size:14px;font-weight:800;color:#374151;">O</span>nline</span><span><span style="font-size:14px;font-weight:800;color:#374151;">S</span>coring</span><span><span style="font-size:14px;font-weight:800;color:#374151;">S</span>ystem</span></div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
         <button class="btn btn-gray btn-xs" id="btn-go-admin" style="font-size:12px;">⚙️ 管理者</button>
-        <div style="font-size:10px;color:#f84f65;font-weight:800;white-space:nowrap;">ver.${APP_VERSION}</div>
+        <div style="font-size:10px;color:#8a6d00;font-weight:800;white-space:nowrap;">ver.${APP_VERSION}</div>
       </div>
     </div>
     ${topBlock}
-    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #f84f65;padding-left:7px;">試合</div>
+    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #E39A00;padding-left:7px;">試合</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
-      <button id="btn-go-matchid" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-matchid" style="padding:12px 6px;background:#F2B705;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📷</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">QRコードで<br>試合開始</div>
       </button>
-      <button id="btn-go-result-only" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-result-only" style="padding:12px 6px;background:#E39A00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📤</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">試合結果のみ<br>を送信</div>
       </button>
-      <button id="btn-go-court-search" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-court-search" style="padding:12px 6px;background:#C98A00;color:#fff8e6;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">${courtIcon}</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${courtLabel}</div>
       </button>
-      <button id="btn-go-regulation" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-regulation" style="padding:12px 6px;background:#FFC93D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📜</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">レギュ<br>レーション</div>
       </button>
-      <button id="btn-go-schedule" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-schedule" style="padding:12px 6px;background:#E39A00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🕐</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">タイム<br>スケジュール</div>
       </button>
-      <button id="btn-go-prelim" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-prelim" style="padding:12px 6px;background:#F2B705;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🏅</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">予選結果<br>を確認</div>
       </button>
-      <button id="btn-go-remaining" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-remaining" style="padding:12px 6px;background:#FFC93D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📊</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">残り試合数<br>を確認</div>
       </button>
-      <button id="btn-go-bracket" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-bracket" style="padding:12px 6px;background:#C98A00;color:#fff8e6;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🏆</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">決勝<br>トーナメント表</div>
       </button>
-      <button id="btn-go-teamsearch" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-teamsearch" style="padding:12px 6px;background:#F2B705;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🪪</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">チームNo<br>を検索</div>
       </button>
-      <button id="btn-go-spreadsheet" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-spreadsheet" style="padding:12px 6px;background:#E39A00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📑</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">大会<br>スプレッドシート</div>
       </button>
     </div>
-    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #f84f65;padding-left:7px;">成績・記録</div>
+    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #E39A00;padding-left:7px;">成績・記録</div>
     <div style="display:flex;gap:8px;">
-      <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#4f46e5;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#B07A00;color:#fff8e6;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📊</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">成績を見る</div>
       </button>
-      <button id="btn-go-score-search" style="flex:1;padding:10px 6px;background:#4f46e5;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-score-search" style="flex:1;padding:10px 6px;background:#B07A00;color:#fff8e6;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📋</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${scoreLabel}</div>
       </button>
@@ -2350,7 +2365,7 @@ function rAdminTop(){
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
       <button class="btn btn-gray btn-sm" id="btn-bk-admin">← 戻る</button>
-      <div style="font-size:18px;font-weight:800;color:#1a1a1a;border-left:4px solid #f84f65;padding-left:9px;">管理者設定</div>
+      <div style="font-size:18px;font-weight:800;color:#1a1a1a;border-left:4px solid #E39A00;padding-left:9px;">管理者設定</div>
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;background:#FFF7ED;">
@@ -2362,7 +2377,7 @@ function rAdminTop(){
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
-        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #f84f65;padding-left:7px;">場所の管理</div>
+        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #E39A00;padding-left:7px;">場所の管理</div>
         <button class="btn btn-green btn-xs" id="btn-add-venue" style="padding:4px 10px;">＋ 追加</button>
       </div>
       ${(ad.venues||[]).length===0?'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>':
@@ -2375,7 +2390,7 @@ function rAdminTop(){
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
-        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #f84f65;padding-left:7px;">大会の管理</div>
+        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #E39A00;padding-left:7px;">大会の管理</div>
         <button class="btn btn-gray btn-xs" id="btn-add-folder" style="padding:4px 10px;">＋ フォルダ</button>
         <button class="btn btn-green btn-xs" id="btn-add-tournament" style="padding:4px 10px;">＋ 大会を追加</button>
       </div>
@@ -2481,7 +2496,7 @@ function ruleCardsHtml(obj){
   const roundRules=obj.roundRules||[];
   const foldSection=(title,count,addBtnId,innerHtml,subHtml,first,accKey)=>`<div style="${first?'':'border-top:1px solid #e5e7eb;margin-top:12px;'}padding-top:${first?'0':'12px'};">
     <div style="display:flex;align-items:center;margin-bottom:8px;">
-      <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #f84f65;padding-left:7px;">${title}</div>
+      <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #E39A00;padding-left:7px;">${title}</div>
       <button class="btn btn-green btn-xs" id="${addBtnId}" style="padding:4px 10px;">＋ 追加</button>
     </div>
     ${subHtml||''}
@@ -3977,6 +3992,7 @@ function showVenueModal(idx){
   if(!AD.venueTemplates)AD.venueTemplates=[];
   const v=idx!=null?{...AD.venues[idx]}:{code:'',name:''};
   const d=v.detail||{};
+  const curColor=v.themeColor||'';
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const notesText=Array.isArray(d.notes)?d.notes.join('\n'):'';
   const sectionsText=Array.isArray(d.sections)?d.sections.map(s=>((s.title||'')+' | '+(s.body||''))).join('\n'):'';
@@ -3993,6 +4009,12 @@ function showVenueModal(idx){
     <div style="display:grid;gap:10px;">
       ${fieldRow('v-code','場所コード（試合IDの1番目・2桁）',v.code,'例: 01')}
       ${fieldRow('v-name','場所名',v.name,'例: 川崎')}
+      <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">テーマカラー（この場所の色。ホームの大会カードの背景に使われます）</div>
+        <div id="v-theme-swatches" style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${VENUE_PALETTE.map(c=>`<button type="button" class="v-theme-sw" data-color="${c.hex}" title="${esc(c.label)}" style="width:30px;height:30px;border-radius:50%;background:${c.hex};border:3px solid ${curColor===c.hex?'#111':'#fff'};box-shadow:0 0 0 1px #d1d5db;cursor:pointer;padding:0;"></button>`).join('')}
+          <button type="button" class="v-theme-sw" data-color="" title="なし（既定色）" style="width:30px;height:30px;border-radius:50%;background:#fff;border:3px solid ${!curColor?'#111':'#fff'};box-shadow:0 0 0 1px #d1d5db;cursor:pointer;font-size:14px;color:#9ca3af;line-height:1;padding:0;">×</button>
+        </div>
+      </div>
 
       <div style="border-top:1px solid #eee;margin-top:6px;padding-top:10px;display:flex;gap:8px;align-items:center;">
         <select id="v-tpl-select" style="flex:1;font-size:13px;">${tplOpts}</select>
@@ -4050,6 +4072,14 @@ function showVenueModal(idx){
     set('v-sections',Array.isArray(det.sections)?det.sections.map(s=>((s.title||'')+' | '+(s.body||''))).join('\n'):'');
   };
 
+  // テーマカラーの選択
+  overlay._themeColor=curColor;
+  overlay.querySelectorAll('.v-theme-sw').forEach(b=>b.onclick=()=>{
+    overlay._themeColor=b.dataset.color||'';
+    overlay.querySelectorAll('.v-theme-sw').forEach(x=>{x.style.borderColor='#fff';});
+    b.style.borderColor='#111';
+  });
+
   document.getElementById('v-cancel').onclick=()=>document.body.removeChild(overlay);
   document.getElementById('v-tpl-load').onclick=()=>{
     const id=document.getElementById('v-tpl-select').value;
@@ -4073,7 +4103,7 @@ function showVenueModal(idx){
     const name=gv('v-name');
     if(!code||!name){alert('場所コードと場所名を入力してください');return;}
     if(!AD.venues)AD.venues=[];
-    const newV={code,name,detail:buildDetail()};
+    const newV={code,name,themeColor:overlay._themeColor||'',detail:buildDetail()};
     if(idx!=null)AD.venues[idx]=newV;else AD.venues.push(newV);
     saveAdmin(AD);document.body.removeChild(overlay);render();
   };
@@ -5300,7 +5330,7 @@ function rCourtSearch(){
             </div>
             <div style="font-size:15px;font-weight:800;color:#9ca3af;">VS</div>
             <div style="flex:1;text-align:center;">
-              <div style="font-size:14px;font-weight:700;color:#E24B4A;">${teamBName}</div>
+              <div style="font-size:14px;font-weight:700;color:#2563EB;">${teamBName}</div>
               <div style="font-size:11px;color:#9ca3af;">No.${r.teamB}</div>
             </div>
           </div>
