@@ -75,10 +75,10 @@ const MAX=50,RST=25,MM=3,TURN_LIMIT=12;
 // ===== アプリのバージョン表記 =====
 // ファイル名（例: molkky_final_7_10.html）から自動でバージョン番号を取り出します。
 // 「7_10」や「7-10」→「7_10」と表示。読み取れないときは下の値を使います。
-const APP_VERSION_FALLBACK='7_12';
+const APP_VERSION_FALLBACK='8_0';
 const APP_VERSION=(function(){
   try{
-    const m=(location.pathname||'').match(/molkky_final_(\d+)[_-](\d+)/i);
+    const m=(location.pathname||'').match(/m[oö]lkky_final_(\d+)[_-](\d+)/i);
     if(m)return m[1]+'_'+m[2];
   }catch(e){}
   return APP_VERSION_FALLBACK;
@@ -881,9 +881,14 @@ function resolveMatchId(id){
   // トーナメントIDはmatchesから取得（組み合わせIDに含まれる）
   const tourneyCode=mc?mc.tourneyCode:'';
 
+  // このラウンド（試合区分×トーナメント種類）の設定を先に取得
+  const roundRule=(src.roundRules||[]).find(r=>r.matchCode===matchCode&&r.tourneyCode===tourneyCode);
+  // 実際に使う優先ルール：ラウンドに個別上書きがあればそれを優先、なければ大会全体の設定
+  const effPriority=(roundRule&&roundRule.prio)?roundRule.prio:(src.priority||'tournament');
+
   // 試合形式解決（試合区分 × トーナメント種類）
   let rule=null;
-  if(src.priority==='tournament'){
+  if(effPriority==='tournament'){
     rule=(src.tourneyRules||[]).find(r=>r.code===tourneyCode)||(src.matchRules||[]).find(r=>r.code===matchCode);
   } else {
     rule=(src.matchRules||[]).find(r=>r.code===matchCode)||(src.tourneyRules||[]).find(r=>r.code===tourneyCode);
@@ -891,7 +896,6 @@ function resolveMatchId(id){
 
   const teamA=mc?(src.teams||[]).find(t=>t.id===mc.teamA):null;
   const teamB=mc?(src.teams||[]).find(t=>t.id===mc.teamB):null;
-  const roundRule=(src.roundRules||[]).find(r=>r.matchCode===matchCode&&r.tourneyCode===tourneyCode);
 
   return {
     matchId:matchIdKey,
@@ -1762,8 +1766,8 @@ function rSetup(){
   const _eventCard=`<div style="margin-bottom:20px;padding:14px 16px;background:#F0FBF7;border:1.5px solid #C9EBDD;border-radius:14px;">
     <div style="display:flex;align-items:stretch;gap:12px;">
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-        <div style="font-size:11px;color:#9ca3af;font-weight:700;letter-spacing:0.04em;">📣 開催中の大会</div>
-        <div style="font-size:18px;font-weight:800;color:#111;line-height:1.35;margin-top:3px;">${_nameHtml}</div>
+        <div style="font-size:11px;color:#f84f65;font-weight:800;letter-spacing:0.04em;">📣 開催中の大会</div>
+        <div style="font-size:18px;font-weight:800;color:#1a1a1a;line-height:1.35;margin-top:3px;">${_nameHtml}</div>
         ${_venueName?`<div style="font-size:13px;color:#6b7280;margin-top:7px;line-height:1.5;">📍 ${escH(_venueName)}</div>`:''}
         ${_period?`<div style="font-size:13px;color:#6b7280;margin-top:2px;line-height:1.5;">🗓 ${escH(_period)}</div>`:''}
         ${(_my&&_myTeamObj)?`<div style="font-size:12px;color:#0a6e57;margin-top:7px;font-weight:700;">${escH(_myTeamObj.name)}</div>`:''}
@@ -1786,11 +1790,11 @@ function rSetup(){
       <div style="flex:1;font-size:11.5px;font-weight:700;color:#9ca3af;letter-spacing:0.12em;line-height:15px;height:54px;display:flex;flex-direction:column;justify-content:center;"><span><span style="font-size:14px;font-weight:800;color:#374151;">O</span>nline</span><span><span style="font-size:14px;font-weight:800;color:#374151;">S</span>coring</span><span><span style="font-size:14px;font-weight:800;color:#374151;">S</span>ystem</span></div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
         <button class="btn btn-gray btn-xs" id="btn-go-admin" style="font-size:12px;">⚙️ 管理者</button>
-        <div style="font-size:10px;color:#9ca3af;font-weight:700;white-space:nowrap;">ver.${APP_VERSION}</div>
+        <div style="font-size:10px;color:#f84f65;font-weight:800;white-space:nowrap;">ver.${APP_VERSION}</div>
       </div>
     </div>
     ${topBlock}
-    <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">試合</div>
+    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #f84f65;padding-left:7px;">試合</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
       <button id="btn-go-matchid" style="padding:12px 6px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📷</span>
@@ -1833,7 +1837,7 @@ function rSetup(){
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">大会<br>スプレッドシート</div>
       </button>
     </div>
-    <div style="font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.08em;margin-bottom:8px;">成績・記録</div>
+    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #f84f65;padding-left:7px;">成績・記録</div>
     <div style="display:flex;gap:8px;">
       <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#4f46e5;color:#fff;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📊</span>
@@ -2328,7 +2332,7 @@ function adminTourRowHtml(t,ad){
         <div style="font-size:12px;color:#9ca3af;">チーム${(t.teams||[]).length}件 / 対戦${(t.matches||[]).length}件</div>
       </div>
       <button class="btn btn-gray btn-xs admin-edit-tour" data-id="${t.id}" style="padding:3px 8px;">編集</button>
-      <button class="btn btn-red-o btn-xs admin-del-tour" data-id="${t.id}" style="padding:3px 8px;">削除</button>
+      <button class="btn btn-red-o btn-xs admin-del-tour" data-id="${t.id}" style="padding:2px 7px;font-size:11px;">削除</button>
       ${(ad.activeEventCode&&t.eventCode&&ad.activeEventCode===t.eventCode)?
         '<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:99px;">📡 配信中</span>':
         `<button class="btn btn-gray btn-xs admin-set-active" data-code="${t.eventCode}" style="padding:3px 8px;">📡 配信中にする</button>`}
@@ -2346,7 +2350,7 @@ function rAdminTop(){
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
       <button class="btn btn-gray btn-sm" id="btn-bk-admin">← 戻る</button>
-      <div style="font-size:18px;font-weight:700;color:#111;">管理者設定</div>
+      <div style="font-size:18px;font-weight:800;color:#1a1a1a;border-left:4px solid #f84f65;padding-left:9px;">管理者設定</div>
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;background:#FFF7ED;">
@@ -2358,20 +2362,20 @@ function rAdminTop(){
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
-        <div style="flex:1;font-size:14px;font-weight:600;color:#111;">場所の管理</div>
+        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #f84f65;padding-left:7px;">場所の管理</div>
         <button class="btn btn-green btn-xs" id="btn-add-venue" style="padding:4px 10px;">＋ 追加</button>
       </div>
       ${(ad.venues||[]).length===0?'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>':
         (ad.venues||[]).map((v,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
           <div style="flex:1;font-size:14px;"><span style="font-weight:600;">${v.code}</span> : ${v.name}</div>
           <button class="btn btn-gray btn-xs admin-edit-venue" data-idx="${i}" style="padding:3px 8px;">編集</button>
-          <button class="btn btn-red-o btn-xs admin-del-venue" data-idx="${i}" style="padding:3px 8px;">削除</button>
+          <button class="btn btn-red-o btn-xs admin-del-venue" data-idx="${i}" style="padding:2px 7px;font-size:11px;">削除</button>
         </div>`).join('')}
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
-        <div style="flex:1;font-size:14px;font-weight:600;color:#111;">大会の管理</div>
+        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #f84f65;padding-left:7px;">大会の管理</div>
         <button class="btn btn-gray btn-xs" id="btn-add-folder" style="padding:4px 10px;">＋ フォルダ</button>
         <button class="btn btn-green btn-xs" id="btn-add-tournament" style="padding:4px 10px;">＋ 大会を追加</button>
       </div>
@@ -2394,7 +2398,7 @@ function rAdminTop(){
             <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#111;">📁 ${escHtml(f.name)} <span style="font-size:11px;color:#9ca3af;font-weight:400;">(${inF.length})</span></summary>
             <div style="display:flex;gap:6px;margin:6px 0 4px;">
               <button class="btn btn-gray btn-xs admin-rename-folder" data-id="${f.id}" style="padding:2px 8px;">名前変更</button>
-              <button class="btn btn-red-o btn-xs admin-del-folder" data-id="${f.id}" style="padding:2px 8px;">フォルダ削除</button>
+              <button class="btn btn-red-o btn-xs admin-del-folder" data-id="${f.id}" style="padding:2px 7px;font-size:11px;">フォルダ削除</button>
             </div>
             ${inF.length?inF.map(t=>adminTourRowHtml(t,ad)).join(''):'<div style="font-size:12px;color:#9ca3af;padding:4px 0;">この中に大会はありません</div>'}
           </details>`;
@@ -2475,22 +2479,44 @@ function ruleCardsHtml(obj){
   const matchRules=obj.matchRules||[];
   const tourneyRules=obj.tourneyRules||[];
   const roundRules=obj.roundRules||[];
-  const foldSection=(title,count,addBtnId,innerHtml,subHtml,first)=>`<div style="${first?'':'border-top:1px solid #e5e7eb;margin-top:12px;'}padding-top:${first?'0':'12px'};">
+  const foldSection=(title,count,addBtnId,innerHtml,subHtml,first,accKey)=>`<div style="${first?'':'border-top:1px solid #e5e7eb;margin-top:12px;'}padding-top:${first?'0':'12px'};">
     <div style="display:flex;align-items:center;margin-bottom:8px;">
-      <div style="flex:1;font-size:14px;font-weight:600;color:#111;">${title}</div>
+      <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #f84f65;padding-left:7px;">${title}</div>
       <button class="btn btn-green btn-xs" id="${addBtnId}" style="padding:4px 10px;">＋ 追加</button>
     </div>
     ${subHtml||''}
-    ${count>0?`<details style="margin-top:4px;"><summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">詳細を表示（${count}件）</summary>
+    ${count>0?`<details data-acc="${accKey||''}" style="margin-top:4px;"><summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">詳細を表示（${count}件）</summary>
       <div style="margin-top:6px;">${innerHtml}</div>
     </details>`:'<div style="font-size:13px;color:#9ca3af;padding:4px 0;">まだ設定がありません</div>'}
   </div>`;
 
-  const roundInner=roundRules.length?roundRules.map((r,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-    <div style="flex:1;font-size:13px;">区分${r.matchCode} × T${r.tourneyCode} → <span style="font-weight:600;">${r.round}</span></div>
+  const roundInner=roundRules.length?roundRules.map((r,i)=>`<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid #f3f4f6;">
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:13px;">区分${r.matchCode} × T${r.tourneyCode} → <span style="font-weight:600;">${r.round}</span></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:5px;">
+        <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">優先</span>
+        <select class="round-prio" data-idx="${i}" style="font-size:12px;padding:4px 6px;width:auto;min-width:150px;">
+          <option value="" ${!r.prio?'selected':''}>基本のまま</option>
+          <option value="tournament" ${r.prio==='tournament'?'selected':''}>トーナメント種類を優先</option>
+          <option value="match" ${r.prio==='match'?'selected':''}>試合区分を優先</option>
+        </select>
+      </div>
+    </div>
     <button class="btn btn-gray btn-xs admin-edit-round" data-idx="${i}" style="padding:3px 8px;">編集</button>
     <button class="btn btn-red-o btn-xs admin-del-round" data-idx="${i}" style="padding:3px 8px;">削除</button>
   </div>`).join(''):'';
+
+  // ラウンド名設定の見出し下：説明＋（1件以上あれば）全ラウンド一括の優先設定
+  const roundSub='<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">試合区分×トーナメント種類の組み合わせ。各ラウンドの「優先」で、大会全体の優先ルールをこのラウンドだけ上書きできます。</div>'
+    +(roundRules.length?`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#f9fafb;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+      <span style="font-size:12px;color:#374151;">全ラウンドの優先を</span>
+      <select id="round-prio-bulk" style="font-size:12px;padding:4px 6px;width:auto;">
+        <option value="">基本のまま</option>
+        <option value="tournament">トーナメント種類を優先</option>
+        <option value="match">試合区分を優先</option>
+      </select>
+      <button class="btn btn-gray btn-xs" id="btn-round-prio-bulk" style="padding:3px 10px;">まとめて適用</button>
+    </div>`:'');
 
   const scText=systemChartToText(obj.systemChart);
   const scHasRules=(matchRules.length||tourneyRules.length||roundRules.length);
@@ -2543,9 +2569,9 @@ function ruleCardsHtml(obj){
     <div id="sc-preview" style="overflow-x:auto;padding:8px;background:#fafafa;border-radius:8px;">${renderSystemChart(scCh,true)}</div>
   </div>`;
 
-  return `<div style="margin-top:14px;">`+foldSection('試合区分ルール',matchRules.length,'btn-add-match-rule',ruleRowsHtml(matchRules,'match',{reorder:true}),'',true)
-    +foldSection('トーナメント種類ルール',tourneyRules.length,'btn-add-tourney-rule',ruleRowsHtml(tourneyRules,'tourney',{}),'',false)
-    +foldSection('ラウンド名設定',roundRules.length,'btn-add-round-rule',roundInner,'<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">試合区分×トーナメント種類の組み合わせ</div>',false)
+  return `<div style="margin-top:14px;">`+foldSection('試合区分ルール',matchRules.length,'btn-add-match-rule',ruleRowsHtml(matchRules,'match',{reorder:true}),'',true,'ruleMatch')
+    +foldSection('トーナメント種類ルール',tourneyRules.length,'btn-add-tourney-rule',ruleRowsHtml(tourneyRules,'tourney',{}),'',false,'ruleTourney')
+    +foldSection('ラウンド名設定',roundRules.length,'btn-add-round-rule',roundInner,roundSub,false,'ruleRound')
     +scSection+`</div>`;
 }
 
@@ -4348,7 +4374,10 @@ function renderSystemChart(ch,editable){
 
   // ── ヘッダ ──
   h+='<tr>';
-  h+=`<td style="background:${SC_COLORS.pink.bg};border:1px solid ${SC_COLORS.pink.bd};color:${SC_COLORS.pink.tx};font-weight:800;text-align:center;padding:6px 3px;white-space:normal;word-break:break-word;line-height:1.2;">${scNameHtml(ch.cornerLabel||'')}</td>`;
+  const _corner=(ch.cornerLabel||'').trim();
+  h+=_corner
+    ?`<td style="background:${SC_COLORS.pink.bg};border:1px solid ${SC_COLORS.pink.bd};color:${SC_COLORS.pink.tx};font-weight:800;text-align:center;padding:6px 3px;white-space:normal;word-break:break-word;line-height:1.2;">${scNameHtml(ch.cornerLabel)}</td>`
+    :`<td style="border-bottom:2px solid #cfcfcf;"></td>`;
   for(let c=0;c<nCols;c++){
     h+=`<td style="border-bottom:2px solid #cfcfcf;font-weight:700;text-align:center;padding:6px 3px;color:#333;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.2;">${scNameHtml(cols[c].name)}</td>`;
     if(c<nCols-1)h+=`<td style="border-bottom:2px solid #cfcfcf;"></td>`;
@@ -5809,6 +5838,12 @@ function bindDrag(){
 
 function bind(){
   const app=document.getElementById('app');
+  // 折りたたみ（詳細を表示）の開閉状態を、画面を作り直しても覚えておく
+  app.querySelectorAll('details[data-acc]').forEach(d=>{
+    const k=d.getAttribute('data-acc');if(!k)return;
+    if(S._accOpen&&S._accOpen[k])d.open=true;
+    d.addEventListener('toggle',()=>{S._accOpen=S._accOpen||{};S._accOpen[k]=d.open;});
+  });
   app.querySelectorAll('input[name="fmt"]').forEach(el=>{el.addEventListener('change',e=>{S.fmt=e.target.value;render();});});
   app.querySelectorAll('input[name="tl"]').forEach(el=>{el.addEventListener('change',e=>{S.turnLimit=e.target.value==='12';render();});});
   // 投擲人数 min/max ボタン
@@ -6671,9 +6706,10 @@ function bind(){
   const bsrt=document.getElementById('btn-save-rule-tpl');if(bsrt)bsrt.onclick=()=>showSaveRuleTemplateModal();
   const blrt=document.getElementById('btn-load-rule-tpl');if(blrt)blrt.onclick=()=>showLoadRuleTemplateModal();
   const bmrt=document.getElementById('btn-manage-rule-tpl');if(bmrt)bmrt.onclick=()=>{S._tplManage=true;render();};
-  const bamr=document.getElementById('btn-add-match-rule');if(bamr)bamr.onclick=()=>showRuleModal('match',null);
-  const batr=document.getElementById('btn-add-tourney-rule');if(batr)batr.onclick=()=>showRuleModal('tourney',null);
-  const barr=document.getElementById('btn-add-round-rule');if(barr)barr.onclick=()=>showRoundRuleModal(null);
+  const _accSet=(k)=>{S._accOpen=S._accOpen||{};S._accOpen[k]=true;};
+  const bamr=document.getElementById('btn-add-match-rule');if(bamr)bamr.onclick=()=>{_accSet('ruleMatch');showRuleModal('match',null);};
+  const batr=document.getElementById('btn-add-tourney-rule');if(batr)batr.onclick=()=>{_accSet('ruleTourney');showRuleModal('tourney',null);};
+  const barr=document.getElementById('btn-add-round-rule');if(barr)barr.onclick=()=>{_accSet('ruleRound');showRoundRuleModal(null);};
   document.querySelectorAll('.admin-edit-rule').forEach(btn=>btn.addEventListener('click',()=>showRuleModal(btn.dataset.prefix,parseInt(btn.dataset.idx))));
   document.querySelectorAll('.admin-del-rule').forEach(btn=>btn.addEventListener('click',()=>{
     const _t=ruleEditTarget();const obj=_t.obj;if(!obj)return;
@@ -6701,6 +6737,21 @@ function bind(){
     const _t=ruleEditTarget();const obj=_t.obj;if(!obj||!obj.roundRules)return;
     obj.roundRules.splice(parseInt(btn.dataset.idx),1);_t.save();render();
   }));
+  // ラウンドごとの優先ルール上書き（1件ずつ）
+  document.querySelectorAll('.round-prio').forEach(sel=>sel.addEventListener('change',()=>{
+    const _t=ruleEditTarget();const obj=_t.obj;if(!obj||!obj.roundRules)return;
+    const rr=obj.roundRules[parseInt(sel.dataset.idx)];if(!rr)return;
+    rr.prio=sel.value;_t.save();
+    S._accOpen=S._accOpen||{};S._accOpen.ruleRound=true;render();
+  }));
+  // ラウンドごとの優先ルール上書き（全ラウンドまとめて）
+  const brpb=document.getElementById('btn-round-prio-bulk');
+  if(brpb)brpb.onclick=()=>{
+    const _t=ruleEditTarget();const obj=_t.obj;if(!obj||!obj.roundRules)return;
+    const selEl=document.getElementById('round-prio-bulk');const v=selEl?selEl.value:'';
+    obj.roundRules.forEach(rr=>{rr.prio=v;});_t.save();
+    S._accOpen=S._accOpen||{};S._accOpen.ruleRound=true;render();
+  };
 
   // ===== テンプレート管理画面 =====
   const btmBack=document.getElementById('btn-tplm-back');if(btmBack)btmBack.onclick=()=>{S._tplManage=false;render();};
