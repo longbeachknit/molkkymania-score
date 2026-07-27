@@ -17,7 +17,7 @@ body{background:#f5f5f5;}
 .btn{padding:8px 16px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#111;cursor:pointer;font-size:14px;font-family:inherit;transition:background 0.15s;}
 .btn:hover{background:#f3f4f6;}.btn:active{transform:scale(0.97);}
 .btn-green{background:#EAA100;color:#2b2100;border-color:#EAA100;}.btn-green:hover{background:#cf8f00;}
-.btn-blue{background:#378ADD;color:#fff;border-color:#378ADD;}.btn-blue:hover{background:#2e72c4;}
+.btn-blue{background:#2E8B57;color:#fff;border-color:#2E8B57;}.btn-blue:hover{background:#247045;}
 .btn-red-o{background:#FEE2E2;color:#b91c1c;border-color:#fca5a5;}.btn-red-o:hover{background:#fecaca;}
 .btn-orange{background:#FFF7ED;color:#92400e;border-color:#fed7aa;}.btn-orange:hover{background:#fef3c7;}
 .btn-yellow{background:#FEFCE8;color:#854d0e;border-color:#fde68a;}.btn-yellow:hover{background:#fef9c3;}
@@ -66,7 +66,9 @@ textarea:focus{outline:none;border-color:#1D9E75;background:#fff;}
 <div class="app" id="app"></div>
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
-const C=['#1D9E75','#2563EB'];
+// チーム色：A=グリーン系 / B=イエロー(アンバー)系。
+// 枠線(C)・背景(LB)・枠色(LBR)・文字(LT)は必ず同じ系統で揃える（内と外でトーンをずらさない）。
+const C=['#1D9E75','#C98A00'];
 // 場所（会場）ごとのテーマカラー候補（モルマニ会場カラー）。管理者が場所ごとに1色選ぶ。
 const VENUE_PALETTE=[
   {hex:'#F5B301',label:'サンイエロー'},{hex:'#F59E0B',label:'アンバー'},
@@ -78,9 +80,9 @@ const VENUE_PALETTE=[
   {hex:'#2E9E5B',label:'グリーン'},{hex:'#7CB342',label:'ライム'},
   {hex:'#8D6E63',label:'ブラウン'},{hex:'#546E7A',label:'スレート'}
 ];
-const LB=['#E1F5EE','#FCEBEB'];
-const LBR=['#9FE1CB','#F7C1C1'];
-const LT=['#085041','#A32D2D'];
+const LB=['#E1F5EE','#FDF3D7'];
+const LBR=['#9FE1CB','#E6CF7A'];
+const LT=['#085041','#6b5510'];
 const MAX=50,RST=25,MM=3,TURN_LIMIT=12;
 
 // ===== アプリのバージョン表記 =====
@@ -1106,9 +1108,9 @@ function rankBadge(r){
   const tc=r<=3?'#fff':'#374151';
   return `<span style="display:inline-block;background:${c};color:${tc};border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;">${r}位</span>`;
 }
-function cssBar(val,max,color='#6366f1'){
+function cssBar(val,max,color='#2E8B57'){
   const w=max>0?Math.min(100,Math.round(val/max*100)):0;
-  return `<div style="background:#e5e7eb;border-radius:4px;height:8px;margin-top:4px;"><div style="background:#3b82f6;width:${w}%;height:8px;border-radius:4px;transition:width 0.3s;"></div></div>`;
+  return `<div style="background:#e5e7eb;border-radius:4px;height:8px;margin-top:4px;"><div style="background:#2E8B57;width:${w}%;height:8px;border-radius:4px;transition:width 0.3s;"></div></div>`;
 }
 
 // アクティブ大会を取得（なければ最初の大会）
@@ -1811,54 +1813,54 @@ function rSetup(){
     ${topBlock}
     <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #E39A00;padding-left:7px;">試合</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
-      <button id="btn-go-matchid" style="padding:12px 6px;background:#F2B705;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-matchid" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📷</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">QRコードで<br>試合開始</div>
       </button>
-      <button id="btn-go-result-only" style="padding:12px 6px;background:#E39A00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-result-only" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📤</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">試合結果のみ<br>を送信</div>
       </button>
-      <button id="btn-go-court-search" style="padding:12px 6px;background:#C98A00;color:#fff8e6;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-court-search" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">${courtIcon}</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${courtLabel}</div>
       </button>
-      <button id="btn-go-regulation" style="padding:12px 6px;background:#FFC93D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-regulation" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📜</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">レギュ<br>レーション</div>
       </button>
-      <button id="btn-go-schedule" style="padding:12px 6px;background:#E39A00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-schedule" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🕐</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">タイム<br>スケジュール</div>
       </button>
-      <button id="btn-go-prelim" style="padding:12px 6px;background:#F2B705;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-prelim" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🏅</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">予選結果<br>を確認</div>
       </button>
-      <button id="btn-go-remaining" style="padding:12px 6px;background:#FFC93D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-remaining" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📊</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">残り試合数<br>を確認</div>
       </button>
-      <button id="btn-go-bracket" style="padding:12px 6px;background:#C98A00;color:#fff8e6;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-bracket" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🏆</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">決勝<br>トーナメント表</div>
       </button>
-      <button id="btn-go-teamsearch" style="padding:12px 6px;background:#F2B705;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-teamsearch" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🪪</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">チームNo<br>を検索</div>
       </button>
-      <button id="btn-go-spreadsheet" style="padding:12px 6px;background:#E39A00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-spreadsheet" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📑</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">大会<br>スプレッドシート</div>
       </button>
     </div>
     <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #E39A00;padding-left:7px;">成績・記録</div>
     <div style="display:flex;gap:8px;">
-      <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#B07A00;color:#fff8e6;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#D28E00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📊</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">成績を見る</div>
       </button>
-      <button id="btn-go-score-search" style="flex:1;padding:10px 6px;background:#B07A00;color:#fff8e6;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-score-search" style="flex:1;padding:10px 6px;background:#D28E00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📋</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${scoreLabel}</div>
       </button>
@@ -1973,8 +1975,8 @@ function rGame(){
       </div>
     </div>
     ${S.endPending?`<div style="background:#FFF7ED;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#92400e;">⏳ <strong>後攻の投擲が終わり次第、試合を終了します</strong></div>`:''}
-    ${S.tieExtend?`<div style="background:#EEF2FF;border:1.5px solid #a5b4fc;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#3730a3;">🔁 <strong>合計点が同点のためもう1ターン延長します。</strong>得点差がついた時点で試合終了となります。</div>`:''}
-    ${S.tlTieExtend?`<div style="background:#EEF2FF;border:1.5px solid #a5b4fc;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#3730a3;">🔁 <strong>${TURN_LIMIT}ターン終了時点で同点のため延長します。</strong>得点差がついた時点でセット終了となります。</div>`:''}
+    ${S.tieExtend?`<div style="background:#F4F7E8;border:1.5px solid #C5D89B;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#4a5d16;">🔁 <strong>合計点が同点のためもう1ターン延長します。</strong>得点差がついた時点で試合終了となります。</div>`:''}
+    ${S.tlTieExtend?`<div style="background:#F4F7E8;border:1.5px solid #C5D89B;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#4a5d16;">🔁 <strong>${TURN_LIMIT}ターン終了時点で同点のため延長します。</strong>得点差がついた時点でセット終了となります。</div>`:''}
     ${S.turnLimit&&displayTurnNum===TURN_LIMIT-1&&!S.tlTieExtend?`<div style="background:#FEF9C3;border:1.5px solid #fde68a;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#854d0e;">⚠️ <strong>残り2ターンです</strong></div>`:''}
     ${S.turnLimit&&displayTurnNum===TURN_LIMIT&&!S.tlTieExtend?`<div style="background:#FEF9C3;border:1.5px solid #fde68a;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#854d0e;">⚠️ <strong>最終ターンです</strong></div>`:''}
     ${S.showHist&&hasPrev?histTbl(S.cur):''}
@@ -2016,9 +2018,9 @@ function rGame(){
         <div style="margin-bottom:10px;">
           <div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-weight:600;">① 得点</div>
           <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
-            ${[1,2,3,4,5,6].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#2563eb':'#e5e7eb'};background:${S.iP===String(n)?'#dbeafe':'#f9fafb'};color:${S.iP===String(n)?'#1d4ed8':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
+            ${[1,2,3,4,5,6].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#1D9E75':'#e5e7eb'};background:${S.iP===String(n)?'#E1F5EE':'#f9fafb'};color:${S.iP===String(n)?'#0a6e57':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
             <button class="btn-pts" id="btn-miss" data-pts="miss" style="font-size:17px;font-weight:800;border-radius:8px;border:2px solid ${S.iP==='miss'?'#dc2626':'#e5e7eb'};background:${S.iP==='miss'?'#fee2e2':'#f9fafb'};color:${S.iP==='miss'?'#dc2626':'#111'};cursor:pointer;grid-row:span 2;width:100%;">ミス<br><span style="font-size:20px;">0</span></button>
-            ${[7,8,9,10,11,12].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#2563eb':'#e5e7eb'};background:${S.iP===String(n)?'#dbeafe':'#f9fafb'};color:${S.iP===String(n)?'#1d4ed8':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
+            ${[7,8,9,10,11,12].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#1D9E75':'#e5e7eb'};background:${S.iP===String(n)?'#E1F5EE':'#f9fafb'};color:${S.iP===String(n)?'#0a6e57':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
           </div>
         </div>
         <div style="margin-bottom:10px;">
@@ -2500,38 +2502,22 @@ function ruleCardsHtml(obj){
       <button class="btn btn-green btn-xs" id="${addBtnId}" style="padding:4px 10px;">＋ 追加</button>
     </div>
     ${subHtml||''}
-    ${count>0?`<details data-acc="${accKey||''}" style="margin-top:4px;"><summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">詳細を表示（${count}件）</summary>
+    ${count>0?`<details data-acc="${accKey||''}" style="margin-top:4px;"><summary style="cursor:pointer;font-size:13px;color:#2E8B57;padding:6px 0;">詳細を表示（${count}件）</summary>
       <div style="margin-top:6px;">${innerHtml}</div>
     </details>`:'<div style="font-size:13px;color:#9ca3af;padding:4px 0;">まだ設定がありません</div>'}
   </div>`;
 
-  const roundInner=roundRules.length?roundRules.map((r,i)=>`<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid #f3f4f6;">
-    <div style="flex:1;min-width:0;">
-      <div style="font-size:13px;">区分${r.matchCode} × T${r.tourneyCode} → <span style="font-weight:600;">${r.round}</span></div>
-      <div style="display:flex;align-items:center;gap:6px;margin-top:5px;">
-        <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">優先</span>
-        <select class="round-prio" data-idx="${i}" style="font-size:12px;padding:4px 6px;width:auto;min-width:150px;">
-          <option value="" ${!r.prio?'selected':''}>基本のまま</option>
-          <option value="tournament" ${r.prio==='tournament'?'selected':''}>トーナメント種類を優先</option>
-          <option value="match" ${r.prio==='match'?'selected':''}>試合区分を優先</option>
-        </select>
-      </div>
-    </div>
+  // 優先の上書きが設定されている行だけ、小さなバッジで表示する（未設定＝大会全体の設定のまま＝何も出さない）
+  const prioBadge=p=>p==='tournament'?'<span style="font-size:10px;font-weight:700;color:#6b5510;background:#FDF3D7;border:1px solid #E6CF7A;border-radius:99px;padding:1px 7px;margin-left:6px;white-space:nowrap;">優先: T種類</span>'
+    :p==='match'?'<span style="font-size:10px;font-weight:700;color:#6b5510;background:#FDF3D7;border:1px solid #E6CF7A;border-radius:99px;padding:1px 7px;margin-left:6px;white-space:nowrap;">優先: 試合区分</span>':'';
+  const roundInner=roundRules.length?roundRules.map((r,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f3f4f6;">
+    <div style="flex:1;min-width:0;font-size:13px;">区分${r.matchCode} × T${r.tourneyCode} → <span style="font-weight:600;">${r.round}</span>${prioBadge(r.prio)}</div>
     <button class="btn btn-gray btn-xs admin-edit-round" data-idx="${i}" style="padding:3px 8px;">編集</button>
     <button class="btn btn-red-o btn-xs admin-del-round" data-idx="${i}" style="padding:3px 8px;">削除</button>
   </div>`).join(''):'';
 
-  // ラウンド名設定の見出し下：説明＋（1件以上あれば）全ラウンド一括の優先設定
-  const roundSub='<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">試合区分×トーナメント種類の組み合わせ。各ラウンドの「優先」で、大会全体の優先ルールをこのラウンドだけ上書きできます。</div>'
-    +(roundRules.length?`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#f9fafb;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
-      <span style="font-size:12px;color:#374151;">全ラウンドの優先を</span>
-      <select id="round-prio-bulk" style="font-size:12px;padding:4px 6px;width:auto;">
-        <option value="">基本のまま</option>
-        <option value="tournament">トーナメント種類を優先</option>
-        <option value="match">試合区分を優先</option>
-      </select>
-      <button class="btn btn-gray btn-xs" id="btn-round-prio-bulk" style="padding:3px 10px;">まとめて適用</button>
-    </div>`:'');
+  // ラウンド名設定の見出し下：説明のみ（優先の上書きは各行の「編集」ダイアログの中で設定する）
+  const roundSub='<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">試合区分×トーナメント種類の組み合わせ。優先ルールをこのラウンドだけ変えたいときは「編集」から設定できます。</div>';
 
   const scText=systemChartToText(obj.systemChart);
   const scHasRules=(matchRules.length||tourneyRules.length||roundRules.length);
@@ -2556,10 +2542,10 @@ function ruleCardsHtml(obj){
       <div style="flex:1;font-size:14px;font-weight:600;color:#111;">🗺 試合システム図</div>
       <button class="btn btn-blue btn-xs" id="btn-sc-autogen" style="padding:4px 10px;">ルールから自動生成</button>
     </div>
-    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">「残り試合数を確認」で表示される図です。一度負けると右の列（トーナメント）へ移ります。${scHasRules?'':'<br>※ 先に試合区分・トーナメント種類・ラウンド名を登録すると自動生成できます。'}</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">「残り試合数を確認」で表示される図です。一度負けると右の列（トーナメント）へ移ります。<br>「ルールから自動生成」を押すと、いまの<strong>試合区分・トーナメント種類・ラウンド名・優先ルール</strong>（ラウンドごとの上書きを含む）にそろえて作り直します。${scHasRules?'':'<br>※ 先に試合区分・トーナメント種類・ラウンド名を登録すると自動生成できます。'}</div>
 
     <details style="margin-bottom:10px;"${scText.trim()?'':' open'}>
-      <summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">① 構成を編集する（トーナメント名・回戦）</summary>
+      <summary style="cursor:pointer;font-size:13px;color:#2E8B57;padding:6px 0;">① 構成を編集する（トーナメント名・回戦）</summary>
       <div style="margin-top:8px;">
         <div style="font-size:11px;color:#9ca3af;line-height:1.7;background:#f9fafb;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
           1行＝1トーナメント（列）。形式は<br>
@@ -2574,7 +2560,7 @@ function ruleCardsHtml(obj){
     </details>
 
     <details style="margin-bottom:10px;">
-      <summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">② 色の設定（10色から選択）</summary>
+      <summary style="cursor:pointer;font-size:13px;color:#2E8B57;padding:6px 0;">② 色の設定（10色から選択）</summary>
       <div style="margin-top:8px;background:#f9fafb;border-radius:8px;padding:8px 10px;">
         ${scColorRows}
       </div>
@@ -2670,8 +2656,8 @@ function rAdminTourEdit(){
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:600;color:#111;margin-bottom:10px;">大会ルール設定</div>
-      <div style="background:#EEF2FF;border-radius:8px;padding:10px;margin-bottom:14px;">
-        <div style="font-size:12px;font-weight:600;color:#3730a3;margin-bottom:6px;">📋 大会ルールのテンプレート</div>
+      <div style="background:#F4F7E8;border-radius:8px;padding:10px;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:600;color:#4a5d16;margin-bottom:6px;">📋 大会ルールのテンプレート</div>
         <div style="display:flex;align-items:center;gap:6px;">
           <button class="btn btn-blue btn-xs" id="btn-load-rule-tpl" style="flex:1;padding:8px;">読み込む</button>
           <button class="btn btn-gray btn-xs" id="btn-save-rule-tpl" style="flex:1;padding:8px;">保存</button>
@@ -2690,7 +2676,7 @@ function rAdminTourEdit(){
         <button class="btn btn-green btn-xs" id="btn-add-team" style="padding:4px 10px;">＋ 追加</button>
       </div>
       <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">CSV: A列=チームNo、B列=チーム名、C〜G列=メンバー　登録済み: ${(tour.teams||[]).length}件</div>
-      ${(tour.teams||[]).length>0?`<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">詳細を表示（${(tour.teams||[]).length}件）</summary>
+      ${(tour.teams||[]).length>0?`<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;color:#2E8B57;padding:6px 0;">詳細を表示（${(tour.teams||[]).length}件）</summary>
         <div style="margin-top:6px;">
         ${(tour.teams||[]).map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
           <div style="flex:1;"><div style="font-size:13px;font-weight:600;">[${t.id}] ${t.name}</div>
@@ -2710,7 +2696,7 @@ function rAdminTourEdit(){
         <button class="btn btn-green btn-xs" id="btn-add-match" style="padding:4px 10px;">＋ 追加</button>
       </div>
       <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">登録済み: ${(tour.matches||[]).length}件</div>
-      ${(tour.matches||[]).length>0?`<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;color:#378ADD;padding:6px 0;">詳細を表示（${(tour.matches||[]).length}件）</summary>
+      ${(tour.matches||[]).length>0?`<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;color:#2E8B57;padding:6px 0;">詳細を表示（${(tour.matches||[]).length}件）</summary>
         <div style="margin-top:6px;max-height:200px;overflow-y:auto;">
         ${(tour.matches||[]).map((m,i)=>`<div style="padding:5px 0;border-bottom:1px solid #f3f4f6;font-size:12px;">
           <div style="font-weight:600;color:#111;">${m.combinedId||m.matchId}</div>
@@ -2823,7 +2809,7 @@ function rViewPortal(){
     const s=vs.eventStat;
     if(!s){listHtml='<div style="text-align:center;padding:32px;color:#9ca3af;">大会を選択してください</div>';}
     else{
-      const sr=(label,val,unit='',color='#6366f1',barMax=100)=>{
+      const sr=(label,val,unit='',color='#2E8B57',barMax=100)=>{
         const num=parseFloat(val)||0;
         const w=barMax>0?Math.min(100,Math.round(num/barMax*100)):0;
         return`<div style="padding:8px 0;border-bottom:1px solid #f3f4f6;">
@@ -2831,7 +2817,7 @@ function rViewPortal(){
             <div style="font-size:13px;color:#374151;">${label}</div>
             <div style="font-size:14px;font-weight:700;">${val??'-'}${unit}</div>
           </div>
-          <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#3b82f6;width:${w}%;height:6px;border-radius:4px;"></div></div>
+          <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#2E8B57;width:${w}%;height:6px;border-radius:4px;"></div></div>
         </div>`;
       };
       listHtml=`
@@ -2843,18 +2829,18 @@ function rViewPortal(){
         </div>
         <div class="card" style="padding:14px;margin-bottom:12px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">先攻・後攻</div>
-          ${sr('先攻セット勝率',s.firstWinRate+'%','','#3b82f6',100,`${s.firstWinSets??'?'}勝 / ${s.firstSets??'?'}セット`)}
-          ${sr('後攻セット勝率',s.secondWinRate+'%','','#3b82f6',100,`${s.secondWinSets??'?'}勝 / ${s.secondSets??'?'}セット`)}
+          ${sr('先攻セット勝率',s.firstWinRate+'%','','#2E8B57',100,`${s.firstWinSets??'?'}勝 / ${s.firstSets??'?'}セット`)}
+          ${sr('後攻セット勝率',s.secondWinRate+'%','','#2E8B57',100,`${s.secondWinSets??'?'}勝 / ${s.secondSets??'?'}セット`)}
         </div>
         <div class="card" style="padding:14px;margin-bottom:12px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-          ${sr('QH率',s.qhRate+'%','','#3b82f6',100)}
-          ${sr('フォルト率',s.fRate+'%','','#3b82f6',100)}
-          ${sr('上がりターン平均',s.agariAvg,'','#3b82f6',12)}
-          ${sr('セット点数平均',s.setPtsAvg,'','#3b82f6',50)}
-          ${sr('平均ブレーク本数',s.breakAvg,'','#3b82f6',12)}
-          ${sr('平均投擲得点',s.throwPtsAvg,'','#3b82f6',12)}
-          ${sr('平均投擲時間',s.throwTimeAvg,'秒','#3b82f6',60)}
+          ${sr('QH率',s.qhRate+'%','','#2E8B57',100)}
+          ${sr('フォルト率',s.fRate+'%','','#2E8B57',100)}
+          ${sr('上がりターン平均',s.agariAvg,'','#2E8B57',12)}
+          ${sr('セット点数平均',s.setPtsAvg,'','#2E8B57',50)}
+          ${sr('平均ブレーク本数',s.breakAvg,'','#2E8B57',12)}
+          ${sr('平均投擲得点',s.throwPtsAvg,'','#2E8B57',12)}
+          ${sr('平均投擲時間',s.throwTimeAvg,'秒','#2E8B57',60)}
         </div>`;
     }
   } else if(vs.tab==='team'){
@@ -2968,7 +2954,7 @@ function rViewTeamDetail(){
         <div style="font-size:14px;font-weight:700;">${val??'-'}${rb}</div>
       </div>
       ${sub?`<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:2px;">${sub}</div>`:''}
-      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#3b82f6;width:${w}%;height:6px;border-radius:4px;"></div></div>
+      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#2E8B57;width:${w}%;height:6px;border-radius:4px;"></div></div>
     </div>`;
   };
 
@@ -2990,24 +2976,24 @@ function rViewTeamDetail(){
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">勝敗</div>
-      ${sr('試合勝率',mwr+'%',t.rankMatchWin,'#3b82f6',100,`${t.winMatches??'?'}勝 / ${t.totalMatches??'?'}試合`)}
-      ${sr('セット勝率',swr+'%',t.rankSetWin,'#3b82f6',100,`${(t.firstWinSets??0)+(t.secondWinSets??0)}勝 / ${t.totalSets??'?'}セット`)}
+      ${sr('試合勝率',mwr+'%',t.rankMatchWin,'#2E8B57',100,`${t.winMatches??'?'}勝 / ${t.totalMatches??'?'}試合`)}
+      ${sr('セット勝率',swr+'%',t.rankSetWin,'#2E8B57',100,`${(t.firstWinSets??0)+(t.secondWinSets??0)}勝 / ${t.totalSets??'?'}セット`)}
       <div style="padding:6px 0;font-size:13px;color:#6b7280;">${t.winMatches??'-'}勝 / ${t.loseMatches??'-'}敗 / ${t.totalMatches??'-'}試合</div>
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">先攻・後攻</div>
-      ${sr('先攻セット勝率',fwr+'%',t.rankFirstWin,'#3b82f6',100,`${t.firstWinSets??'?'}勝 / ${t.firstSets??'?'}セット`)}
-      ${sr('後攻セット勝率',swr2+'%',t.rankSecondWin,'#3b82f6',100,`${t.secondWinSets??'?'}勝 / ${t.secondSets??'?'}セット`)}
+      ${sr('先攻セット勝率',fwr+'%',t.rankFirstWin,'#2E8B57',100,`${t.firstWinSets??'?'}勝 / ${t.firstSets??'?'}セット`)}
+      ${sr('後攻セット勝率',swr2+'%',t.rankSecondWin,'#2E8B57',100,`${t.secondWinSets??'?'}勝 / ${t.secondSets??'?'}セット`)}
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-      ${sr('QH率',qhr+'%',t.rankQh,'#3b82f6',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalAim??'?'}投 / ${t.dTotalThrows??'?'}投`:'')}
-      ${sr('フォルト率',fr+'%',t.rankF,'#3b82f6',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalFault??'?'}投 / ${t.dTotalThrows??'?'}投`:'')}
-      ${sr('上がりターン平均',t.agariAvg,t.rankAgari,'#3b82f6',12)}
-      ${sr('セット点数平均',t.setPtsAvg,t.rankSetPts,'#3b82f6',50)}
-      ${sr('平均ブレーク本数',t.breakAvg,t.rankBreak,'#3b82f6',12)}
-      ${sr('平均投擲得点',t.throwPtsAvg,t.rankThrowPts,'#3b82f6',12)}
-      ${sr('平均投擲時間(秒)',t.throwTimeAvg,t.rankThrowTime,'#3b82f6',60)}
+      ${sr('QH率',qhr+'%',t.rankQh,'#2E8B57',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalAim??'?'}投 / ${t.dTotalThrows??'?'}投`:'')}
+      ${sr('フォルト率',fr+'%',t.rankF,'#2E8B57',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalFault??'?'}投 / ${t.dTotalThrows??'?'}投`:'')}
+      ${sr('上がりターン平均',t.agariAvg,t.rankAgari,'#2E8B57',12)}
+      ${sr('セット点数平均',t.setPtsAvg,t.rankSetPts,'#2E8B57',50)}
+      ${sr('平均ブレーク本数',t.breakAvg,t.rankBreak,'#2E8B57',12)}
+      ${sr('平均投擲得点',t.throwPtsAvg,t.rankThrowPts,'#2E8B57',12)}
+      ${sr('平均投擲時間(秒)',t.throwTimeAvg,t.rankThrowTime,'#2E8B57',60)}
     </div>
   </div>`;
 }
@@ -3051,7 +3037,7 @@ function rViewPersonDetail(){
         <div style="font-size:14px;font-weight:700;">${val??'-'}${rb}</div>
       </div>
       ${sub?`<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:2px;">${sub}</div>`:''}
-      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#3b82f6;width:${w}%;height:6px;border-radius:4px;"></div></div>
+      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#2E8B57;width:${w}%;height:6px;border-radius:4px;"></div></div>
     </div>`;
   };
 
@@ -3087,23 +3073,23 @@ function rViewPersonDetail(){
     </div>`:''}
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">勝敗</div>
-      ${sr('試合勝率',mwr+'%',d.rankMatchWin,'#3b82f6',100,`${d.winMatches??'?'}勝 / ${d.totalMatches??'?'}試合`)}
-      ${sr('セット勝率',swr+'%',d.rankSetWin,'#3b82f6',100,`${d.setWin??'?'}勝 / ${d.totalSets??'?'}セット`)}
+      ${sr('試合勝率',mwr+'%',d.rankMatchWin,'#2E8B57',100,`${d.winMatches??'?'}勝 / ${d.totalMatches??'?'}試合`)}
+      ${sr('セット勝率',swr+'%',d.rankSetWin,'#2E8B57',100,`${d.setWin??'?'}勝 / ${d.totalSets??'?'}セット`)}
       <div style="padding:6px 0;font-size:13px;color:#6b7280;">${d.winMatches??'-'}勝 / ${d.loseMatches??'-'}敗 / ${d.totalMatches??'-'}試合</div>
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">先攻・後攻</div>
-      ${sr('先攻セット勝率',fwr+'%',d.rankFirstWin,'#3b82f6',100,`${d.firstWinSets??'?'}勝 / ${d.firstSets??'?'}セット`)}
-      ${sr('後攻セット勝率',swr2+'%',d.rankSecondWin,'#3b82f6',100,`${d.secondWinSets??'?'}勝 / ${d.secondSets??'?'}セット`)}
+      ${sr('先攻セット勝率',fwr+'%',d.rankFirstWin,'#2E8B57',100,`${d.firstWinSets??'?'}勝 / ${d.firstSets??'?'}セット`)}
+      ${sr('後攻セット勝率',swr2+'%',d.rankSecondWin,'#2E8B57',100,`${d.secondWinSets??'?'}勝 / ${d.secondSets??'?'}セット`)}
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-      ${sr('QH率',qhr+'%',d.rankQh,'#3b82f6',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.dTotalThrows??'?'}投`:'')}
-      ${sr('フォルト率',fr+'%',d.rankF,'#3b82f6',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.dTotalThrows??'?'}投`:'')}
-      ${sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#3b82f6',12)}
-      ${sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#3b82f6',12)}
-      ${sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#3b82f6',12)}
-      ${sr('平均投擲時間(秒)',toP(d.throwTimeAvg),d.rankThrowTime,'#3b82f6',60)}
+      ${sr('QH率',qhr+'%',d.rankQh,'#2E8B57',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.dTotalThrows??'?'}投`:'')}
+      ${sr('フォルト率',fr+'%',d.rankF,'#2E8B57',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.dTotalThrows??'?'}投`:'')}
+      ${sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#2E8B57',12)}
+      ${sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#2E8B57',12)}
+      ${sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#2E8B57',12)}
+      ${sr('平均投擲時間(秒)',toP(d.throwTimeAvg),d.rankThrowTime,'#2E8B57',60)}
     </div>
     ${mode==='event'&&history.length>1?`<div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">大会履歴</div>
@@ -3315,7 +3301,7 @@ function generateQRPrintPage(venueId, eventId, courtCount, matchCount, customLab
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, sans-serif; background: #fff; }
   .no-print { padding: 16px; background: #f0f9ff; border-bottom: 1px solid #bae6fd; }
-  .no-print button { padding: 10px 24px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; margin-right: 10px; }
+  .no-print button { padding: 10px 24px; background: #2E8B57; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; margin-right: 10px; }
   .no-print button.close { background: #6b7280; }
   /* 10個を2列×5行に収める: A4縦(297mm)想定 */
   .page-break { padding: 12px 16px; min-height: 100vh; }
@@ -3385,8 +3371,9 @@ async function saveScoresheet(){
   const roundRuleName=rr?rr.name||rr.code:'';
   const fmtName=fl();
 
-  const LB=['#DBEAFE','#FEE2E2'];
-  const LT=['#1D4ED8','#B91C1C'];
+  // 画像化用も画面と同じ配色（A=グリーン系 / B=イエロー系）に統一
+  const LB=['#E1F5EE','#FDF3D7'];
+  const LT=['#085041','#6b5510'];
 
   // 各セットのHTMLを生成（画面表示と同じ buildSS をそのまま使う）
   // buildSS が使うCSSクラスのスタイルを画像化用にインライン展開するための style
@@ -3502,7 +3489,7 @@ function rScoreSearch(){
 // ===== スコアシート検索：チーム名プルダウン／チームNo入力のタブ切替ブロック =====
 function ssTeamBlockHtml(ss,compact){
   const mode=ss.mode||'select';
-  const tab=(v,l)=>`<button class="ss-mode-tab" data-mode="${v}" style="flex:1;padding:${compact?'8px':'9px'} 4px;font-size:${compact?12:13}px;font-weight:700;border:none;border-radius:8px;background:${mode===v?'#378ADD':'#f3f4f6'};color:${mode===v?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
+  const tab=(v,l)=>`<button class="ss-mode-tab" data-mode="${v}" style="flex:1;padding:${compact?'8px':'9px'} 4px;font-size:${compact?12:13}px;font-weight:700;border:none;border-radius:8px;background:${mode===v?'#2E8B57':'#f3f4f6'};color:${mode===v?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
   const lt=findTourByScoreEvent(ss.eventCode);
   const teams=((lt&&lt.teams)||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
   let inner;
@@ -3563,7 +3550,7 @@ function rScoreMatchList(){
       return`
       <div class="card" style="padding:12px;margin-bottom:8px;cursor:pointer;" data-match-idx="${i}">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <div style="font-size:14px;font-weight:700;color:#6366f1;line-height:1.3;">${mainLabel}${roundLabel?`　<span style="color:#4f46e5;">${roundLabel}</span>`:''}</div>
+          <div style="font-size:14px;font-weight:700;color:#2E8B57;line-height:1.3;">${mainLabel}${roundLabel?`　<span style="color:#0a6e57;">${roundLabel}</span>`:''}</div>
           <span style="font-size:13px;font-weight:700;color:${m.result==='勝ち'?'#1D9E75':m.result==='負け'?'#E24B4A':'#9ca3af'};white-space:nowrap;margin-left:8px;">${m.result}</span>
         </div>
         <div style="font-size:13px;color:#374151;">vs <strong>${m.opponentName||'相手不明'}</strong></div>
@@ -4113,7 +4100,8 @@ function showVenueModal(idx){
 function showRoundRuleModal(idx){
   const _rt=ruleEditTarget();const roundTour=_rt.obj;
   if(!roundTour.roundRules)roundTour.roundRules=[];
-  const r=idx!=null?{...roundTour.roundRules[idx]}:{matchCode:'',tourneyCode:'',round:''};
+  const r=idx!=null?{...roundTour.roundRules[idx]}:{matchCode:'',tourneyCode:'',round:'',prio:''};
+  const basePrioLabel=(roundTour.priority||'tournament')==='match'?'試合区分を優先':'トーナメント種類を優先';
   const mOpts=(roundTour.matchRules||[]).map(m=>`<option value="${m.code}" ${r.matchCode===m.code?'selected':''}>${m.code}${m.name?' ('+m.name+')':''}</option>`).join('');
   const tOpts=(roundTour.tourneyRules||[]).map(t=>`<option value="${t.code}" ${r.tourneyCode===t.code?'selected':''}>${t.code}${t.name?' ('+t.name+')':''}</option>`).join('');
   const overlay=document.createElement('div');
@@ -4131,6 +4119,15 @@ function showRoundRuleModal(idx){
       </div>
       <div><div style="font-size:13px;color:#6b7280;margin-bottom:4px;">ラウンド名</div>
         <input type="text" id="rr-name" value="${r.round}" placeholder="例: 予選1回戦、決勝"/></div>
+      <div style="border-top:1px solid #eee;padding-top:10px;">
+        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">このラウンドの優先ルール</div>
+        <select id="rr-prio">
+          <option value="" ${!r.prio?'selected':''}>大会全体の設定にしたがう（${basePrioLabel}）</option>
+          <option value="tournament" ${r.prio==='tournament'?'selected':''}>このラウンドだけ「トーナメント種類」を優先</option>
+          <option value="match" ${r.prio==='match'?'selected':''}>このラウンドだけ「試合区分」を優先</option>
+        </select>
+        <div style="font-size:11px;color:#9ca3af;margin-top:4px;">試合形式（2先・3先・表裏など）をどちらのルールから決めるかです。ふつうは変更不要です。</div>
+      </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button id="rr-cancel" class="btn btn-gray" style="flex:1;">キャンセル</button>
@@ -4144,9 +4141,11 @@ function showRoundRuleModal(idx){
     const tc=document.getElementById('rr-tourney').value;
     const rn=document.getElementById('rr-name').value.trim();
     if(!mc||!tc||!rn){alert('全項目を入力してください');return;}
-    const newR={matchCode:mc,tourneyCode:tc,round:rn};
+    const prioEl=document.getElementById('rr-prio');
+    const newR={matchCode:mc,tourneyCode:tc,round:rn,prio:prioEl?prioEl.value:''};
     if(idx!=null)roundTour.roundRules[idx]=newR;else roundTour.roundRules.push(newR);
-    _rt.save();document.body.removeChild(overlay);render();
+    _rt.save();document.body.removeChild(overlay);
+    S._accOpen=S._accOpen||{};S._accOpen.ruleRound=true;render();
   };
 }
 
@@ -4270,6 +4269,23 @@ function scColData(ch,col){
   const k=(ch&&ch.colors&&ch.colors[col.name])||col.color||'green';
   return SC_COLORS[scColorOf(k)]||SC_COLORS.green;
 }
+// セル単位の色を解決。cellColors（「列名@行index」）があればそれを優先し、無ければ列の色。
+// ※ 優先ルールが「試合区分」寄りだと、同じ列でも行ごとに試合形式（色）が変わるため。
+function scCellData(ch,col,rowIdx){
+  const ck=ch&&ch.cellColors&&ch.cellColors[col.name+'@'+rowIdx];
+  if(ck)return SC_COLORS[scColorOf(ck)]||SC_COLORS.green;
+  return scColData(ch,col);
+}
+// 実際の試合形式の決まり方（resolveMatch と同じ判定）を図にも使う。
+// ラウンドごとの優先上書き → 無ければ大会全体の優先ルール、の順で参照する。
+function scEffRule(obj,matchCode,tourneyCode){
+  const rr=(obj.roundRules||[]).find(r=>r.matchCode===matchCode&&r.tourneyCode===tourneyCode);
+  const prio=(rr&&rr.prio)?rr.prio:(obj.priority||'tournament');
+  if(prio==='tournament'){
+    return(obj.tourneyRules||[]).find(r=>r.code===tourneyCode)||(obj.matchRules||[]).find(r=>r.code===matchCode)||null;
+  }
+  return(obj.matchRules||[]).find(r=>r.code===matchCode)||(obj.tourneyRules||[]).find(r=>r.code===tourneyCode)||null;
+}
 
 // 大会ルール（試合区分×トーナメント種類×ラウンド名）から図のたたき台を自動生成
 function buildSystemChartFromRules(obj){
@@ -4282,6 +4298,8 @@ function buildSystemChartFromRules(obj){
   const colCodes=tr.map(t=>t.code).filter(c=>usedTour.includes(c));
   usedTour.forEach(c=>{if(!colCodes.includes(c))colCodes.push(c);});
   const colors={};
+  const cellColors={};
+  const usedFmts=[];
   const columns=colCodes.map(tc=>{
     const tRule=tr.find(t=>t.code===tc);
     const byRow=rowCodes.map(mc=>{const rule=rr.find(r=>r.matchCode===mc&&r.tourneyCode===tc);return rule?(rule.round||''):null;});
@@ -4290,13 +4308,35 @@ function buildSystemChartFromRules(obj){
     while(cells.length&&cells[cells.length-1]==null)cells.pop();
     cells=cells.map(c=>c==null?'':c);
     const name=(tRule&&tRule.name)?tRule.name:('T'+tc);
-    colors[name]=fmtToColor(tRule?tRule.fmt:'');
+    // 各セルの試合形式を、優先ルール（ラウンド個別の上書きを含む）で決める
+    const fmts=cells.map((cell,i)=>{
+      if(cell==='')return null;
+      const mc=rowCodes[start+i];
+      const eff=scEffRule(obj,mc,tc);
+      return eff?(eff.fmt||''):'';
+    });
+    // 列の代表色＝その列で一番多い形式。異なるセルだけ個別色で上書きする
+    const tally={};fmts.forEach(f=>{if(f!=null)tally[f]=(tally[f]||0)+1;});
+    let major=null,best=-1;
+    Object.keys(tally).forEach(f=>{if(tally[f]>best){best=tally[f];major=f;}});
+    if(major==null)major=tRule?(tRule.fmt||''):'';
+    colors[name]=fmtToColor(major);
+    fmts.forEach((f,i)=>{
+      if(f==null)return;
+      if(!usedFmts.includes(f))usedFmts.push(f);
+      if(f!==major)cellColors[name+'@'+(start+i)]=fmtToColor(f);
+    });
     return{name,startRow:start,note:'',cells};
   }).filter(c=>c.cells.length>0);
   const prelims=mr.filter(m=>!usedMatch.includes(m.code)).map(m=>m.name||('予選'+m.code));
+  // 凡例は「実際に使われている試合形式」だけを並べる
+  const fmtLabel=f=>f==='best3'?'3先':f==='round2'?'表裏':'2先';
+  const order=['round2','best3','best2'];
+  const legend=order.filter(f=>usedFmts.includes(f)).map(f=>({label:fmtLabel(f),color:fmtToColor(f)}));
+  usedFmts.forEach(f=>{if(!order.includes(f))legend.push({label:fmtLabel(f),color:fmtToColor(f)});});
   return{enabled:true,cornerLabel:'',prelims,rowLabels,
-    legend:[{label:'表裏',color:'gray'},{label:'3先',color:'pink'},{label:'2先',color:'green'}],
-    columns,colors,loseArrows:{}};
+    legend:legend.length?legend:[{label:'2先',color:'green'}],
+    columns,colors,cellColors,loseArrows:{}};
 }
 
 // 図オブジェクト → 構成テキスト（※色・矢印は含めない＝別管理）
@@ -4372,6 +4412,11 @@ function scApplyStructureText(obj,text){
   const arrows={};
   Object.keys(oldArrows).forEach(k=>{const nm=k.split('@')[0];if(parsed.columns.some(c=>c.name===nm))arrows[k]=oldArrows[k];});
   parsed.loseArrows=arrows;
+  // セル個別色も同様に、現存する列のものだけ引き継ぐ
+  const oldCellColors=(obj&&obj.cellColors)?obj.cellColors:{};
+  const cellColors={};
+  Object.keys(oldCellColors).forEach(k=>{const nm=k.split('@')[0];if(parsed.columns.some(c=>c.name===nm))cellColors[k]=oldCellColors[k];});
+  parsed.cellColors=cellColors;
   return parsed;
 }
 
@@ -4439,7 +4484,7 @@ function renderSystemChart(ch,editable){
     h+=`<td style="text-align:center;padding:3px 1px;color:#444;white-space:normal;word-break:break-word;line-height:1.2;">${scEsc(rowLabels[r]||('[第'+(r+1)+'試合]'))}</td>`;
     for(let c=0;c<nCols;c++){
       if(hasCell(c,r)){
-        const cc=scColData(ch,cols[c]);
+        const cc=scCellData(ch,cols[c],r);
         h+=`<td style="background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};text-align:center;padding:7px 3px;font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.25;">${scEsc(cellOf(c,r))}</td>`;
       }else{
         h+='<td></td>';
@@ -4458,7 +4503,7 @@ function renderSystemChart(ch,editable){
           const arrow='<span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:4px;padding:0 2px;font-size:11px;font-weight:900;line-height:1.4;">↘</span>';
           if(editable&&toggleable){
             const auto=loseAuto(c,r)?1:0;
-            h+=`<td class="sc-arrow" data-k="${scEsc(loseKey(c,r))}" data-auto="${auto}" title="タップで負け矢印を表示／非表示" style="cursor:pointer;text-align:center;padding:0;vertical-align:middle;">${active?arrow:'<span style="opacity:0.28;font-size:12px;color:#378ADD;font-weight:900;">↘</span>'}</td>`;
+            h+=`<td class="sc-arrow" data-k="${scEsc(loseKey(c,r))}" data-auto="${auto}" title="タップで負け矢印を表示／非表示" style="cursor:pointer;text-align:center;padding:0;vertical-align:middle;">${active?arrow:'<span style="opacity:0.28;font-size:12px;color:#2E8B57;font-weight:900;">↘</span>'}</td>`;
           }else{
             h+=`<td style="text-align:center;padding:0;vertical-align:middle;">${active?arrow:''}</td>`;
           }
@@ -4500,7 +4545,7 @@ function buildTeamSearchList(query){
   }
   return`<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">${filtered.length}チーム${q?'が一致':'を表示中'}</div>`
     +filtered.map(t=>`<div style="display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-      <div style="background:#EEF2FF;color:#1d4ed8;border-radius:8px;padding:6px 10px;font-size:14px;font-weight:800;min-width:64px;text-align:center;">No.${t.id}</div>
+      <div style="background:#E1F5EE;color:#0a6e57;border-radius:8px;padding:6px 10px;font-size:14px;font-weight:800;min-width:64px;text-align:center;">No.${t.id}</div>
       <div style="flex:1;font-size:15px;font-weight:700;color:#111;">${t.name||''}</div>
     </div>`).join('');
 }
@@ -4545,7 +4590,7 @@ function rTournamentInfo(){
             <div style="padding:2px 2px 12px;border-bottom:2px solid #e5e7eb;margin-bottom:4px;">
               <div style="font-size:18px;font-weight:800;color:#111;line-height:1.3;">${esc(title)}</div>
               ${d.address?`<div style="font-size:13px;color:#6b7280;margin-top:5px;">${esc(d.address)}</div>`:''}
-              ${safeMap?`<a href="${esc(safeMap)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;font-size:13px;font-weight:700;color:#1d4ed8;text-decoration:none;">🗺 地図を開く ▸</a>`:''}
+              ${safeMap?`<a href="${esc(safeMap)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;font-size:13px;font-weight:700;color:#0a6e57;text-decoration:none;">🗺 地図を開く ▸</a>`:''}
             </div>
             ${row('🚉','アクセス',d.access)}
             ${row('🅿','駐車場',d.parking)}
@@ -4849,7 +4894,7 @@ function rTournamentInfo(){
       :`<div style="display:flex;gap:8px;">
           <input type="text" id="ti-prelim-input" value="${q}" placeholder="チームNo（例: 001）" inputmode="numeric"
             style="flex:1;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;"/>
-          <button id="ti-prelim-search" style="padding:10px 18px;background:#1d4ed8;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">検索</button>
+          <button id="ti-prelim-search" style="padding:10px 18px;background:#2E8B57;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">検索</button>
         </div>`;
     const searchBox=`<div style="margin-bottom:16px;">
       <div style="display:flex;gap:8px;margin-bottom:10px;">
@@ -4876,7 +4921,7 @@ function rTournamentInfo(){
         <div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px;">
           <div style="font-size:16px;font-weight:700;color:#111;margin-bottom:2px;">No.${sel.teamNo}　${sel.teamName||''}</div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px;">
-            <div style="text-align:center;background:#eff6ff;border-radius:8px;padding:10px 4px;"><div style="font-size:11px;color:#6b7280;">勝利数</div><div style="font-size:20px;font-weight:700;color:#1d4ed8;">${sel.wins||'0'}</div></div>
+            <div style="text-align:center;background:#E1F5EE;border-radius:8px;padding:10px 4px;"><div style="font-size:11px;color:#6b7280;">勝利数</div><div style="font-size:20px;font-weight:700;color:#0a6e57;">${sel.wins||'0'}</div></div>
             <div style="text-align:center;background:#f0fdf4;border-radius:8px;padding:10px 4px;"><div style="font-size:11px;color:#6b7280;">引分</div><div style="font-size:20px;font-weight:700;color:#16a34a;">${sel.draws||'0'}</div></div>
             <div style="text-align:center;background:#fef3c7;border-radius:8px;padding:10px 4px;"><div style="font-size:11px;color:#6b7280;">合計点</div><div style="font-size:20px;font-weight:700;color:#d97706;">${sel.total||'0'}</div></div>
             <div style="text-align:center;background:#faf5ff;border-radius:8px;padding:10px 4px;"><div style="font-size:11px;color:#6b7280;">順位</div><div style="font-size:20px;font-weight:700;color:#9333ea;">${sel.rank||'-'}</div></div>
@@ -5117,7 +5162,7 @@ function rRcpQ3(){
     ${rcpProgress(3)}
     <div style="font-size:17px;font-weight:700;color:#111;line-height:1.5;margin-bottom:20px;">❸ 本大会に参加したことがあるメンバーが、チームに1人はいますか？</div>
     ${rcpChoice('q3','yes',st.q3,'いる','#1D9E75')}
-    ${rcpChoice('q3','no',st.q3,'いない','#378ADD')}
+    ${rcpChoice('q3','no',st.q3,'いない','#2E8B57')}
     ${rcpNextBtn(!st.q3)}
   </div>`;
 }
@@ -5130,7 +5175,7 @@ function rRcpQ4(){
     ${rcpProgress(4)}
     <div style="font-size:17px;font-weight:700;color:#111;line-height:1.5;margin-bottom:20px;">❹ 本部でのモルック棒の貸し出しを希望しますか？</div>
     ${rcpChoice('q4','want',st.q4,'希望する','#1D9E75')}
-    ${rcpChoice('q4','nowant',st.q4,'希望しない','#378ADD')}
+    ${rcpChoice('q4','nowant',st.q4,'希望しない','#2E8B57')}
     ${rcpNextBtn(!st.q4)}
   </div>`;
 }
@@ -5330,7 +5375,7 @@ function rCourtSearch(){
             </div>
             <div style="font-size:15px;font-weight:800;color:#9ca3af;">VS</div>
             <div style="flex:1;text-align:center;">
-              <div style="font-size:14px;font-weight:700;color:#2563EB;">${teamBName}</div>
+              <div style="font-size:14px;font-weight:700;color:#C98A00;">${teamBName}</div>
               <div style="font-size:11px;color:#9ca3af;">No.${r.teamB}</div>
             </div>
           </div>
@@ -5431,7 +5476,7 @@ function rResultOnlyMatchId(){
       <button class="btn btn-gray btn-sm" id="btn-bk-ro-matchid">← 戻る</button>
       <div style="font-size:18px;font-weight:700;color:#111;">試合結果のみを送信</div>
     </div>
-    <div style="background:#EEF2FF;border:1.5px solid #c7d2fe;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#3730a3;">📤 試合の結果（各セットの点数）だけを送信します。投擲データは送信されません。</div>
+    <div style="background:#F4F7E8;border:1.5px solid #C5D89B;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#4a5d16;">📤 試合の結果（各セットの点数）だけを送信します。投擲データは送信されません。</div>
     <div class="card" style="padding:16px;margin-bottom:12px;">
       <div style="font-size:13px;color:#6b7280;margin-bottom:8px;">試合IDを入力またはQRコードで読み取ってください</div>
       <input type="text" id="ro-matchid-input" value="${mid}" placeholder="例: 01_0602_02_002" style="font-size:16px;letter-spacing:1px;"/>
@@ -5640,7 +5685,7 @@ function rResultOnlyInput(){
         <span style="font-size:14px;font-weight:700;color:${C[0]};">${nameA}</span>
         <span style="font-size:12px;color:#9ca3af;">vs</span>
         <span style="font-size:14px;font-weight:700;color:${C[1]};">${nameB}</span>
-        <span style="font-size:12px;background:#EEF2FF;color:#3730a3;padding:2px 8px;border-radius:99px;margin-left:auto;">${fmtLabel}</span>
+        <span style="font-size:12px;background:#F4F7E8;color:#4a5d16;padding:2px 8px;border-radius:99px;margin-left:auto;">${fmtLabel}</span>
       </div>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;">試合ID: ${S._matchId||(d.matchId||'')}</div>
     </div>
@@ -5680,7 +5725,7 @@ function rMatchConfirm(){
     <div class="card" style="padding:12px;margin-bottom:10px;background:#f8fafc;">
       ${tourSrc.eventName?`<div style="font-size:15px;font-weight:700;color:#111;margin-bottom:4px;">${tourSrc.eventName}</div>`:''}
       <div style="display:flex;flex-wrap:wrap;gap:6px;">
-        ${matchRuleName?`<span style="font-size:12px;background:#EEF2FF;color:#3730a3;padding:3px 8px;border-radius:99px;">${matchRuleName.name||'試合区分'+d.matchCode}</span>`:''}
+        ${matchRuleName?`<span style="font-size:12px;background:#F4F7E8;color:#4a5d16;padding:3px 8px;border-radius:99px;">${matchRuleName.name||'試合区分'+d.matchCode}</span>`:''}
         ${tourneyRuleName?`<span style="font-size:12px;background:#F0FDF4;color:#166534;padding:3px 8px;border-radius:99px;">${tourneyRuleName.name||'トーナメント'+d.tourneyCode}</span>`:''}
         ${round?`<span style="font-size:12px;background:#FFF7ED;color:#92400e;padding:3px 8px;border-radius:99px;font-weight:600;">${round}</span>`:''}
         <span style="font-size:12px;background:#f3f4f6;color:#374151;padding:3px 8px;border-radius:99px;">コート ${d.courtCode}</span>
@@ -6660,6 +6705,11 @@ function bind(){
       const _t=ruleEditTarget();if(!_t||!_t.obj||!_t.obj.systemChart)return;
       const ch=_t.obj.systemChart;ch.colors=ch.colors||{};
       ch.colors[sel.dataset.col]=sel.value;
+      // 手動で列の色を選んだら、その列のセル個別色（自動生成分）は解除して手動指定を優先する
+      if(ch.cellColors){
+        const pre=sel.dataset.col+'@';
+        Object.keys(ch.cellColors).forEach(k=>{if(k.indexOf(pre)===0)delete ch.cellColors[k];});
+      }
       _t.save();
       const cc=SC_COLORS[scColorOf(sel.value)]||SC_COLORS.green;
       sel.style.background=cc.bg;
@@ -6767,21 +6817,7 @@ function bind(){
     const _t=ruleEditTarget();const obj=_t.obj;if(!obj||!obj.roundRules)return;
     obj.roundRules.splice(parseInt(btn.dataset.idx),1);_t.save();render();
   }));
-  // ラウンドごとの優先ルール上書き（1件ずつ）
-  document.querySelectorAll('.round-prio').forEach(sel=>sel.addEventListener('change',()=>{
-    const _t=ruleEditTarget();const obj=_t.obj;if(!obj||!obj.roundRules)return;
-    const rr=obj.roundRules[parseInt(sel.dataset.idx)];if(!rr)return;
-    rr.prio=sel.value;_t.save();
-    S._accOpen=S._accOpen||{};S._accOpen.ruleRound=true;render();
-  }));
-  // ラウンドごとの優先ルール上書き（全ラウンドまとめて）
-  const brpb=document.getElementById('btn-round-prio-bulk');
-  if(brpb)brpb.onclick=()=>{
-    const _t=ruleEditTarget();const obj=_t.obj;if(!obj||!obj.roundRules)return;
-    const selEl=document.getElementById('round-prio-bulk');const v=selEl?selEl.value:'';
-    obj.roundRules.forEach(rr=>{rr.prio=v;});_t.save();
-    S._accOpen=S._accOpen||{};S._accOpen.ruleRound=true;render();
-  };
+  // ※ ラウンドごとの優先ルール上書きは、各行の「編集」ダイアログ（showRoundRuleModal）の中で設定する
 
   // ===== テンプレート管理画面 =====
   const btmBack=document.getElementById('btn-tplm-back');if(btmBack)btmBack.onclick=()=>{S._tplManage=false;render();};
@@ -7751,7 +7787,7 @@ window.addEventListener('beforeunload',(e)=>{
       </div>
       <div id="qr-reader" style="width:100%;"></div>
     </div>
-    <button id="btn-qr-to-manual" style="position:fixed;right:18px;bottom:24px;padding:12px 16px;background:#1d4ed8;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);">⌨️ 試合IDを入力する</button>
+    <button id="btn-qr-to-manual" style="position:fixed;right:18px;bottom:24px;padding:12px 16px;background:#2E8B57;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);">⌨️ 試合IDを入力する</button>
   </div>
 <script>
 // ページ離脱時の確認（試合中のみ）
