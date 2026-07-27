@@ -16,8 +16,10 @@ body{background:#f5f5f5;}
 .app{padding:10px;max-width:480px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
 .btn{padding:8px 16px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#111;cursor:pointer;font-size:14px;font-family:inherit;transition:background 0.15s;}
 .btn:hover{background:#f3f4f6;}.btn:active{transform:scale(0.97);}
-.btn-green{background:#EAA100;color:#2b2100;border-color:#EAA100;}.btn-green:hover{background:#cf8f00;}
-.btn-blue{background:#2E8B57;color:#fff;border-color:#2E8B57;}.btn-blue:hover{background:#247045;}
+/* 主ボタン＝明るい黄色 / 副ボタン＝明るい緑。どちらも文字は濃色にして屋外でも読めるようにする。
+   押したとき（hover/active）は少しだけ濃くする程度に留める。 */
+.btn-green{background:#FFCB3D;color:#2b2100;border-color:#FFCB3D;}.btn-green:hover{background:#F5BE2A;}
+.btn-blue{background:#6FD0A4;color:#08341f;border-color:#6FD0A4;}.btn-blue:hover{background:#5CC496;}
 .btn-red-o{background:#FEE2E2;color:#b91c1c;border-color:#fca5a5;}.btn-red-o:hover{background:#fecaca;}
 .btn-orange{background:#FFF7ED;color:#92400e;border-color:#fed7aa;}.btn-orange:hover{background:#fef3c7;}
 .btn-yellow{background:#FEFCE8;color:#854d0e;border-color:#fde68a;}.btn-yellow:hover{background:#fef9c3;}
@@ -26,11 +28,11 @@ body{background:#f5f5f5;}
 .btn:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
 .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;}
 input[type=text]{width:100%;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;background:#f3f4f6;color:#111;font-size:15px;font-family:inherit;}
-input[type=text]:focus{outline:none;border-color:#1D9E75;background:#fff;}
+input[type=text]:focus{outline:none;border-color:#35BE94;background:#fff;}
 select{width:100%;padding:10px 11px;border:1.5px solid #d1d5db;border-radius:8px;background:#f3f4f6;color:#111;font-size:15px;font-family:inherit;cursor:pointer;}
-select:focus{outline:none;border-color:#1D9E75;background:#fff;}
+select:focus{outline:none;border-color:#35BE94;background:#fff;}
 .order-item{padding:10px 12px;background:#f3f4f6;border:1.5px solid #d1d5db;border-radius:8px;display:flex;align-items:center;gap:8px;font-size:14px;color:#111;user-select:none;}
-.order-item.dragging{opacity:0.4;}.order-item.over{border-color:#1D9E75;background:#E1F5EE;}
+.order-item.dragging{opacity:0.4;}.order-item.over{border-color:#35BE94;background:#E1F5EE;}
 .ss-wrap{overflow-x:auto;}
 .ss-tbl{border-collapse:collapse;width:100%;}
 .ss-tbl th,.ss-tbl td{border:1px solid #bbb;text-align:center;vertical-align:middle;padding:5px 6px;}
@@ -43,9 +45,9 @@ select:focus{outline:none;border-color:#1D9E75;background:#fff;}
 .tot-cell{font-size:14px;font-weight:600;min-width:38px;background:#fafaf6;padding:5px 6px;}
 .team-hdr{font-size:14px;font-weight:600;padding:7px 8px;}
 label.radio-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid #e5e7eb;border-radius:10px;cursor:pointer;background:#fff;}
-label.radio-card.selected{border-color:#1D9E75;background:#E1F5EE;}
+label.radio-card.selected{border-color:#35BE94;background:#E1F5EE;}
 textarea{width:100%;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;background:#f3f4f6;color:#111;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;}
-textarea:focus{outline:none;border-color:#1D9E75;background:#fff;}
+textarea:focus{outline:none;border-color:#35BE94;background:#fff;}
 /* ===== コート図 ===== */
 .cm-outer{display:flex;flex-direction:column;align-items:center;width:100%;}
 .cm-label-top,.cm-label-bottom{font-size:12px;font-weight:700;color:#374151;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:5px 12px;margin:4px 0;text-align:center;max-width:100%;}
@@ -57,7 +59,7 @@ textarea:focus{outline:none;border-color:#1D9E75;background:#fff;}
 .cm-cell{border:1px solid #d1d5db;width:22px;height:22px;min-width:22px;text-align:center;vertical-align:middle;font-size:10px;color:#374151;background:#fff;padding:0;}
 .cm-cell.cm-empty{background:#f9fafb;}
 .cm-cell.cm-x{color:#cbd5e1;background:#f9fafb;}
-.cm-cell.cm-hi{background:#1D9E75;color:#fff;font-weight:800;border:2px solid #0d6b4d;animation:cmPulse 1.6s ease-out infinite;}
+.cm-cell.cm-hi{background:#23AD82;color:#fff;font-weight:800;border:2px solid #15805f;animation:cmPulse 1.6s ease-out infinite;}
 .cm-side-slot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;flex-shrink:0;}
 @keyframes cmPulse{0%{box-shadow:0 0 0 0 rgba(29,158,117,0.55);}70%{box-shadow:0 0 0 9px rgba(29,158,117,0);}100%{box-shadow:0 0 0 0 rgba(29,158,117,0);}}
 </style>
@@ -66,9 +68,10 @@ textarea:focus{outline:none;border-color:#1D9E75;background:#fff;}
 <div class="app" id="app"></div>
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
-// チーム色：A=グリーン系 / B=イエロー(アンバー)系。
+// チーム色：A=水色（スカイ）系 / B=明るいイエロー系。
 // 枠線(C)・背景(LB)・枠色(LBR)・文字(LT)は必ず同じ系統で揃える（内と外でトーンをずらさない）。
-const C=['#1D9E75','#C98A00'];
+// C は文字・枠線にも使うので、白地でも読める濃さを保つ（背景の明るさは LB 側で出す）。
+const C=['#1B9AD1','#D9A400'];
 // 場所（会場）ごとのテーマカラー候補（モルマニ会場カラー）。管理者が場所ごとに1色選ぶ。
 const VENUE_PALETTE=[
   {hex:'#F5B301',label:'サンイエロー'},{hex:'#F59E0B',label:'アンバー'},
@@ -80,9 +83,9 @@ const VENUE_PALETTE=[
   {hex:'#2E9E5B',label:'グリーン'},{hex:'#7CB342',label:'ライム'},
   {hex:'#8D6E63',label:'ブラウン'},{hex:'#546E7A',label:'スレート'}
 ];
-const LB=['#E1F5EE','#FDF3D7'];
-const LBR=['#9FE1CB','#E6CF7A'];
-const LT=['#085041','#6b5510'];
+const LB=['#E3F4FD','#FFF6D9'];
+const LBR=['#9BD9F0','#F5D77A'];
+const LT=['#0B5E7D','#7A5B00'];
 const MAX=50,RST=25,MM=3,TURN_LIMIT=12;
 
 // ===== アプリのバージョン表記 =====
@@ -1110,7 +1113,7 @@ function rankBadge(r){
 }
 function cssBar(val,max,color='#2E8B57'){
   const w=max>0?Math.min(100,Math.round(val/max*100)):0;
-  return `<div style="background:#e5e7eb;border-radius:4px;height:8px;margin-top:4px;"><div style="background:#2E8B57;width:${w}%;height:8px;border-radius:4px;transition:width 0.3s;"></div></div>`;
+  return `<div style="background:#e5e7eb;border-radius:4px;height:8px;margin-top:4px;"><div style="background:#4FC08D;width:${w}%;height:8px;border-radius:4px;transition:width 0.3s;"></div></div>`;
 }
 
 // アクティブ大会を取得（なければ最初の大会）
@@ -1129,9 +1132,14 @@ function saveActiveTour(tour){
 // 参加者側は配信で届いた tour.venue を優先、管理者側は AD.venues から補完する。
 function resolveVenue(tour){
   if(!tour)return null;
-  if(tour.venue&&(tour.venue.name||tour.venue.detail))return tour.venue;
-  const v=(AD.venues||[]).find(x=>x.code===tour.venueCode);
-  return v||null;
+  // 配信で届いた会場情報（参加者側にはこれしかない）
+  const snap=(tour.venue&&(tour.venue.name||tour.venue.detail||tour.venue.themeColor))?tour.venue:null;
+  // 管理者端末にある「場所の管理」の登録内容。こちらが常に最新（テーマカラーを変えたらここが変わる）
+  const local=(AD.venues||[]).find(x=>x.code===tour.venueCode)||null;
+  // 両方ある場合は「場所の管理」を優先して上書きする。
+  // （以前は配信スナップショットを先に返していたため、テーマカラーを変えても画面に反映されなかった）
+  if(local&&snap)return{...snap,...local};
+  return local||snap||null;
 }
 // 会場に「詳細」が1つでも入っているか（＝「詳細を見る」を出すか判定）
 function venueHasDetail(v){
@@ -1561,7 +1569,7 @@ function showDuplicateNotice(onClose){
         同じ試合の結果が、既に他の端末から送信されています。<br>
         あなたの端末からの送信は不要です。
       </div>
-      <button id="dup-ok" style="width:100%;padding:12px;font-size:15px;font-weight:700;background:#EAA100;color:#2b2100;border:none;border-radius:8px;">OK</button>
+      <button id="dup-ok" style="width:100%;padding:12px;font-size:15px;font-weight:700;background:#FFCB3D;color:#2b2100;border:none;border-radius:8px;">OK</button>
     </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#dup-ok').onclick=()=>{
@@ -1745,9 +1753,9 @@ function rSetup(){
   const _venueName=_venue?String((_venue.detail&&_venue.detail.locationName)||_venue.name||'').trim():'';
   const _period=fmtEventPeriod(_liveTour);
   // 大会カードのテーマ色：場所に設定があればその色、無ければ既定のゴールド
-  const _theme=(_venue&&_venue.themeColor)?_venue.themeColor:'#EAA100';
-  const _themeBg=_theme+'1F';   // 背景ハイライト（薄め）
-  const _themeSoft=_theme+'33'; // 受付済みボックス（やや濃いめ）
+  const _theme=(_venue&&_venue.themeColor)?_venue.themeColor:'#FFC93D';
+  const _themeBg=_theme+'2E';   // 背景ハイライト（薄め）
+  const _themeSoft=_theme+'4D'; // 受付済みボックス（やや濃いめ）
   const _showVenueDetail=venueHasDetail(_venue);
 
   // 従来の表示（配信中の大会名が無いときのフォールバック）
@@ -1761,7 +1769,7 @@ function rSetup(){
         </div>
         <button id="btn-clear-myteam" style="font-size:13px;font-weight:700;color:#085041;background:#fff;border:1px solid #9FE1CB;border-radius:10px;padding:8px 14px;cursor:pointer;white-space:nowrap;">解除</button>
       </div>`
-    :`<button id="btn-go-reception" style="width:100%;padding:24px 20px;font-size:20px;font-weight:700;margin-bottom:20px;background:#EAA100;color:#2b2100;border:none;border-radius:14px;display:flex;align-items:center;gap:14px;cursor:pointer;">
+    :`<button id="btn-go-reception" style="width:100%;padding:24px 20px;font-size:20px;font-weight:700;margin-bottom:20px;background:#FFCB3D;color:#2b2100;border:none;border-radius:14px;display:flex;align-items:center;gap:14px;cursor:pointer;">
         <span style="font-size:32px;">📝</span>
         <div style="text-align:left;font-size:20px;font-weight:700;">大会受付（チーム登録）</div>
       </button>`;
@@ -1775,7 +1783,7 @@ function rSetup(){
         <div style="font-size:12px;color:#1a1a1a;font-weight:800;text-align:center;line-height:1.35;">👤<br>受付済み</div>
         <button id="btn-clear-myteam" style="font-size:12px;font-weight:700;color:#1a1a1a;background:#fff;border:1px solid ${_theme};border-radius:9px;padding:6px 12px;cursor:pointer;white-space:nowrap;">解除</button>
       </div>`
-    :`<button id="btn-go-reception" style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 8px;background:#EAA100;color:#2b2100;border:none;border-radius:12px;cursor:pointer;text-align:center;line-height:1.3;">
+    :`<button id="btn-go-reception" style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 8px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;cursor:pointer;text-align:center;line-height:1.3;">
         <span style="font-size:30px;">📝</span>
         <span style="font-size:15px;font-weight:800;">受付<br><span style="font-size:11px;font-weight:700;">（チーム登録）</span></span>
       </button>`;
@@ -1811,56 +1819,56 @@ function rSetup(){
       </div>
     </div>
     ${topBlock}
-    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #E39A00;padding-left:7px;">試合</div>
+    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #FFB800;padding-left:7px;">試合</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
-      <button id="btn-go-matchid" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-matchid" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📷</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">QRコードで<br>試合開始</div>
       </button>
-      <button id="btn-go-result-only" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-result-only" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📤</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">試合結果のみ<br>を送信</div>
       </button>
-      <button id="btn-go-court-search" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-court-search" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">${courtIcon}</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${courtLabel}</div>
       </button>
-      <button id="btn-go-regulation" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-regulation" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📜</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">レギュ<br>レーション</div>
       </button>
-      <button id="btn-go-schedule" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-schedule" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🕐</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">タイム<br>スケジュール</div>
       </button>
-      <button id="btn-go-prelim" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-prelim" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🏅</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">予選結果<br>を確認</div>
       </button>
-      <button id="btn-go-remaining" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-remaining" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📊</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">残り試合数<br>を確認</div>
       </button>
-      <button id="btn-go-bracket" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-bracket" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🏆</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">決勝<br>トーナメント表</div>
       </button>
-      <button id="btn-go-teamsearch" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-teamsearch" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🪪</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">チームNo<br>を検索</div>
       </button>
-      <button id="btn-go-spreadsheet" style="padding:12px 6px;background:#EFAF1E;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-spreadsheet" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📑</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">大会<br>スプレッドシート</div>
       </button>
     </div>
-    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #E39A00;padding-left:7px;">成績・記録</div>
+    <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #FFB800;padding-left:7px;">成績・記録</div>
     <div style="display:flex;gap:8px;">
-      <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#D28E00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#FFB347;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📊</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">成績を見る</div>
       </button>
-      <button id="btn-go-score-search" style="flex:1;padding:10px 6px;background:#D28E00;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-score-search" style="flex:1;padding:10px 6px;background:#FFB347;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">📋</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${scoreLabel}</div>
       </button>
@@ -1947,6 +1955,16 @@ function rOrder(){
   </div>`;
 }
 
+// 「② 結果」の記録ON/OFFトグル。extra で置き場所（右寄せ等）を調整する。
+// OFFのときは「記録しない…」の行の右横に置き、得点ボタン（ミス・12・6 など）から離して誤タップを防ぐ。
+function aimToggleHtml(extra){
+  const on=S.useAimed;
+  return`<button id="btn-aimed-toggle" style="${extra||''}display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;border:1.5px solid ${on?'#1B9AD1':'#d1d5db'};background:${on?'#E3F4FD':'#f3f4f6'};cursor:pointer;font-size:12px;font-weight:700;color:${on?'#0B5E7D':'#9ca3af'};white-space:nowrap;">
+    <span style="width:28px;height:16px;border-radius:8px;background:${on?'#1B9AD1':'#d1d5db'};display:inline-flex;align-items:center;padding:0 2px;transition:all 0.15s;"><span style="width:12px;height:12px;border-radius:50%;background:#fff;margin-left:${on?'12px':'0px'};display:block;"></span></span>
+    ${on?'ON':'OFF'}
+  </button>`;
+}
+
 function rGame(){
   const cset=cs(),ct=cset.ctid;
   const wins=[0,0];S.sets.forEach((s,si)=>{if(si<S.cur&&s.wid!=null)wins[s.wid]++;});
@@ -2018,22 +2036,22 @@ function rGame(){
         <div style="margin-bottom:10px;">
           <div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-weight:600;">① 得点</div>
           <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
-            ${[1,2,3,4,5,6].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#1D9E75':'#e5e7eb'};background:${S.iP===String(n)?'#E1F5EE':'#f9fafb'};color:${S.iP===String(n)?'#0a6e57':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
+            ${[1,2,3,4,5,6].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#1B9AD1':'#e5e7eb'};background:${S.iP===String(n)?'#E3F4FD':'#f9fafb'};color:${S.iP===String(n)?'#0B5E7D':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
             <button class="btn-pts" id="btn-miss" data-pts="miss" style="font-size:17px;font-weight:800;border-radius:8px;border:2px solid ${S.iP==='miss'?'#dc2626':'#e5e7eb'};background:${S.iP==='miss'?'#fee2e2':'#f9fafb'};color:${S.iP==='miss'?'#dc2626':'#111'};cursor:pointer;grid-row:span 2;width:100%;">ミス<br><span style="font-size:20px;">0</span></button>
-            ${[7,8,9,10,11,12].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#1D9E75':'#e5e7eb'};background:${S.iP===String(n)?'#E1F5EE':'#f9fafb'};color:${S.iP===String(n)?'#0a6e57':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
+            ${[7,8,9,10,11,12].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#1B9AD1':'#e5e7eb'};background:${S.iP===String(n)?'#E3F4FD':'#f9fafb'};color:${S.iP===String(n)?'#0B5E7D':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
           </div>
         </div>
         <div style="margin-bottom:10px;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
             <span style="font-size:13px;color:#6b7280;font-weight:600;">② 結果</span>
-            <button id="btn-aimed-toggle" style="margin-left:auto;display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;border:1.5px solid ${S.useAimed?'#1D9E75':'#d1d5db'};background:${S.useAimed?'#e1f5ee':'#f3f4f6'};cursor:pointer;font-size:12px;font-weight:700;color:${S.useAimed?'#0f6e56':'#9ca3af'};">
-              <span style="width:28px;height:16px;border-radius:8px;background:${S.useAimed?'#1D9E75':'#d1d5db'};display:inline-flex;align-items:center;padding:0 2px;transition:all 0.15s;"><span style="width:12px;height:12px;border-radius:50%;background:#fff;margin-left:${S.useAimed?'12px':'0px'};display:block;"></span></span>
-              ${S.useAimed?'ON':'OFF'}
-            </button>
+            ${S.useAimed?aimToggleHtml('margin-left:auto;'):''}
           </div>
           ${S.useAimed?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;">
             ${[{v:'circle',label:'○ 狙い通り',c:'#16a34a',bg:'#dcfce7'},{v:'cross',label:'× 狙い通りではない',c:'#dc2626',bg:'#fee2e2'},{v:'unknown',label:'？ 不明',c:'#d97706',bg:'#fef3c7'}].map(({v,label,c,bg})=>`<button class="btn-aim" data-aim="${v}" style="height:48px;border-radius:8px;border:2px solid ${S.iA===v?c:'#e5e7eb'};background:${S.iA===v?bg:'#f9fafb'};cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;padding:0 4px;"><span style="font-size:13px;font-weight:800;color:${S.iA===v?c:'#374151'};white-space:nowrap;">${label}</span></button>`).join('')}
-          </div>`:'<div style="padding:8px 10px;background:#f3f4f6;border-radius:8px;font-size:12px;color:#9ca3af;text-align:center;">記録しない（すべて「不明」として保存）</div>'}
+          </div>`:`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f3f4f6;border-radius:8px;">
+            <span style="flex:1;min-width:0;font-size:12px;color:#9ca3af;">記録しない（すべて「不明」として保存）</span>
+            ${aimToggleHtml('flex-shrink:0;')}
+          </div>`}
         </div>
 
         ${S.rule37Pending?`
@@ -2367,7 +2385,7 @@ function rAdminTop(){
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
       <button class="btn btn-gray btn-sm" id="btn-bk-admin">← 戻る</button>
-      <div style="font-size:18px;font-weight:800;color:#1a1a1a;border-left:4px solid #E39A00;padding-left:9px;">管理者設定</div>
+      <div style="font-size:18px;font-weight:800;color:#1a1a1a;border-left:4px solid #FFB800;padding-left:9px;">管理者設定</div>
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;background:#FFF7ED;">
@@ -2379,11 +2397,12 @@ function rAdminTop(){
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
-        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #E39A00;padding-left:7px;">場所の管理</div>
+        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #FFB800;padding-left:7px;">場所の管理</div>
         <button class="btn btn-green btn-xs" id="btn-add-venue" style="padding:4px 10px;">＋ 追加</button>
       </div>
       ${(ad.venues||[]).length===0?'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>':
         (ad.venues||[]).map((v,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span title="${v.themeColor?'テーマカラー設定あり':'テーマカラー未設定'}" style="width:14px;height:14px;border-radius:50%;flex-shrink:0;background:${v.themeColor||'#fff'};border:1px solid ${v.themeColor?'rgba(0,0,0,0.2)':'#d1d5db'};"></span>
           <div style="flex:1;font-size:14px;"><span style="font-weight:600;">${v.code}</span> : ${v.name}</div>
           <button class="btn btn-gray btn-xs admin-edit-venue" data-idx="${i}" style="padding:3px 8px;">編集</button>
           <button class="btn btn-red-o btn-xs admin-del-venue" data-idx="${i}" style="padding:2px 7px;font-size:11px;">削除</button>
@@ -2392,7 +2411,7 @@ function rAdminTop(){
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:10px;">
-        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #E39A00;padding-left:7px;">大会の管理</div>
+        <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #FFB800;padding-left:7px;">大会の管理</div>
         <button class="btn btn-gray btn-xs" id="btn-add-folder" style="padding:4px 10px;">＋ フォルダ</button>
         <button class="btn btn-green btn-xs" id="btn-add-tournament" style="padding:4px 10px;">＋ 大会を追加</button>
       </div>
@@ -2498,7 +2517,7 @@ function ruleCardsHtml(obj){
   const roundRules=obj.roundRules||[];
   const foldSection=(title,count,addBtnId,innerHtml,subHtml,first,accKey)=>`<div style="${first?'':'border-top:1px solid #e5e7eb;margin-top:12px;'}padding-top:${first?'0':'12px'};">
     <div style="display:flex;align-items:center;margin-bottom:8px;">
-      <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #E39A00;padding-left:7px;">${title}</div>
+      <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #FFB800;padding-left:7px;">${title}</div>
       <button class="btn btn-green btn-xs" id="${addBtnId}" style="padding:4px 10px;">＋ 追加</button>
     </div>
     ${subHtml||''}
@@ -2817,7 +2836,7 @@ function rViewPortal(){
             <div style="font-size:13px;color:#374151;">${label}</div>
             <div style="font-size:14px;font-weight:700;">${val??'-'}${unit}</div>
           </div>
-          <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#2E8B57;width:${w}%;height:6px;border-radius:4px;"></div></div>
+          <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#4FC08D;width:${w}%;height:6px;border-radius:4px;"></div></div>
         </div>`;
       };
       listHtml=`
@@ -2954,7 +2973,7 @@ function rViewTeamDetail(){
         <div style="font-size:14px;font-weight:700;">${val??'-'}${rb}</div>
       </div>
       ${sub?`<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:2px;">${sub}</div>`:''}
-      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#2E8B57;width:${w}%;height:6px;border-radius:4px;"></div></div>
+      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#4FC08D;width:${w}%;height:6px;border-radius:4px;"></div></div>
     </div>`;
   };
 
@@ -3037,7 +3056,7 @@ function rViewPersonDetail(){
         <div style="font-size:14px;font-weight:700;">${val??'-'}${rb}</div>
       </div>
       ${sub?`<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:2px;">${sub}</div>`:''}
-      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#2E8B57;width:${w}%;height:6px;border-radius:4px;"></div></div>
+      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#4FC08D;width:${w}%;height:6px;border-radius:4px;"></div></div>
     </div>`;
   };
 
@@ -3371,9 +3390,9 @@ async function saveScoresheet(){
   const roundRuleName=rr?rr.name||rr.code:'';
   const fmtName=fl();
 
-  // 画像化用も画面と同じ配色（A=グリーン系 / B=イエロー系）に統一
-  const LB=['#E1F5EE','#FDF3D7'];
-  const LT=['#085041','#6b5510'];
+  // 画像化用も画面と同じ配色（A=水色系 / B=イエロー系）に統一
+  const LB=['#E3F4FD','#FFF6D9'];
+  const LT=['#0B5E7D','#7A5B00'];
 
   // 各セットのHTMLを生成（画面表示と同じ buildSS をそのまま使う）
   // buildSS が使うCSSクラスのスタイルを画像化用にインライン展開するための style
@@ -4894,7 +4913,7 @@ function rTournamentInfo(){
       :`<div style="display:flex;gap:8px;">
           <input type="text" id="ti-prelim-input" value="${q}" placeholder="チームNo（例: 001）" inputmode="numeric"
             style="flex:1;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;"/>
-          <button id="ti-prelim-search" style="padding:10px 18px;background:#2E8B57;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">検索</button>
+          <button id="ti-prelim-search" style="padding:10px 18px;background:#6FD0A4;color:#08341f;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">検索</button>
         </div>`;
     const searchBox=`<div style="margin-bottom:16px;">
       <div style="display:flex;gap:8px;margin-bottom:10px;">
@@ -5045,7 +5064,7 @@ function rcpProgress(step){
   const total=4;
   let dots='';
   for(let i=1;i<=total;i++){
-    dots+=`<div style="flex:1;height:5px;border-radius:3px;background:${i<=step?'#1D9E75':'#e5e7eb'};"></div>`;
+    dots+=`<div style="flex:1;height:5px;border-radius:3px;background:${i<=step?'#3FBF8F':'#e5e7eb'};"></div>`;
   }
   return`<div style="display:flex;gap:5px;margin-bottom:16px;">${dots}</div>`;
 }
@@ -5358,7 +5377,7 @@ function rCourtSearch(){
         const labels=resolveMatchLabels(tourSrc,r.matchId,r.tourneyCode||'');
         return`<div class="card" style="padding:14px;margin-bottom:10px;">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-            <div style="background:#1D9E75;color:#fff;border-radius:10px;padding:8px 14px;text-align:center;min-width:64px;">
+            <div style="background:#23AD82;color:#fff;border-radius:10px;padding:8px 14px;text-align:center;min-width:64px;">
               <div style="font-size:11px;opacity:0.85;">コート</div>
               <div style="font-size:26px;font-weight:800;line-height:1.1;">${parseInt(courtNo)||courtNo}</div>
             </div>
@@ -7787,7 +7806,7 @@ window.addEventListener('beforeunload',(e)=>{
       </div>
       <div id="qr-reader" style="width:100%;"></div>
     </div>
-    <button id="btn-qr-to-manual" style="position:fixed;right:18px;bottom:24px;padding:12px 16px;background:#2E8B57;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);">⌨️ 試合IDを入力する</button>
+    <button id="btn-qr-to-manual" style="position:fixed;right:18px;bottom:24px;padding:12px 16px;background:#6FD0A4;color:#08341f;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);">⌨️ 試合IDを入力する</button>
   </div>
 <script>
 // ページ離脱時の確認（試合中のみ）
