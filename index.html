@@ -2988,10 +2988,7 @@ function rViewPortal(){
         <div style="margin-bottom:10px;"><span style="font-weight:600;">(e) 平均ブレイク本数</span><br>先行の1投目で何点獲得したかの平均点です。</div>
 
         <div style="font-weight:700;margin:14px 0 6px;">3. 平均投擲得点について</div>
-        <p style="margin:0 0 6px;">大会・チーム別と個人別で計算方法が異なりますので、以下の点にご留意ください。</p>
-        <div style="margin-bottom:6px;"><span style="font-weight:600;">(a) 大会別・チーム別</span><br>「セットの合計点 ÷ 投擲回数」で求めています。3ミスやバーストの影響が加味された点数です。</div>
-        <div style="margin-bottom:10px;"><span style="font-weight:600;">(b) 個人別</span><br>「個人が獲得した点数の合計 ÷ 総投擲回数」で求めています。例えば、バーストして39点から25点に戻った場合でも、本来獲得した12点（あるいは記録上の点数）がそのまま計算に含まれるため、バーストによる減退の影響が考慮されません。</div>
-        <p style="margin:0 0 10px;">この計算方法の違いにより、数値に多少のブレが生じることがあります。</p>
+        <p style="margin:0 0 10px;">「個人が獲得した点数の合計 ÷ 総投擲回数」で求めています。例えば、バーストして39点から25点に戻った場合でも、本来獲得した12点（あるいは記録上の点数）がそのまま計算に含まれるため、バーストによる減退の影響が考慮されません。</p>
 
         <div style="font-weight:700;margin:14px 0 6px;">4. 平均投擲時間</div>
         <p style="margin:0;">点数が入力されてから次の点数が入力されるまでの時間を計測したものです。モルック協会が定める規定の投擲時間とは定義が異なりますので、参考値としてご覧ください。</p>
@@ -3293,24 +3290,29 @@ function rViewRanking(type){
 function rViewTeamList(){return rViewPortal();}
 function rViewPersonList(){return rViewPortal();}
 
+// いま表示中の画面(phase)が期待どおりのときだけ画面を作り直す。
+// これにより、裏で読み込みが終わっても、ユーザーが別の画面（成績詳細など）を
+// 開いている場合はその画面を勝手に閉じない。
+function renderIfPhase(ph){ if(S.phase===ph)render(); }
+
 async function loadViewData(eventCode,tab){
   if(!eventCode)return;
   tab=tab||_viewState.tab;
 
   if(tab==='event'&&!_viewState.eventStat){
-    _viewState.loading=true;render();
+    _viewState.loading=true;renderIfPhase('viewPortal');
     const d=await fetchViewData('getEventStat',{eventCode});
     _viewState.eventStat=d&&d.stat?d.stat:null;
     _viewState.loading=false;
   } else if(tab==='team'&&!_viewState.teams.length){
     // チームリストのみ取得（名前・No・メンバー）
-    _viewState.loading=true;render();
+    _viewState.loading=true;renderIfPhase('viewPortal');
     const d=await fetchViewData('getTeamList',{eventCode});
     _viewState.teams=d&&d.teams?d.teams:[];
     _viewState.loading=false;
   } else if(tab==='person'&&!_viewState.persons.length){
     // 個人リストのみ取得（名前のみ）
-    _viewState.loading=true;render();
+    _viewState.loading=true;renderIfPhase('viewPortal');
     const d=await fetchViewData('getPersonList',{eventCode});
     _viewState.persons=d&&d.persons?d.persons:[];
     _viewState.loading=false;
@@ -6208,7 +6210,7 @@ function bind(){
     if(_viewState.eventCode){
       await loadViewData(_viewState.eventCode,_viewState.tab);
     }
-    _viewState.loading=false;render();
+    _viewState.loading=false;renderIfPhase('viewPortal');
   };
 
   const bbkv=document.getElementById('btn-bk-view');
@@ -6270,7 +6272,7 @@ function bind(){
       _viewState.loading=true;S.phase='viewTeamDetail';render();
       const d=await fetchViewData('getTeamDetail',{eventCode:_viewState.eventCode,teamNo:tm.teamNo});
       _viewState.selectedTeam=d&&d.team?d.team:tm;
-      _viewState.loading=false;render();
+      _viewState.loading=false;renderIfPhase('viewTeamDetail');
     });
   });
 
@@ -6286,7 +6288,7 @@ function bind(){
       const d=await fetchViewData('getPersonDetail',{eventCode:_viewState.eventCode,name:p.name});
       _viewState.selectedPerson=d&&d.person?d.person:p;
       _viewState.loading=false;_viewState.cumulData=null;_viewState.personMode='event';
-      render();
+      renderIfPhase('viewPersonDetail');
     });
   });
 
@@ -6300,7 +6302,7 @@ function bind(){
       _viewState.selectedPerson=cumulPerson||{name};
       _viewState.cumulData=cumulPerson;
       _viewState.personMode='cumul';
-      _viewState.loading=false;render();
+      _viewState.loading=false;renderIfPhase('viewPersonDetail');
     });
   });
 
@@ -6347,7 +6349,7 @@ function bind(){
       }
     }
     _viewState.cumulLoading=false;
-    render();
+    renderIfPhase('viewPersonDetail');
   };
 
   // 大会選択
@@ -6358,7 +6360,7 @@ function bind(){
     // 大会変更時はキャッシュをクリア
     _viewState.teams=[];_viewState.persons=[];_viewState.eventStat=null;_viewState.cumulData=null;
     await loadViewData(_viewState.eventCode,_viewState.tab);
-    render();
+    renderIfPhase('viewPortal');
   };
 
   // タブ切り替え（そのタブのデータを遅延取得）
@@ -6368,7 +6370,7 @@ function bind(){
       render();
       if(_viewState.eventCode){
         await loadViewData(_viewState.eventCode,btn.dataset.vtab);
-        render();
+        renderIfPhase('viewPortal');
       }
     });
   });
@@ -6384,7 +6386,7 @@ function bind(){
       _viewState.loading=true;S.phase='viewTeamDetail';render();
       const d=await fetchViewData('getTeamDetail',{eventCode:_viewState.eventCode,teamNo:tm.teamNo});
       _viewState.selectedTeam=d&&d.team?d.team:tm;
-      _viewState.loading=false;render();
+      _viewState.loading=false;renderIfPhase('viewTeamDetail');
     });
   });
 
@@ -6400,7 +6402,7 @@ function bind(){
       const d=await fetchViewData('getPersonDetail',{eventCode:_viewState.eventCode,name:p.name});
       _viewState.selectedPerson=d&&d.person?d.person:p;
       _viewState.loading=false;_viewState.cumulData=null;_viewState.personMode='event';
-      render();
+      renderIfPhase('viewPersonDetail');
     });
   });
 
