@@ -2035,8 +2035,8 @@ function rGame(){
     ${S.endPending?`<div style="background:#FFF7ED;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#92400e;">⏳ <strong>後攻の投擲が終わり次第、試合を終了します</strong></div>`:''}
     ${S.tieExtend?`<div style="background:#F4F7E8;border:1.5px solid #C5D89B;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#4a5d16;">🔁 <strong>合計点が同点のためもう1ターン延長します。</strong>得点差がついた時点で試合終了となります。</div>`:''}
     ${S.tlTieExtend?`<div style="background:#F4F7E8;border:1.5px solid #C5D89B;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#4a5d16;">🔁 <strong>${TURN_LIMIT}ターン終了時点で同点のため延長します。</strong>得点差がついた時点でセット終了となります。</div>`:''}
-    ${S.turnLimit&&displayTurnNum===TURN_LIMIT-1&&!S.tlTieExtend?`<div style="background:#FEF9C3;border:1.5px solid #fde68a;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#854d0e;">⚠️ <strong>残り2ターンです</strong></div>`:''}
-    ${S.turnLimit&&displayTurnNum===TURN_LIMIT&&!S.tlTieExtend?`<div style="background:#FEF9C3;border:1.5px solid #fde68a;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#854d0e;">⚠️ <strong>最終ターンです</strong></div>`:''}
+    ${S.turnLimit&&displayTurnNum===TURN_LIMIT-1&&!S.tlTieExtend?`<div style="background:#FEE2E2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#b91c1c;">⚠️ <strong>残り2ターンです</strong></div>`:''}
+    ${S.turnLimit&&displayTurnNum===TURN_LIMIT&&!S.tlTieExtend?`<div style="background:#FEE2E2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#b91c1c;">⚠️ <strong>最終ターンです</strong></div>`:''}
     ${S.showHist&&hasPrev?histTbl(S.cur):''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
       ${[0,1].map(i=>{
@@ -2076,9 +2076,9 @@ function rGame(){
         <div style="margin-bottom:10px;">
           <div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-weight:600;">① 得点</div>
           <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
-            ${[1,2,3,4,5,6].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#1D9E75':'#e5e7eb'};background:${S.iP===String(n)?'#E1F5EE':'#f9fafb'};color:${S.iP===String(n)?'#0a6e57':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
+            ${[1,2,3,4,5,6].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#374151':'#e5e7eb'};background:${S.iP===String(n)?'#d1d5db':'#f9fafb'};color:${S.iP===String(n)?'#111827':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
             <button class="btn-pts" id="btn-miss" data-pts="miss" style="font-size:17px;font-weight:800;border-radius:8px;border:2px solid ${S.iP==='miss'?'#dc2626':'#e5e7eb'};background:${S.iP==='miss'?'#fee2e2':'#f9fafb'};color:${S.iP==='miss'?'#dc2626':'#111'};cursor:pointer;grid-row:span 2;width:100%;">ミス<br><span style="font-size:20px;">0</span></button>
-            ${[7,8,9,10,11,12].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#1D9E75':'#e5e7eb'};background:${S.iP===String(n)?'#E1F5EE':'#f9fafb'};color:${S.iP===String(n)?'#0a6e57':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
+            ${[7,8,9,10,11,12].map(n=>`<button class="btn-pts" data-pts="${n}" style="height:52px;font-size:22px;font-weight:800;border-radius:8px;border:2px solid ${S.iP===String(n)?'#374151':'#e5e7eb'};background:${S.iP===String(n)?'#d1d5db':'#f9fafb'};color:${S.iP===String(n)?'#111827':'#374151'};cursor:pointer;width:100%;">${n}</button>`).join('')}
           </div>
         </div>
         <div style="margin-bottom:10px;">
@@ -2262,7 +2262,7 @@ function rSetOver(){
     </div>`:``}
     <button class="btn btn-red-o" id="btn-undo-end" style="width:100%;margin-bottom:10px;padding:12px;font-size:15px;" ${cu?'':'disabled'}>↩ 最後の1投に戻す</button>
     ${S.earlyEnd?`<div style="text-align:center;padding:12px 0 14px;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:#111;margin-bottom:4px;">試合終了</div><div style="font-size:14px;font-weight:700;color:#92400e;">⚠️ 結果が送信されるまで画面を進めてください</div></div>
-      <button class="btn btn-green" id="btn-early-match-over" style="width:100%;padding:14px;font-size:16px;">試合結果を確認する →</button>`
+      <button class="btn btn-green" id="btn-early-match-over" style="width:100%;padding:14px;font-size:16px;">試合結果送信画面へ →</button>`
     :mw!=null?`<div style="text-align:center;padding:12px 0 14px;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:#111;margin-bottom:4px;">試合終了</div><div style="font-size:14px;font-weight:700;color:#92400e;">⚠️ 結果が送信されるまで画面を進めてください</div></div>
       <button class="btn btn-green" id="btn-match-over" style="width:100%;padding:14px;font-size:16px;">結果を見る</button>`
     :isLast?`<div style="text-align:center;padding:12px 0 14px;background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:#111;margin-bottom:4px;">試合終了</div><div style="font-size:14px;font-weight:700;color:#92400e;">⚠️ 結果が送信されるまで画面を進めてください</div></div>
@@ -3609,7 +3609,7 @@ function rScoreMatchList(){
       return`
       <div class="card" style="padding:12px;margin-bottom:8px;cursor:pointer;" data-match-idx="${i}">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <div style="font-size:14px;font-weight:700;color:${textSafeColor(tourThemeColor(listTour,'#2E8B57'),'#2E8B57')};line-height:1.3;">${mainLabel}${roundLabel?`　<span style="color:${textSafeColor(tourThemeColor(listTour,'#0a6e57'),'#0a6e57')};">${roundLabel}</span>`:''}</div>
+          <div style="font-size:14px;font-weight:700;color:#2E8B57;line-height:1.3;">${mainLabel}${roundLabel?`　<span style="color:#0a6e57;">${roundLabel}</span>`:''}</div>
           <span style="font-size:13px;font-weight:700;color:${m.result==='勝ち'?'#1D9E75':m.result==='負け'?'#E24B4A':'#9ca3af'};white-space:nowrap;margin-left:8px;">${m.result}</span>
         </div>
         <div style="font-size:13px;color:#374151;">vs <strong>${m.opponentName||'相手不明'}</strong></div>
@@ -5406,10 +5406,6 @@ function rCourtSearch(){
     if(results.length===0){
       resultHtml=`<div style="text-align:center;padding:16px;color:#9ca3af;font-size:14px;">該当する対戦が見つかりませんでした</div>`;
     } else {
-      // 会場テーマカラー（未設定なら既定の緑）。コート番号と回戦名に使う。
-      const _thm=tourThemeColor(tourSrc,'#23AD82');
-      const _thmTx=readableOn(_thm);
-      const _thmText=textSafeColor(_thm,'#1D9E75');
       resultHtml=results.map(r=>{
         const teamAInfo=(tourSrc.teams||[]).find(t=>t.id===r.teamA);
         const teamBInfo=(tourSrc.teams||[]).find(t=>t.id===r.teamB);
@@ -5421,13 +5417,13 @@ function rCourtSearch(){
         const labels=resolveMatchLabels(tourSrc,r.matchId,r.tourneyCode||'');
         return`<div class="card" style="padding:14px;margin-bottom:10px;">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-            <div style="background:${_thm};color:${_thmTx};border-radius:10px;padding:8px 14px;text-align:center;min-width:64px;">
+            <div style="background:#23AD82;color:#fff;border-radius:10px;padding:8px 14px;text-align:center;min-width:64px;">
               <div style="font-size:11px;opacity:0.85;">コート</div>
               <div style="font-size:26px;font-weight:800;line-height:1.1;">${parseInt(courtNo)||courtNo}</div>
             </div>
             <div>
               <div style="font-size:17px;font-weight:800;color:#111;line-height:1.25;">${labels.matchLabel}</div>
-              ${labels.roundLabel?`<div style="font-size:16px;font-weight:700;color:${_thmText};margin-top:2px;line-height:1.25;">${labels.roundLabel}</div>`:''}
+              ${labels.roundLabel?`<div style="font-size:16px;font-weight:700;color:#111;margin-top:2px;line-height:1.25;">${labels.roundLabel}</div>`:''}
               <div style="font-size:11px;color:#9ca3af;margin-top:3px;">試合ID: ${r.matchId}</div>
             </div>
           </div>
@@ -5723,7 +5719,7 @@ function rResultOnlyInput(){
         }).join('')}
       </div>
       ${!early&&S.fmt!=='round2'&&matchDecided?`<div style="font-size:12px;color:#166534;margin-top:8px;text-align:center;">✓ ${decidedAt+1}セットで決着（残りセットは入力不要）</div>`:''}
-      ${!early&&S.fmt!=='round2'&&!matchDecided?`<div style="font-size:12px;color:#92400e;margin-top:8px;text-align:center;">⚠️ まだ勝敗が確定していません（${fmtLabel}に達していません）</div>`:''}
+      ${!early&&S.fmt!=='round2'&&!matchDecided?`<div style="font-size:12px;color:#b91c1c;font-weight:600;margin-top:8px;text-align:center;">⚠️ まだ勝敗が確定していません（${fmtLabel}に達していません）</div>`:''}
       ${early&&earlyNeedMolkout&&S._roMolkoutWinner==null?`<div style="font-size:12px;color:#92400e;margin-top:8px;text-align:center;">セット勝数・合計点が同数のため、下のモルックアウトで勝者を選択してください</div>`:''}
     </div>`;
   }
@@ -5796,7 +5792,7 @@ function rMatchConfirm(){
       <div style="font-size:11px;color:#9ca3af;margin-top:6px;">試合ID: ${d.matchId}</div>
     </div>
 
-    ${!d.hasRule?`<div style="background:#FEF3C7;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#92400e;">⚠️ 試合区分「${d.matchCode}」またはトーナメント種類「${d.tourneyCode}」のルールが管理者設定に見つかりません</div>`:''}
+    ${!d.hasRule?`<div style="background:#FEE2E2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#b91c1c;">⚠️ 試合区分「${d.matchCode}」またはトーナメント種類「${d.tourneyCode}」のルールが管理者設定に見つかりません</div>`:''}
     ${!d.hasTeams?`<div style="background:#FEE2E2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#b91c1c;"><div style="font-weight:700;margin-bottom:4px;">⚠️ 対戦カードが見つかりません</div><div style="font-size:12px;opacity:0.8;margin-top:4px;">${debugInfo}</div><div style="font-size:12px;margin-top:4px;">試合IDを確認するか、チームNoで手動変更してください</div></div>`:''}
 
     <div class="card" style="padding:12px;margin-bottom:10px;">
@@ -5847,9 +5843,9 @@ function rUnknownCheck(){
   const total=uSets.length;
   // スコアシートを編集モードで表示
   return`<div style="padding:6px 0 4px;">
-    <div style="background:#FEF3C7;border:1.5px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:12px;">
-      <div style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:4px;">⚠️ 「？ わからない」の投擲が残っています</div>
-      <div style="font-size:13px;color:#92400e;">試合結果を確定する前に、全ての投擲の結果（○か×）を確定してください。✏️をタップして修正できます。</div>
+    <div style="background:#FEE2E2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:700;color:#b91c1c;margin-bottom:4px;">⚠️ 「？ わからない」の投擲が残っています</div>
+      <div style="font-size:13px;color:#991b1b;">試合結果を確定する前に、全ての投擲の結果（○か×）を確定してください。✏️をタップして修正できます。</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
       <div style="flex:1;"><div style="font-size:12px;color:#6b7280;">${fl()} | 未確定 ${total}セット</div><div style="font-size:16px;font-weight:700;color:#111;">スコア確認・修正</div></div>
