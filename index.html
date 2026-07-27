@@ -1116,6 +1116,31 @@ function cssBar(val,max,color='#2E8B57'){
   return `<div style="background:#e5e7eb;border-radius:4px;height:8px;margin-top:4px;"><div style="background:#4FC08D;width:${w}%;height:8px;border-radius:4px;transition:width 0.3s;"></div></div>`;
 }
 
+// 成績用ドーナツ円グラフ（1マス分）。中央をくり抜いて数値・補足(◯/◯)・順位を表示する。
+//   label   : グラフ名（上に表示）
+//   valText : 中央に大きく出す値（例 "62.5%" / "8.3秒"）
+//   pct     : リングの塗り割合(0〜100)
+//   color   : リングの色
+//   sub     : 補足テキスト（例 "8勝 / 13セット"）。中の数字2つを取り出して "8/13" と中央に出す
+//   rank    : 順位（>0 のときバッジ表示）
+function statDonut(label,valText,pct,color,sub,rank){
+  const w=Math.max(0,Math.min(100,Math.round((parseFloat(pct)||0)*10)/10));
+  const r=parseInt(rank)||0;
+  const rb=r>0?`<div style="margin-top:5px;"><span style="display:inline-block;background:${r===1?'#f59e0b':r<=3?'#94a3b8':'#e5e7eb'};color:${r<=3?'#fff':'#374151'};border-radius:99px;padding:1px 9px;font-size:11px;font-weight:700;">${r}位</span></div>`:'';
+  let center='';
+  if(sub){const m=String(sub).match(/\d+(?:\.\d+)?/g);if(m&&m.length>=2)center=m[0]+'/'+m[1];}
+  return`<div style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:8px 2px;">
+    <div style="font-size:12px;color:#374151;font-weight:600;margin-bottom:8px;line-height:1.25;min-height:2.4em;display:flex;align-items:center;justify-content:center;">${label}</div>
+    <div style="width:100px;height:100px;border-radius:50%;background:conic-gradient(${color||'#2E8B57'} 0% ${w}%,#e9ecef ${w}% 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+      <div style="width:70px;height:70px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;">
+        <div style="font-size:16px;font-weight:800;color:#111;">${valText}</div>
+        ${center?`<div style="font-size:10px;color:#9ca3af;margin-top:2px;">${center}</div>`:''}
+      </div>
+    </div>
+    ${rb}
+  </div>`;
+}
+
 // アクティブ大会を取得（なければ最初の大会）
 function activeTour(){
   if(!AD.tournaments||!AD.tournaments.length)return null;
@@ -2893,17 +2918,12 @@ function rViewPortal(){
     const s=vs.eventStat;
     if(!s){listHtml='<div style="text-align:center;padding:32px;color:#9ca3af;">大会を選択してください</div>';}
     else{
-      const sr=(label,val,unit='',color='#2E8B57',barMax=100)=>{
+      const sr=(label,val,unit='',color='#2E8B57',barMax=100,sub='')=>{
         const num=parseFloat(val)||0;
-        const w=barMax>0?Math.min(100,Math.round(num/barMax*100)):0;
-        return`<div style="padding:8px 0;border-bottom:1px solid #f3f4f6;">
-          <div style="display:flex;justify-content:space-between;">
-            <div style="font-size:13px;color:#374151;">${label}</div>
-            <div style="font-size:14px;font-weight:700;">${val??'-'}${unit}</div>
-          </div>
-          <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#4FC08D;width:${w}%;height:6px;border-radius:4px;"></div></div>
-        </div>`;
+        const w=barMax>0?num/barMax*100:0;
+        return statDonut(label,(val==null?'-':val)+(unit||''),w,color,sub,0);
       };
+      const grid=inner=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${inner}</div>`;
       listHtml=`
         <div class="card" style="padding:14px;margin-bottom:12px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">大会基本情報</div>
@@ -2913,18 +2933,22 @@ function rViewPortal(){
         </div>
         <div class="card" style="padding:14px;margin-bottom:12px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">先攻・後攻</div>
-          ${sr('先攻セット勝率',s.firstWinRate+'%','','#2E8B57',100,`${s.firstWinSets??'?'}勝 / ${s.firstSets??'?'}セット`)}
-          ${sr('後攻セット勝率',s.secondWinRate+'%','','#2E8B57',100,`${s.secondWinSets??'?'}勝 / ${s.secondSets??'?'}セット`)}
+          ${grid(
+            sr('先攻セット勝率',s.firstWinRate+'%','','#2E8B57',100,`${s.firstWinSets??'?'}勝 / ${s.firstSets??'?'}セット`)+
+            sr('後攻セット勝率',s.secondWinRate+'%','','#2E8B57',100,`${s.secondWinSets??'?'}勝 / ${s.secondSets??'?'}セット`)
+          )}
         </div>
         <div class="card" style="padding:14px;margin-bottom:12px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-          ${sr('QH率',s.qhRate+'%','','#2E8B57',100)}
-          ${sr('フォルト率',s.fRate+'%','','#2E8B57',100)}
-          ${sr('上がりターン平均',s.agariAvg,'','#2E8B57',12)}
-          ${sr('セット点数平均',s.setPtsAvg,'','#2E8B57',50)}
-          ${sr('平均ブレーク本数',s.breakAvg,'','#2E8B57',12)}
-          ${sr('平均投擲得点',s.throwPtsAvg,'','#2E8B57',12)}
-          ${sr('平均投擲時間',s.throwTimeAvg,'秒','#2E8B57',60)}
+          ${grid(
+            sr('QH率',s.qhRate+'%','','#2E8B57',100)+
+            sr('フォルト率',s.fRate+'%','','#2E8B57',100)+
+            sr('上がりターン平均',s.agariAvg,'','#2E8B57',12)+
+            sr('セット点数平均',s.setPtsAvg,'','#2E8B57',50)+
+            sr('平均ブレーク本数',s.breakAvg,'','#2E8B57',12)+
+            sr('平均投擲得点',s.throwPtsAvg,'','#2E8B57',12)+
+            sr('平均投擲時間',s.throwTimeAvg,'秒','#2E8B57',60)
+          )}
         </div>`;
     }
   } else if(vs.tab==='team'){
@@ -3023,21 +3047,13 @@ function rViewTeamDetail(){
     return n>0&&n<=1?Math.round(n*1000)/10:Math.round(n*10)/10;
   };
 
-  // sub: 例 '2勝 / 3試合' のような補足テキスト（省略可）
+  // sub: 例 '2勝 / 3試合' のような補足テキスト（省略可）。ドーナツ円グラフ1マスを返す。
   const sr=(label,val,rank,color,barMax,sub)=>{
-    const r=parseInt(rank)||0;
-    const rb=r>0?`<span style="display:inline-block;background:${r===1?'#f59e0b':r<=3?'#94a3b8':'#e5e7eb'};color:${r<=3?'#fff':'#374151'};border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;">${r}位</span>`:'';
     const num=parseFloat(val)||0;
-    const w=barMax>0?Math.min(100,Math.round(num/barMax*100)):0;
-    return`<div style="padding:8px 0;border-bottom:1px solid #f3f4f6;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="font-size:13px;color:#374151;">${label}</div>
-        <div style="font-size:14px;font-weight:700;">${val??'-'}${rb}</div>
-      </div>
-      ${sub?`<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:2px;">${sub}</div>`:''}
-      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#4FC08D;width:${w}%;height:6px;border-radius:4px;"></div></div>
-    </div>`;
+    const w=barMax>0?num/barMax*100:0;
+    return statDonut(label,val==null?'-':val,w,color,sub,rank);
   };
+  const grid=inner=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${inner}</div>`;
 
   const mwr=toP(t.matchWinRate);
   const swr=toP(t.setWinRate);
@@ -3057,24 +3073,30 @@ function rViewTeamDetail(){
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">勝敗</div>
-      ${sr('試合勝率',mwr+'%',t.rankMatchWin,'#2E8B57',100,`${t.winMatches??'?'}勝 / ${t.totalMatches??'?'}試合`)}
-      ${sr('セット勝率',swr+'%',t.rankSetWin,'#2E8B57',100,`${(t.firstWinSets??0)+(t.secondWinSets??0)}勝 / ${t.totalSets??'?'}セット`)}
-      <div style="padding:6px 0;font-size:13px;color:#6b7280;">${t.winMatches??'-'}勝 / ${t.loseMatches??'-'}敗 / ${t.totalMatches??'-'}試合</div>
+      ${grid(
+        sr('試合勝率',mwr+'%',t.rankMatchWin,'#2E8B57',100,`${t.winMatches??'?'}勝 / ${t.totalMatches??'?'}試合`)+
+        sr('セット勝率',swr+'%',t.rankSetWin,'#2E8B57',100,`${(t.firstWinSets??0)+(t.secondWinSets??0)}勝 / ${t.totalSets??'?'}セット`)
+      )}
+      <div style="padding:10px 0 0;font-size:13px;color:#6b7280;text-align:center;">${t.winMatches??'-'}勝 / ${t.loseMatches??'-'}敗 / ${t.totalMatches??'-'}試合</div>
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">先攻・後攻</div>
-      ${sr('先攻セット勝率',fwr+'%',t.rankFirstWin,'#2E8B57',100,`${t.firstWinSets??'?'}勝 / ${t.firstSets??'?'}セット`)}
-      ${sr('後攻セット勝率',swr2+'%',t.rankSecondWin,'#2E8B57',100,`${t.secondWinSets??'?'}勝 / ${t.secondSets??'?'}セット`)}
+      ${grid(
+        sr('先攻セット勝率',fwr+'%',t.rankFirstWin,'#2E8B57',100,`${t.firstWinSets??'?'}勝 / ${t.firstSets??'?'}セット`)+
+        sr('後攻セット勝率',swr2+'%',t.rankSecondWin,'#2E8B57',100,`${t.secondWinSets??'?'}勝 / ${t.secondSets??'?'}セット`)
+      )}
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-      ${sr('QH率',qhr+'%',t.rankQh,'#2E8B57',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalAim??'?'}投 / ${t.dTotalThrows??'?'}投`:'')}
-      ${sr('フォルト率',fr+'%',t.rankF,'#2E8B57',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalFault??'?'}投 / ${t.dTotalThrows??'?'}投`:'')}
-      ${sr('上がりターン平均',t.agariAvg,t.rankAgari,'#2E8B57',12)}
-      ${sr('セット点数平均',t.setPtsAvg,t.rankSetPts,'#2E8B57',50)}
-      ${sr('平均ブレーク本数',t.breakAvg,t.rankBreak,'#2E8B57',12)}
-      ${sr('平均投擲得点',t.throwPtsAvg,t.rankThrowPts,'#2E8B57',12)}
-      ${sr('平均投擲時間(秒)',t.throwTimeAvg,t.rankThrowTime,'#2E8B57',60)}
+      ${grid(
+        sr('QH率',qhr+'%',t.rankQh,'#2E8B57',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalAim??'?'}投 / ${t.dTotalThrows??'?'}投`:'')+
+        sr('フォルト率',fr+'%',t.rankF,'#2E8B57',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalFault??'?'}投 / ${t.dTotalThrows??'?'}投`:'')+
+        sr('上がりターン平均',t.agariAvg,t.rankAgari,'#2E8B57',12)+
+        sr('セット点数平均',t.setPtsAvg,t.rankSetPts,'#2E8B57',50)+
+        sr('平均ブレーク本数',t.breakAvg,t.rankBreak,'#2E8B57',12)+
+        sr('平均投擲得点',t.throwPtsAvg,t.rankThrowPts,'#2E8B57',12)+
+        sr('平均投擲時間(秒)',t.throwTimeAvg,t.rankThrowTime,'#2E8B57',60)
+      )}
     </div>
   </div>`;
 }
@@ -3108,19 +3130,11 @@ function rViewPersonDetail(){
   const d=mode==='cumul'&&cd?cd:p;
 
   const sr=(label,val,rank,color,barMax,sub)=>{
-    const r=parseInt(rank)||0;
-    const rb=r>0?`<span style="display:inline-block;background:${r===1?'#f59e0b':r<=3?'#94a3b8':'#e5e7eb'};color:${r<=3?'#fff':'#374151'};border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;">${r}位</span>`:'';
     const num=parseFloat(val)||0;
-    const w=barMax>0?Math.min(100,Math.round(num/barMax*100)):0;
-    return`<div style="padding:8px 0;border-bottom:1px solid #f3f4f6;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="font-size:13px;color:#374151;">${label}</div>
-        <div style="font-size:14px;font-weight:700;">${val??'-'}${rb}</div>
-      </div>
-      ${sub?`<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:2px;">${sub}</div>`:''}
-      <div style="background:#e5e7eb;border-radius:4px;height:6px;margin-top:4px;"><div style="background:#4FC08D;width:${w}%;height:6px;border-radius:4px;"></div></div>
-    </div>`;
+    const w=barMax>0?num/barMax*100:0;
+    return statDonut(label,val==null?'-':val,w,color,sub,rank);
   };
+  const grid=inner=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${inner}</div>`;
 
   const mwr=toP(d.matchWinRate);
   const swr=toP(d.setWinRate);
@@ -3154,23 +3168,29 @@ function rViewPersonDetail(){
     </div>`:''}
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">勝敗</div>
-      ${sr('試合勝率',mwr+'%',d.rankMatchWin,'#2E8B57',100,`${d.winMatches??'?'}勝 / ${d.totalMatches??'?'}試合`)}
-      ${sr('セット勝率',swr+'%',d.rankSetWin,'#2E8B57',100,`${d.setWin??'?'}勝 / ${d.totalSets??'?'}セット`)}
-      <div style="padding:6px 0;font-size:13px;color:#6b7280;">${d.winMatches??'-'}勝 / ${d.loseMatches??'-'}敗 / ${d.totalMatches??'-'}試合</div>
+      ${grid(
+        sr('試合勝率',mwr+'%',d.rankMatchWin,'#2E8B57',100,`${d.winMatches??'?'}勝 / ${d.totalMatches??'?'}試合`)+
+        sr('セット勝率',swr+'%',d.rankSetWin,'#2E8B57',100,`${d.setWin??'?'}勝 / ${d.totalSets??'?'}セット`)
+      )}
+      <div style="padding:10px 0 0;font-size:13px;color:#6b7280;text-align:center;">${d.winMatches??'-'}勝 / ${d.loseMatches??'-'}敗 / ${d.totalMatches??'-'}試合</div>
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">先攻・後攻</div>
-      ${sr('先攻セット勝率',fwr+'%',d.rankFirstWin,'#2E8B57',100,`${d.firstWinSets??'?'}勝 / ${d.firstSets??'?'}セット`)}
-      ${sr('後攻セット勝率',swr2+'%',d.rankSecondWin,'#2E8B57',100,`${d.secondWinSets??'?'}勝 / ${d.secondSets??'?'}セット`)}
+      ${grid(
+        sr('先攻セット勝率',fwr+'%',d.rankFirstWin,'#2E8B57',100,`${d.firstWinSets??'?'}勝 / ${d.firstSets??'?'}セット`)+
+        sr('後攻セット勝率',swr2+'%',d.rankSecondWin,'#2E8B57',100,`${d.secondWinSets??'?'}勝 / ${d.secondSets??'?'}セット`)
+      )}
     </div>
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
-      ${sr('QH率',qhr+'%',d.rankQh,'#2E8B57',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.dTotalThrows??'?'}投`:'')}
-      ${sr('フォルト率',fr+'%',d.rankF,'#2E8B57',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.dTotalThrows??'?'}投`:'')}
-      ${sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#2E8B57',12)}
-      ${sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#2E8B57',12)}
-      ${sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#2E8B57',12)}
-      ${sr('平均投擲時間(秒)',toP(d.throwTimeAvg),d.rankThrowTime,'#2E8B57',60)}
+      ${grid(
+        sr('QH率',qhr+'%',d.rankQh,'#2E8B57',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.dTotalThrows??'?'}投`:'')+
+        sr('フォルト率',fr+'%',d.rankF,'#2E8B57',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.dTotalThrows??'?'}投`:'')+
+        sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#2E8B57',12)+
+        sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#2E8B57',12)+
+        sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#2E8B57',12)+
+        sr('平均投擲時間(秒)',toP(d.throwTimeAvg),d.rankThrowTime,'#2E8B57',60)
+      )}
     </div>
     ${mode==='event'&&history.length>1?`<div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">大会履歴</div>
