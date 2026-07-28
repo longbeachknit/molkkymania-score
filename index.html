@@ -2968,7 +2968,7 @@ function rViewPortal(){
     const filtered=vs.teams.filter(t=>!q||t.teamName.toLowerCase().includes(q)||t.teamNo.includes(q)).sort((a,b)=>parseInt(a.teamNo)-parseInt(b.teamNo));
     if(!filtered.length){listHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">チームが見つかりません</div>';}
     else{
-      listHtml='<button class="btn" id="btn-team-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((t,i)=>`
+      listHtml='<button class="btn" id="btn-team-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#F2B705;color:#3a2c00;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((t,i)=>`
         <div class="card" style="padding:12px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;" data-vteam="${vs.teams.indexOf(t)}">
           <div>
             <div style="font-size:14px;font-weight:700;">${t.teamName}</div>
@@ -2983,7 +2983,7 @@ function rViewPortal(){
     const filtered=vs.persons.filter(p=>!q||p.name.toLowerCase().includes(q)||p.teamName.toLowerCase().includes(q)).sort((a,b)=>{const ak=_isKanji(a.name)?0:1,bk=_isKanji(b.name)?0:1;if(ak!==bk)return ak-bk;return a.name.localeCompare(b.name,'ja');});
     if(!filtered.length){listHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">選手が見つかりません</div>';}
     else{
-      listHtml='<button class="btn" id="btn-person-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((p,i)=>`
+      listHtml='<button class="btn" id="btn-person-ranking" style="width:100%;padding:10px;margin-bottom:10px;font-size:14px;background:#F2B705;color:#3a2c00;border:none;border-radius:8px;">🏅 ランキングを見る</button>'+filtered.map((p,i)=>`
         <div class="card" style="padding:12px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;" data-vperson="${vs.persons.indexOf(p)}">
           <div>
             <div style="font-size:14px;font-weight:700;">${p.name}</div>
@@ -3204,7 +3204,7 @@ function rViewPersonDetail(){
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
       ${grid(
         sr('QH率',qhr+'%',d.rankQh,'#F2B705',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.dTotalThrows??'?'}投`:'')+
-        sr('フォルト率',fr+'%',d.rankF,'#F2B705',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.dTotalThrows??'?'}投`:'')+
+        sr('フォルト率',fr+'%',d.rankF,'#F2B705',100,(parseInt(d.totalThrows)||0)>0?`${d.totalThrows}投`:'')+
         sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#F2B705',12,(parseInt(d.breakCount)||0)>0?`${d.breakCount}投`:'')+
         sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#F2B705',12,(parseInt(d.totalThrows)||0)>0?`${d.totalThrows}投`:'')+
         sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#F2B705',12,(parseInt(d.secondFirst1Count)||0)>0?`${d.secondFirst1Count}投`:'')+
@@ -3308,7 +3308,7 @@ function rViewRanking(type){
     bodyHtml='<div style="text-align:center;padding:24px;color:#9ca3af;">指標を選択してください</div>';
   }
 
-  const metricBtns=metrics.map(mx=>`<button class="btn ${selMetric&&mx.key===selMetric?'btn-blue':'btn-gray'} btn-xs" data-metric="${mx.key}" style="margin:3px;padding:5px 10px;font-size:12px;">${mx.label}</button>`).join('');
+  const metricBtns=metrics.map(mx=>`<button class="btn ${selMetric&&mx.key===selMetric?'btn-gold':'btn-gray'} btn-xs" data-metric="${mx.key}" style="margin:3px;padding:5px 10px;font-size:12px;">${mx.label}</button>`).join('');
 
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
@@ -3605,7 +3605,7 @@ function rScoreSearch(){
         ${evOpts}
       </select>
       ${ssTeamBlockHtml(ss,false)}
-      <button class="btn btn-blue" id="btn-ss-search" style="width:100%;padding:12px;font-size:15px;">🔍 試合一覧を検索</button>
+      <button class="btn btn-gold" id="btn-ss-search" style="width:100%;padding:12px;font-size:15px;">🔍 試合一覧を検索</button>
     </div>
     ${ss.error?`<div style="color:#e24b4a;padding:12px;">${ss.error}</div>`:''}`}
   </div>`;
@@ -3614,7 +3614,7 @@ function rScoreSearch(){
 // ===== スコアシート検索：チーム名プルダウン／チームNo入力のタブ切替ブロック =====
 function ssTeamBlockHtml(ss,compact){
   const mode=ss.mode||'select';
-  const tab=(v,l)=>`<button class="ss-mode-tab" data-mode="${v}" style="flex:1;padding:${compact?'8px':'9px'} 4px;font-size:${compact?12:13}px;font-weight:700;border:none;border-radius:8px;background:${mode===v?'#2E8B57':'#f3f4f6'};color:${mode===v?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
+  const tab=(v,l)=>`<button class="ss-mode-tab" data-mode="${v}" style="flex:1;padding:${compact?'8px':'9px'} 4px;font-size:${compact?12:13}px;font-weight:700;border:none;border-radius:8px;background:${mode===v?'#F2B705':'#f3f4f6'};color:${mode===v?'#3a2c00':'#6b7280'};cursor:pointer;">${l}</button>`;
   const lt=findTourByScoreEvent(ss.eventCode);
   const teams=((lt&&lt.teams)||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
   let inner;
@@ -3647,7 +3647,7 @@ function rScoreMatchList(){
         <option value="">-- 大会を選択 --</option>${evOpts}
       </select>
       ${ssTeamBlockHtml(ss,true)}
-      <button class="btn btn-blue" id="btn-ss-search" style="width:100%;padding:10px;font-size:14px;">🔍 検索する</button>
+      <button class="btn btn-gold" id="btn-ss-search" style="width:100%;padding:10px;font-size:14px;">🔍 検索する</button>
     </div>`;
   const formBlock=personalized
     ?(expanded
@@ -3675,7 +3675,7 @@ function rScoreMatchList(){
       return`
       <div class="card" style="padding:12px;margin-bottom:8px;cursor:pointer;" data-match-idx="${i}">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <div style="font-size:14px;font-weight:700;color:#2E8B57;line-height:1.3;">${mainLabel}${roundLabel?`　<span style="color:#0a6e57;">${roundLabel}</span>`:''}</div>
+          <div style="font-size:14px;font-weight:700;color:#8a6d00;line-height:1.3;">${mainLabel}${roundLabel?`　<span style="color:#a06a00;">${roundLabel}</span>`:''}</div>
           <span style="font-size:13px;font-weight:700;color:${m.result==='勝ち'?'#1D9E75':m.result==='負け'?'#E24B4A':'#9ca3af'};white-space:nowrap;margin-left:8px;">${m.result}</span>
         </div>
         <div style="font-size:13px;color:#374151;">vs <strong>${m.opponentName||'相手不明'}</strong></div>
@@ -4705,7 +4705,7 @@ function buildTeamSearchList(query){
   }
   return`<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">${filtered.length}チーム${q?'が一致':'を表示中'}</div>`
     +filtered.map(t=>`<div style="display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-      <div style="background:#E1F5EE;color:#0a6e57;border-radius:8px;padding:6px 10px;font-size:14px;font-weight:800;min-width:64px;text-align:center;">No.${t.id}</div>
+      <div style="background:#FFF3CC;color:#8a6d00;border-radius:8px;padding:6px 10px;font-size:14px;font-weight:800;min-width:64px;text-align:center;">No.${t.id}</div>
       <div style="flex:1;font-size:15px;font-weight:700;color:#111;">${t.name||''}</div>
     </div>`).join('');
 }
