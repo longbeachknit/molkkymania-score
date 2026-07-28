@@ -3109,8 +3109,8 @@ function rViewTeamDetail(){
         sr('上がりターン平均',t.agariAvg,t.rankAgari,'#F2B705',12,(parseInt(t.agariCount)||0)>0?`上がり${t.agariCount}回`:'')+
         sr('セット点数平均',t.setPtsAvg,t.rankSetPts,'#F2B705',50,(parseInt(t.totalSets)||0)>0?`${t.totalSets}セット中`:'')+
         sr('平均ブレーク本数',t.breakAvg,t.rankBreak,'#F2B705',12,(parseInt(t.firstSets)||0)>0?`${t.firstSets}投`:'')+
-        sr('平均投擲得点',t.throwPtsAvg,t.rankThrowPts,'#F2B705',12,(parseInt(t.dTotalThrows)||0)>0?`${t.dTotalThrows}投`:'')+
-        sr('平均投擲時間(秒)',t.throwTimeAvg,t.rankThrowTime,'#F2B705',60,(parseInt(t.dTotalThrows)||0)>0?`${t.dTotalThrows}投`:'')
+        sr('平均投擲得点',t.throwPtsAvg,t.rankThrowPts,'#F2B705',12,(parseInt(t.totalThrows)||0)>0?`${t.totalThrows}投`:'')+
+        sr('平均投擲時間(秒)',t.throwTimeAvg,t.rankThrowTime,'#F2B705',60,(parseInt(t.totalThrows)||0)>0?`${t.totalThrows}投`:'')
       )}
     </div>
   </div>`;
@@ -3205,10 +3205,10 @@ function rViewPersonDetail(){
       ${grid(
         sr('QH率',qhr+'%',d.rankQh,'#F2B705',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.dTotalThrows??'?'}投`:'')+
         sr('フォルト率',fr+'%',d.rankF,'#F2B705',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.dTotalThrows??'?'}投`:'')+
-        sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#F2B705',12,(parseInt(d.firstSets)||0)>0?`${d.firstSets}投`:'')+
-        sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#F2B705',12,(parseInt(d.dTotalThrows)||0)>0?`${d.dTotalThrows}投`:'')+
-        sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#F2B705',12,(parseInt(d.secondSets)||0)>0?`${d.secondSets}投`:'')+
-        sr('平均投擲時間(秒)',toP(d.throwTimeAvg),d.rankThrowTime,'#F2B705',60,(parseInt(d.dTotalThrows)||0)>0?`${d.dTotalThrows}投`:'')
+        sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#F2B705',12,(parseInt(d.breakCount)||0)>0?`${d.breakCount}投`:'')+
+        sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#F2B705',12,(parseInt(d.totalThrows)||0)>0?`${d.totalThrows}投`:'')+
+        sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#F2B705',12,(parseInt(d.secondFirst1Count)||0)>0?`${d.secondFirst1Count}投`:'')+
+        sr('平均投擲時間(秒)',toP(d.throwTimeAvg),d.rankThrowTime,'#F2B705',60,(parseInt(d.totalThrows)||0)>0?`${d.totalThrows}投`:'')
       )}
     </div>
     ${mode==='event'&&history.length>1?`<div class="card" style="padding:14px;margin-bottom:12px;">
