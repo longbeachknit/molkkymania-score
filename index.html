@@ -520,58 +520,50 @@ async function syncSettingsFromGitHub(eventCode,useRaw){
   // eventCodeは "01_0601" 形式の場合がある。venueCode/eventCodeに正規化する
   const parts=String(eventCode).split('_');
   const normVenue=parts.length>=2?parts[0]:(data.venueCode||'');
-  const normEvent=parts.length>=2?parts[1]:eventCode;
-  // 大会設定を上書き（対象大会のみ。venueCode+eventCodeで照合）
-  const tour=AD.tournaments&&AD.tournaments.find(t=>
-    (t.venueCode===normVenue&&t.eventCode===normEvent)||
-    t.eventCode===eventCode
-  );
-  if(tour){
-    if(data.eventName!==undefined)tour.eventName=data.eventName;
-    if(data.displayName!==undefined)tour.displayName=data.displayName;
-    if(data.priority!==undefined)tour.priority=data.priority;
-    if(data.matchRules!==undefined)tour.matchRules=data.matchRules;
-    if(data.tourneyRules!==undefined)tour.tourneyRules=data.tourneyRules;
-    if(data.roundRules!==undefined)tour.roundRules=data.roundRules;
-    if(data.teams!==undefined)tour.teams=decTeams(data.teams);
-    if(data.eventPeriodStart!==undefined)tour.eventPeriodStart=data.eventPeriodStart;
-    if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
-    if(data.receptionPw!==undefined)tour.receptionPw=data.receptionPw;
-    if(data.bracketTeamCount!==undefined)tour.bracketTeamCount=Number(data.bracketTeamCount)||64;
-    if(data.sheetUrl!==undefined)tour.sheetUrl=data.sheetUrl;
-    if(data.systemChart!==undefined)tour.systemChart=data.systemChart;
-    if(data.venue!==undefined)tour.venue=data.venue;
-    if(data.tourInfo!==undefined)tour.tourInfo=data.tourInfo;
-    if(data.courtLayout!==undefined)tour.courtLayout=data.courtLayout;
-    saveActiveTour(tour);
-  } else {
-    // 大会が存在しない場合は新規作成（venueCode/eventCodeを正規化して保存）
-    const newTour=makeTournament({
-      venueCode:data.venueCode||normVenue,
-      eventCode:normEvent,
-      eventName:data.eventName||'',
-      displayName:data.displayName||'',
-      gasUrl:data.gasUrl||'',
-      sheetUrl:data.sheetUrl||'',
-      priority:data.priority||'tournament',
-      matchRules:data.matchRules||[],
-      tourneyRules:data.tourneyRules||[],
-      roundRules:data.roundRules||[],
-      teams:decTeams(data.teams||[]),
-      matches:[],
-      eventPeriodStart:data.eventPeriodStart||'',
-      eventPeriodEnd:data.eventPeriodEnd||'',
-      receptionPw:data.receptionPw||'',
-      bracketTeamCount:Number(data.bracketTeamCount)||64,
-      systemChart:data.systemChart||null,
-      venue:data.venue||null,
-      tourInfo:data.tourInfo||{rules:'',notes:''},
-      courtLayout:data.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}}
-    });
-    if(!AD.tournaments)AD.tournaments=[];
-    AD.tournaments.push(newTour);
-    saveAdmin(AD);
+  const normEvent=parts.length>=2?parts[1]:String(eventCode);
+  const wantFile=toJsonFileCode(normEvent);
+  if(!AD.tournaments)AD.tournaments=[];
+  // 【重複防止】同じ大会ID（配信ファイルが同じ）が既にあれば更新、無ければ新規作成。
+  //   大会IDは場所プレフィックスの有無に関わらず、配信ファイル名（末尾の大会ID）で照合する。
+  let tour=AD.tournaments.find(t=>{
+    const te=String(t.eventCode||'');
+    return te===normEvent||toJsonFileCode(te)===wantFile;
+  });
+  if(!tour){
+    tour=makeTournament({venueCode:data.venueCode||normVenue,eventCode:normEvent});
+    AD.tournaments.push(tour);
   }
+  // 配信内容で上書き（既存でも新規でも同じ処理＝重複を作らず内容だけ更新）
+  if(data.eventName!==undefined)tour.eventName=data.eventName;
+  if(data.displayName!==undefined)tour.displayName=data.displayName;
+  if(data.priority!==undefined)tour.priority=data.priority;
+  if(data.matchRules!==undefined)tour.matchRules=data.matchRules;
+  if(data.tourneyRules!==undefined)tour.tourneyRules=data.tourneyRules;
+  if(data.roundRules!==undefined)tour.roundRules=data.roundRules;
+  if(data.teams!==undefined)tour.teams=decTeams(data.teams);
+  if(data.eventPeriodStart!==undefined)tour.eventPeriodStart=data.eventPeriodStart;
+  if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
+  if(data.receptionPw!==undefined)tour.receptionPw=data.receptionPw;
+  if(data.bracketTeamCount!==undefined)tour.bracketTeamCount=Number(data.bracketTeamCount)||64;
+  if(data.sheetUrl!==undefined)tour.sheetUrl=data.sheetUrl;
+  if(data.gasUrl)tour.gasUrl=data.gasUrl; // 空で上書きして消さないよう、値がある時だけ反映
+  if(data.systemChart!==undefined)tour.systemChart=data.systemChart;
+  if(data.venue!==undefined)tour.venue=data.venue;
+  if(data.tourInfo!==undefined)tour.tourInfo=data.tourInfo;
+  if(data.courtLayout!==undefined)tour.courtLayout=data.courtLayout;
+  // 【フォルダ分類】配信されたフォルダ名に合わせる（フォルダ名で照合し、無ければ作成）
+  if(data.folderName!==undefined){
+    const fname=String(data.folderName||'').trim();
+    if(fname){
+      if(!AD.folders)AD.folders=[];
+      let f=AD.folders.find(x=>x.name===fname);
+      if(!f){f={id:'fld_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),name:fname};AD.folders.push(f);}
+      tour.folderId=f.id;
+    } else {
+      tour.folderId=null;
+    }
+  }
+  saveAdmin(AD);
   return true;
 }
 
@@ -2547,6 +2539,7 @@ function rAdminTop(){
         <div style="flex:1;">
           <div style="font-size:12px;color:#374151;margin-bottom:3px;">場所IDを入れて取り込む（他の端末で配信した場所）</div>
           <input type="text" id="admin-venue-import" placeholder="例: 01" style="font-size:14px;"/>
+          <div id="admin-venue-import-preview" style="font-size:13px;margin-top:4px;min-height:16px;color:#6b7280;"></div>
         </div>
         <button class="btn btn-green btn-sm" id="btn-venue-import" style="white-space:nowrap;padding:8px 12px;">⬇️ 取り込む</button>
       </div>
@@ -2563,17 +2556,10 @@ function rAdminTop(){
 
     <div class="card" style="padding:14px;margin-bottom:12px;background:#F0FDF4;">
       <div style="font-size:14px;font-weight:700;color:#166534;margin-bottom:6px;">⬇️ 大会を取り込む</div>
-      <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">他の端末で配信した大会を、この端末の一覧に表示します。場所IDと大会IDを入れて取り込んでください。（通信の回数制限は使いません）</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-        <div>
-          <div style="font-size:12px;color:#374151;margin-bottom:3px;">場所ID</div>
-          <input type="text" id="admin-import-venue" placeholder="例: 01" style="font-size:14px;"/>
-        </div>
-        <div>
-          <div style="font-size:12px;color:#374151;margin-bottom:3px;">大会ID</div>
-          <input type="text" id="admin-import-event" placeholder="例: 0601" style="font-size:14px;"/>
-        </div>
-      </div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">他の端末で配信した大会を、この端末の一覧に表示します。大会IDを入れると大会名が表示されるので、確認して取り込んでください。（通信の回数制限は使いません）</div>
+      <div style="font-size:12px;color:#374151;margin-bottom:3px;">大会ID</div>
+      <input type="text" id="admin-import-event" placeholder="例: 0601" style="font-size:14px;"/>
+      <div id="admin-import-preview" style="font-size:13px;margin:6px 0 8px;min-height:18px;color:#6b7280;"></div>
       <button class="btn btn-green" id="btn-admin-import" style="width:100%;padding:10px;">⬇️ 取り込む</button>
     </div>
 
@@ -4129,6 +4115,7 @@ async function publishSettings(tour,opts){
     venue: resolveVenue(tour), // 会場（場所）情報＋詳細を同梱して参加者へ配信
     tourInfo: tour.tourInfo||{rules:'',notes:''}, // 大会の詳細（規約・注意点）を同梱して参加者へ配信
     courtLayout: tour.courtLayout||{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}},
+    folderName: ((AD.folders||[]).find(f=>String(f.id)===String(tour.folderId||''))||{}).name||'', // フォルダ分類を配信（取り込み先で同名フォルダに振り分け）
     publishedAt: new Date().toISOString()
   };
   const fileName=tour.eventCode+'_settings.json';
@@ -6783,6 +6770,25 @@ function bind(){
     if(ok){render();alert('✅ 場所を取り込みました。\n下の一覧に反映されます。');}
     else alert('❌ 取り込めませんでした。\n・場所ID が正しいか\n・その場所がまだ配信されていないか\nをご確認ください。\n（配信直後は反映まで数分かかることがあります）');
   };
+  // 場所ID入力で「場所名」を先に表示（プレビュー・raw経由なので回数制限なし）
+  (function(){
+    const inp=document.getElementById('admin-venue-import');
+    const prev=document.getElementById('admin-venue-import-preview');
+    if(!inp||!prev)return;
+    let timer=null;
+    inp.addEventListener('input',()=>{
+      const code=(inp.value||'').trim();
+      if(timer)clearTimeout(timer);
+      if(!code){prev.textContent='';return;}
+      prev.style.color='#6b7280';prev.textContent='確認中…';
+      timer=setTimeout(async()=>{
+        const data=await fetchVenueJson(code).catch(()=>null);
+        if((inp.value||'').trim()!==code)return; // 入力が変わっていたら破棄
+        if(data){prev.style.color='#166534';prev.textContent='✅ 場所名：'+String(data.name||'（名称未設定）');}
+        else{prev.style.color='#b91c1c';prev.textContent='⚠️ この場所IDは見つかりません（未配信の可能性）';}
+      },500);
+    });
+  })();
   // 各場所：配信（この場所を他の端末が取り込めるようにネットへ上げる）
   document.querySelectorAll('.admin-pub-venue').forEach(btn=>btn.addEventListener('click',async()=>{
     const v=(AD.venues||[])[parseInt(btn.dataset.idx)];
@@ -6805,19 +6811,36 @@ function bind(){
   const bat2=document.getElementById('btn-add-tournament');if(bat2)bat2.onclick=()=>{
     const t=makeTournament();t.lastUsedAt=Date.now();AD.tournaments.push(t);saveAdmin(AD);S._editingTourId=t.id;render();
   };
-  // 大会を取り込む（場所ID＋大会ID → raw経由で取り込み、この端末の一覧に表示）
+  // 大会を取り込む（大会IDのみ → raw経由で取り込み、この端末の一覧に表示）
   const bimp=document.getElementById('btn-admin-import');
   if(bimp)bimp.onclick=async()=>{
-    const vid=(document.getElementById('admin-import-venue').value||'').trim();
     const eid=(document.getElementById('admin-import-event').value||'').trim();
     if(!eid){alert('大会IDを入力してください（例: 0601）');return;}
-    const code=vid?vid+'_'+eid:eid;
     const orig=bimp.textContent;bimp.disabled=true;bimp.textContent='取り込み中...';
-    const ok=await syncSettingsFromGitHub(code,true).catch(()=>false);
+    const ok=await syncSettingsFromGitHub(eid,true).catch(()=>false);
     bimp.disabled=false;bimp.textContent=orig;
-    if(ok){saveAdmin(AD);render();alert('✅ 取り込みました。\n下の大会一覧に表示されます。');}
-    else alert('❌ 取り込めませんでした。\n・場所ID / 大会ID が正しいか\n・その大会がまだ配信されていないか\nをご確認ください。\n（配信直後は反映まで数分かかることがあります）');
+    if(ok){render();alert('✅ 取り込みました。\n下の大会一覧に表示されます。');}
+    else alert('❌ 取り込めませんでした。\n・大会ID が正しいか\n・その大会がまだ配信されていないか\nをご確認ください。\n（配信直後は反映まで数分かかることがあります）');
   };
+  // 大会ID入力で「大会名」を先に表示（プレビュー・raw経由なので回数制限なし）
+  (function(){
+    const inp=document.getElementById('admin-import-event');
+    const prev=document.getElementById('admin-import-preview');
+    if(!inp||!prev)return;
+    let timer=null;
+    inp.addEventListener('input',()=>{
+      const code=(inp.value||'').trim();
+      if(timer)clearTimeout(timer);
+      if(!code){prev.textContent='';return;}
+      prev.style.color='#6b7280';prev.textContent='確認中…';
+      timer=setTimeout(async()=>{
+        const data=await fetchSettingsJson(code,true).catch(()=>null);
+        if((inp.value||'').trim()!==code)return; // 入力が変わっていたら破棄
+        if(data){prev.style.color='#166534';prev.textContent='✅ 大会名：'+String(data.eventName||data.displayName||'（名称未設定）').replace(/\\n|\n/g,' ');}
+        else{prev.style.color='#b91c1c';prev.textContent='⚠️ この大会IDは見つかりません（未配信の可能性）';}
+      },500);
+    });
+  })();
   // 各大会：最新に更新（配信された最新の設定を取り込んで上書き）
   document.querySelectorAll('.admin-refresh-tour').forEach(btn=>btn.addEventListener('click',async()=>{
     const code=btn.dataset.code;
