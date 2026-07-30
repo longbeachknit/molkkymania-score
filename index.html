@@ -477,14 +477,23 @@ async function fetchMatchesJson(eventCode){
 }
 
 
-async function fetchSettingsJson(eventCode){
+async function fetchSettingsJson(eventCode,useRaw){
   const now=Date.now();
-  const cacheKey='settings_'+eventCode;
+  const cacheKey=(useRaw?'settings_raw_':'settings_')+eventCode;
   if(_jsonCache[cacheKey]&&(now-_jsonCache[cacheKey].ts)<CACHE_TTL){
     return _jsonCache[cacheKey].data;
   }
   try{
     const fileCode=toJsonFileCode(eventCode);
+    if(useRaw){
+      // 【raw経由】管理者の「大会を取り込む」用。API回数制限を消費しない（反映は最大数分遅れることあり）
+      const url=GITHUB_RAW_BASE+'/'+fileCode+'_settings.json?t='+Date.now();
+      const res=await fetch(url,{cache:'no-store'});
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      const data=await res.json(); // raw は生JSONなのでbase64デコード不要
+      _jsonCache[cacheKey]={ts:now,data};
+      return data;
+    }
     // 【API経由】開催期間・ルール等の設定は即時反映が必要なため api.github.com から取得
     //   （raw はCDNキャッシュで最大約5分遅れるため、設定変更の反映が遅くなる）
     const url=GITHUB_DATA_BASE+'/'+fileCode+'_settings.json?t='+Date.now();
@@ -505,8 +514,8 @@ async function fetchSettingsJson(eventCode){
 }
 
 
-async function syncSettingsFromGitHub(eventCode){
-  const data=await fetchSettingsJson(eventCode);
+async function syncSettingsFromGitHub(eventCode,useRaw){
+  const data=await fetchSettingsJson(eventCode,useRaw);
   if(!data)return false;
   // eventCodeは "01_0601" 形式の場合がある。venueCode/eventCodeに正規化する
   const parts=String(eventCode).split('_');
@@ -2460,6 +2469,7 @@ function adminTourRowHtml(t,ad){
         <div style="font-size:12px;color:#6b7280;margin-top:2px;">${venue?venue.name:'場所未設定'} / コード: ${t.eventCode||'未設定'}</div>
         <div style="font-size:12px;color:#9ca3af;">チーム${(t.teams||[]).length}件 / 対戦${(t.matches||[]).length}件</div>
       </div>
+      ${t.eventCode?`<button class="btn btn-gray btn-xs admin-refresh-tour" data-code="${t.venueCode?t.venueCode+'_'+t.eventCode:t.eventCode}" title="配信された最新の内容を取り込みます" style="padding:3px 8px;">⟳ 更新</button>`:''}
       <button class="btn btn-gray btn-xs admin-edit-tour" data-id="${t.id}" style="padding:3px 8px;">編集</button>
       <button class="btn btn-red-o btn-xs admin-del-tour" data-id="${t.id}" style="padding:2px 7px;font-size:11px;">削除</button>
       ${(ad.activeEventCode&&t.eventCode&&ad.activeEventCode===t.eventCode)?
@@ -2501,6 +2511,22 @@ function rAdminTop(){
           <button class="btn btn-gray btn-xs admin-edit-venue" data-idx="${i}" style="padding:3px 8px;">編集</button>
           <button class="btn btn-red-o btn-xs admin-del-venue" data-idx="${i}" style="padding:2px 7px;font-size:11px;">削除</button>
         </div>`).join('')}
+    </div>
+
+    <div class="card" style="padding:14px;margin-bottom:12px;background:#F0FDF4;">
+      <div style="font-size:14px;font-weight:700;color:#166534;margin-bottom:6px;">⬇️ 大会を取り込む</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">他の端末で配信した大会を、この端末の一覧に表示します。場所IDと大会IDを入れて取り込んでください。（通信の回数制限は使いません）</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div>
+          <div style="font-size:12px;color:#374151;margin-bottom:3px;">場所ID</div>
+          <input type="text" id="admin-import-venue" placeholder="例: 01" style="font-size:14px;"/>
+        </div>
+        <div>
+          <div style="font-size:12px;color:#374151;margin-bottom:3px;">大会ID</div>
+          <input type="text" id="admin-import-event" placeholder="例: 0601" style="font-size:14px;"/>
+        </div>
+      </div>
+      <button class="btn btn-green" id="btn-admin-import" style="width:100%;padding:10px;">⬇️ 取り込む</button>
     </div>
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
@@ -6656,6 +6682,29 @@ function bind(){
   const bat2=document.getElementById('btn-add-tournament');if(bat2)bat2.onclick=()=>{
     const t=makeTournament();t.lastUsedAt=Date.now();AD.tournaments.push(t);saveAdmin(AD);S._editingTourId=t.id;render();
   };
+  // 大会を取り込む（場所ID＋大会ID → raw経由で取り込み、この端末の一覧に表示）
+  const bimp=document.getElementById('btn-admin-import');
+  if(bimp)bimp.onclick=async()=>{
+    const vid=(document.getElementById('admin-import-venue').value||'').trim();
+    const eid=(document.getElementById('admin-import-event').value||'').trim();
+    if(!eid){alert('大会IDを入力してください（例: 0601）');return;}
+    const code=vid?vid+'_'+eid:eid;
+    const orig=bimp.textContent;bimp.disabled=true;bimp.textContent='取り込み中...';
+    const ok=await syncSettingsFromGitHub(code,true).catch(()=>false);
+    bimp.disabled=false;bimp.textContent=orig;
+    if(ok){saveAdmin(AD);render();alert('✅ 取り込みました。\n下の大会一覧に表示されます。');}
+    else alert('❌ 取り込めませんでした。\n・場所ID / 大会ID が正しいか\n・その大会がまだ配信されていないか\nをご確認ください。\n（配信直後は反映まで数分かかることがあります）');
+  };
+  // 各大会：最新に更新（配信された最新の設定を取り込んで上書き）
+  document.querySelectorAll('.admin-refresh-tour').forEach(btn=>btn.addEventListener('click',async()=>{
+    const code=btn.dataset.code;
+    if(!code){alert('大会コードが設定されていません');return;}
+    const orig=btn.textContent;btn.disabled=true;btn.textContent='更新中...';
+    const ok=await syncSettingsFromGitHub(code,true).catch(()=>false);
+    btn.disabled=false;btn.textContent=orig;
+    if(ok){saveAdmin(AD);render();alert('✅ 最新の内容に更新しました。');}
+    else alert('❌ 更新できませんでした。\nまだ配信されていないか、コードをご確認ください。\n（配信直後は反映まで数分かかることがあります）');
+  }));
   document.querySelectorAll('.admin-edit-tour').forEach(btn=>btn.addEventListener('click',()=>{
     const t=(AD.tournaments||[]).find(x=>x.id===btn.dataset.id);if(t){t.lastUsedAt=Date.now();saveAdmin(AD);}
     S._editingTourId=btn.dataset.id;render();
