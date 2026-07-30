@@ -2514,6 +2514,9 @@ function adminTourRowHtml(t,ad){
   </div>`;
 }
 
+// 管理者「大会の管理」フォルダの開閉状態を記憶する（画面を作り直しても開いたまま維持するため）。
+// キー：フォルダIDのほか、'__recent__'（最近使った）／'__uncat__'（未分類）。既定は最近＆未分類が開、各フォルダは閉。
+const _adminFolderOpen={};
 function rAdminTop(){
   const ad=AD;
   if(!ad.folders)ad.folders=[];
@@ -2578,13 +2581,13 @@ function rAdminTop(){
         if(!tours.length)return'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>';
         const folders=ad.folders||[];
         const recent=tours.filter(t=>t.lastUsedAt).slice().sort((a,b)=>(b.lastUsedAt||0)-(a.lastUsedAt||0)).slice(0,5);
-        const recentHtml=recent.length?`<details open style="margin-bottom:10px;">
+        const recentHtml=recent.length?`<details data-fold="__recent__" ${_adminFolderOpen['__recent__']!==false?'open':''} style="margin-bottom:10px;">
           <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#374151;">🕐 最近使った大会（${recent.length}）</summary>
           <div style="margin-top:4px;">${recent.map(t=>adminTourRowHtml(t,ad)).join('')}</div>
         </details>`:'';
         const foldersHtml=folders.map(f=>{
           const inF=tours.filter(t=>String(t.folderId||'')===String(f.id));
-          return`<details style="margin-bottom:8px;border:1px solid #eee;border-radius:8px;padding:6px 10px;">
+          return`<details data-fold="${f.id}" ${_adminFolderOpen[f.id]?'open':''} style="margin-bottom:8px;border:1px solid #eee;border-radius:8px;padding:6px 10px;">
             <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#111;">📁 ${escHtml(f.name)} <span style="font-size:11px;color:#9ca3af;font-weight:400;">(${inF.length})</span></summary>
             <div style="display:flex;gap:6px;margin:6px 0 4px;">
               <button class="btn btn-gray btn-xs admin-rename-folder" data-id="${f.id}" style="padding:2px 8px;">名前変更</button>
@@ -2594,7 +2597,7 @@ function rAdminTop(){
           </details>`;
         }).join('');
         const un=tours.filter(t=>!t.folderId);
-        const unHtml=`<details open style="margin-bottom:4px;">
+        const unHtml=`<details data-fold="__uncat__" ${_adminFolderOpen['__uncat__']!==false?'open':''} style="margin-bottom:4px;">
           <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#111;">📄 未分類 <span style="font-size:11px;color:#9ca3af;font-weight:400;">(${un.length})</span></summary>
           <div style="margin-top:4px;">${un.length?un.map(t=>adminTourRowHtml(t,ad)).join(''):'<div style="font-size:12px;color:#9ca3af;padding:4px 0;">未分類の大会はありません</div>'}</div>
         </details>`;
@@ -6885,6 +6888,10 @@ function bind(){
     const t=(AD.tournaments||[]).find(x=>x.id===sel.dataset.id);if(!t)return;
     t.folderId=sel.value||null;saveAdmin(AD);render();
   }));
+  // フォルダの開閉状態を記憶（編集などで画面を作り直しても開いたまま維持する）
+  document.querySelectorAll('details[data-fold]').forEach(d=>{
+    d.addEventListener('toggle',()=>{ _adminFolderOpen[d.dataset.fold]=d.open; });
+  });
 
   // 配信停止ボタン
   const bsb=document.getElementById('btn-stop-broadcast');
