@@ -575,6 +575,45 @@ async function syncSettingsFromGitHub(eventCode,useRaw){
   return true;
 }
 
+// ===== 場所（会場）情報の配信・取り込み =====
+// 「場所の管理」の各場所を、大会と同じように端末間で共有できるようにする。
+// 配信＝venue_{code}.json をGitHubに書き込み。取り込み＝raw経由で読み込み（API不使用）。
+async function fetchVenueJson(code){
+  const now=Date.now();
+  const cacheKey='venue_'+code;
+  if(_jsonCache[cacheKey]&&(now-_jsonCache[cacheKey].ts)<CACHE_TTL){
+    return _jsonCache[cacheKey].data;
+  }
+  try{
+    // 【raw経由】場所の取り込み用。API回数制限を消費しない（反映は最大数分遅れることあり）
+    const url=GITHUB_RAW_BASE+'/venue_'+code+'.json?t='+Date.now();
+    const res=await fetch(url,{cache:'no-store'});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    _jsonCache[cacheKey]={ts:now,data};
+    return data;
+  }catch(e){
+    console.warn('venue.json取得失敗:',e.message);
+    return null;
+  }
+}
+
+async function syncVenueFromGitHub(code){
+  const data=await fetchVenueJson(code);
+  if(!data)return false;
+  if(!AD.venues)AD.venues=[];
+  const v={
+    code: data.code||code,
+    name: data.name||'',
+    themeColor: data.themeColor||'',
+    detail: data.detail||{}
+  };
+  const idx=AD.venues.findIndex(x=>x.code===v.code);
+  if(idx>=0)AD.venues[idx]=v; else AD.venues.push(v);
+  saveAdmin(AD);
+  return true;
+}
+
 // 設定→対戦カードの順で取得（設定で大会を先に作成してからmatchesを反映）
 async function syncAllFromGitHub(eventCode){
   // 1) 先に設定を取得して大会を作成/更新
@@ -2504,10 +2543,19 @@ function rAdminTop(){
         <div style="flex:1;font-size:14px;font-weight:700;color:#1a1a1a;border-left:3px solid #FFB800;padding-left:7px;">場所の管理</div>
         <button class="btn btn-green btn-xs" id="btn-add-venue" style="padding:4px 10px;">＋ 追加</button>
       </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed #e5e7eb;">
+        <div style="flex:1;">
+          <div style="font-size:12px;color:#374151;margin-bottom:3px;">場所IDを入れて取り込む（他の端末で配信した場所）</div>
+          <input type="text" id="admin-venue-import" placeholder="例: 01" style="font-size:14px;"/>
+        </div>
+        <button class="btn btn-green btn-sm" id="btn-venue-import" style="white-space:nowrap;padding:8px 12px;">⬇️ 取り込む</button>
+      </div>
       ${(ad.venues||[]).length===0?'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>':
         (ad.venues||[]).map((v,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
           <span title="${v.themeColor?'テーマカラー設定あり':'テーマカラー未設定'}" style="width:14px;height:14px;border-radius:50%;flex-shrink:0;background:${v.themeColor||'#fff'};border:1px solid ${v.themeColor?'rgba(0,0,0,0.2)':'#d1d5db'};"></span>
           <div style="flex:1;font-size:14px;"><span style="font-weight:600;">${v.code}</span> : ${v.name}</div>
+          <button class="btn btn-gray btn-xs admin-pub-venue" data-idx="${i}" title="この場所を配信します（他の端末が取り込めるようになります）" style="padding:3px 8px;">📡</button>
+          ${v.code?`<button class="btn btn-gray btn-xs admin-refresh-venue" data-code="${v.code}" title="配信された最新の場所情報を取り込みます" style="padding:3px 8px;">⟳</button>`:''}
           <button class="btn btn-gray btn-xs admin-edit-venue" data-idx="${i}" style="padding:3px 8px;">編集</button>
           <button class="btn btn-red-o btn-xs admin-del-venue" data-idx="${i}" style="padding:2px 7px;font-size:11px;">削除</button>
         </div>`).join('')}
@@ -4123,6 +4171,51 @@ async function publishSettings(tour,opts){
     return false;
   }finally{
     if(btn){btn.disabled=false;btn.textContent='📡 設定を配信する';}
+  }
+}
+
+// 場所（会場）1件をGitHubに配信する。大会の publishSettings と同じ書き込み方法。
+async function publishVenue(venue,opts){
+  const silent=opts&&opts.silent;
+  if(!venue||!venue.code){
+    if(!silent)alert('場所コードが設定されていません。');
+    return false;
+  }
+  if(!AD.githubPat||!AD.githubPat.startsWith('ghp_')){
+    if(!silent)alert('GitHub Personal Access Tokenが設定されていません。\n管理者設定画面のトップで設定してください。');
+    return false;
+  }
+  const payload={
+    code: venue.code,
+    name: venue.name||'',
+    themeColor: venue.themeColor||'',
+    detail: venue.detail||{},
+    publishedAt: new Date().toISOString()
+  };
+  const fileName='venue_'+venue.code+'.json';
+  const jsonBody=JSON.stringify(payload,null,2);
+  const apiUrl='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/'+fileName;
+  try{
+    // 既存ファイルのSHAを取得（無ければ新規作成）
+    let sha=null;
+    try{
+      const getRes=await fetch(apiUrl+'?t='+Date.now(),{headers:{'Authorization':'token '+AD.githubPat},cache:'no-store'});
+      if(getRes.ok){const d=await getRes.json();sha=d.sha;}
+    }catch(e){}
+    const body={
+      message:'Update '+fileName,
+      content:btoa(unescape(encodeURIComponent(jsonBody)))
+    };
+    if(sha)body.sha=sha;
+    const res=await fetch(apiUrl,{
+      method:'PUT',
+      headers:{'Authorization':'token '+AD.githubPat,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    return res.ok;
+  }catch(e){
+    if(!silent)alert('❌ エラー: '+e.message);
+    return false;
   }
 }
 
@@ -6678,6 +6771,36 @@ function bind(){
   document.querySelectorAll('.admin-edit-venue').forEach(btn=>btn.addEventListener('click',()=>showVenueModal(parseInt(btn.dataset.idx))));
   document.querySelectorAll('.admin-del-venue').forEach(btn=>btn.addEventListener('click',()=>{
     if(confirm('この場所を削除しますか？')){AD.venues.splice(parseInt(btn.dataset.idx),1);saveAdmin(AD);render();}
+  }));
+  // 場所を取り込む（場所ID → raw経由で取り込み、この端末の場所一覧に反映）
+  const bvimp=document.getElementById('btn-venue-import');
+  if(bvimp)bvimp.onclick=async()=>{
+    const code=(document.getElementById('admin-venue-import').value||'').trim();
+    if(!code){alert('場所IDを入力してください（例: 01）');return;}
+    const orig=bvimp.textContent;bvimp.disabled=true;bvimp.textContent='取り込み中...';
+    const ok=await syncVenueFromGitHub(code).catch(()=>false);
+    bvimp.disabled=false;bvimp.textContent=orig;
+    if(ok){render();alert('✅ 場所を取り込みました。\n下の一覧に反映されます。');}
+    else alert('❌ 取り込めませんでした。\n・場所ID が正しいか\n・その場所がまだ配信されていないか\nをご確認ください。\n（配信直後は反映まで数分かかることがあります）');
+  };
+  // 各場所：配信（この場所を他の端末が取り込めるようにネットへ上げる）
+  document.querySelectorAll('.admin-pub-venue').forEach(btn=>btn.addEventListener('click',async()=>{
+    const v=(AD.venues||[])[parseInt(btn.dataset.idx)];
+    if(!v){return;}
+    if(!confirm(`場所「${v.code} : ${v.name||''}」を配信しますか？\n他の端末がこの内容を取り込めるようになります。`))return;
+    const orig=btn.textContent;btn.disabled=true;btn.textContent='…';
+    const ok=await publishVenue(v,{silent:true}).catch(()=>false);
+    btn.disabled=false;btn.textContent=orig;
+    alert(ok?'✅ 場所を配信しました。':'❌ 配信に失敗しました。GitHub Tokenをご確認ください。');
+  }));
+  // 各場所：最新に更新（配信された最新の場所情報を取り込んで上書き）
+  document.querySelectorAll('.admin-refresh-venue').forEach(btn=>btn.addEventListener('click',async()=>{
+    const code=btn.dataset.code;if(!code)return;
+    const orig=btn.textContent;btn.disabled=true;btn.textContent='…';
+    const ok=await syncVenueFromGitHub(code).catch(()=>false);
+    btn.disabled=false;btn.textContent=orig;
+    if(ok){render();alert('✅ 最新の場所情報に更新しました。');}
+    else alert('❌ 更新できませんでした。\nまだ配信されていないか、IDをご確認ください。\n（配信直後は反映まで数分かかることがあります）');
   }));
   const bat2=document.getElementById('btn-add-tournament');if(bat2)bat2.onclick=()=>{
     const t=makeTournament();t.lastUsedAt=Date.now();AD.tournaments.push(t);saveAdmin(AD);S._editingTourId=t.id;render();
