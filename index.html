@@ -1898,7 +1898,10 @@ function rBeginner(){
       </table></div>`;
   const VID=(url,label,sub)=>`<a href="${url}" target="_blank" rel="noopener" style="display:block;text-decoration:none;background:#FFCB3D;color:#2b2100;border-radius:10px;padding:13px 15px;margin:0 0 6px;font-size:14.5px;font-weight:800;line-height:1.5;">▶ ${label}</a>`
       +(sub?`<div style="font-size:12.5px;color:#9ca3af;margin:0 0 18px;line-height:1.7;">${sub}</div>`:`<div style="margin-bottom:18px;"></div>`);
-  const VIDSOON=sub=>`<div style="background:#f3f4f6;color:#9ca3af;border-radius:10px;padding:13px 15px;margin:0 0 6px;font-size:14.5px;font-weight:800;line-height:1.5;">▶ 解説動画（準備中です）</div>`
+  const VIDSOON=sub=>`<div style="background:#fcfcfd;border:1.5px dashed #d8dade;border-radius:10px;padding:13px 15px;margin:0 0 6px;display:flex;align-items:center;gap:9px;">
+      <span style="font-size:14.5px;font-weight:800;color:#b6b9bf;">▶ 解説動画</span>
+      <span style="background:#f3f4f6;color:#9ca3af;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:800;white-space:nowrap;">準備中</span>
+    </div>`
       +(sub?`<div style="font-size:12.5px;color:#9ca3af;margin:0 0 18px;line-height:1.7;">${sub}</div>`:`<div style="margin-bottom:18px;"></div>`);
   const SUM=arr=>`<div style="background:#f9fafb;border:1px solid #e9ebef;border-radius:12px;padding:15px 16px;margin:22px 0 18px;">
       <div style="font-size:13px;font-weight:800;color:#6b7280;letter-spacing:0.06em;margin-bottom:10px;">まとめ</div>
@@ -2088,7 +2091,7 @@ function rBeginner(){
       +P('試合結果の記録のしかたは、その大会でアプリを使うかどうかで変わります。')
       +UL(['<b>アプリ（MMOSS）を使う大会</b><br>アプリの画面で1投ずつ入力し、そのまま結果を送信します。',
            '<b>アプリを使わない大会</b><br>紙のスコアシートに記入し、Googleフォームから結果を報告します。'])
-      +P('今大会でどちらなのかは、事前のOCでのご案内や当日の開会式でご案内します。分からなければ、その場でスタッフにお聞きください。')
+      +P('今大会でどちらなのかは、事前の<b>LINEのオープンチャット（OC）</b>でのご案内や当日の開会式でご案内します。分からなければ、その場でスタッフにお聞きください。')
       +H3('紙のスコアシートに書くときのポイント')
       +UL(['<b>いちばん最初に「コート番号」と「何試合目か」を書いてください。</b><br>あとから運営が確認するときに、これがないと探せなくなってしまいます。',
            '<b>1投ごとに、その投擲の点数と、そこまでの累計点を書きます。</b>',
@@ -2109,32 +2112,53 @@ function rBeginner(){
   }
 
   // ================= レベル3 =================
-  // トーナメントの進み方の図
-  // 「決勝トーナメントで負けたチームは、まず5位タイへ合流する」ことが分かる形にしてある。
-  const boxTop='background:#FFF8E1;border:1.5px solid #FDE68A;border-radius:10px;padding:11px;text-align:center;font-size:14.5px;font-weight:800;color:#7c5c05;';
-  const boxMain='background:#fff;border:2px solid #FFB800;border-radius:10px;padding:11px;text-align:center;font-size:14px;font-weight:800;color:#7c5c05;';
-  const boxSub='background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:11px;text-align:center;font-size:14px;font-weight:800;color:#374151;';
-  const arrow=t=>`<div style="text-align:center;color:#9ca3af;font-size:11.5px;line-height:1.5;margin:5px 0;">↓${t?' '+t:''}</div>`;
-  const flow=`<div style="margin:0 0 8px;">
-    <div style="${boxTop}">予選</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
-      <div style="display:flex;flex-direction:column;justify-content:space-between;background:#F7FCF9;border:1.5px solid #BFE3CE;border-radius:10px;padding:10px 8px;">
-        <div style="font-size:11px;font-weight:800;color:#1f5136;letter-spacing:0.04em;">↓ 予選の上位</div>
-        <div style="background:#fff;border:1.5px solid #BFE3CE;border-radius:8px;padding:9px 6px;margin:7px 0;font-size:13px;font-weight:800;color:#1f5136;line-height:1.45;">決勝<br>トーナメント</div>
-        <div style="font-size:11px;color:#4b7a63;line-height:1.5;">↓ 負けたら</div>
+  // トーナメントの進み方の図（線でつないだ流れ図）
+  const cL='#cbd5e1';                                   // つなぎ線の色
+  const chip=(t,bg,bd,fg)=>`<div style="background:${bg};border:1.5px solid ${bd};color:${fg};border-radius:999px;padding:3px 12px;font-size:11.5px;font-weight:800;white-space:nowrap;">${t}</div>`;
+  const vseg=extra=>`<div style="width:2px;background:${cL};${extra}"></div>`;
+  const bx=(t,bd,bg,fg,size)=>`<div style="background:${bg};border:${bd};border-radius:10px;padding:11px 8px;text-align:center;font-size:${size}px;font-weight:800;color:${fg};line-height:1.45;">${t}</div>`;
+  // まっすぐ下へ（右に小さなラベルを添えられる）
+  const conn=label=>`<div style="position:relative;height:${label?26:16}px;">
+      <div style="position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:${cL};"></div>
+      ${label?`<div style="position:absolute;left:50%;top:2px;margin-left:9px;font-size:11px;font-weight:700;color:#9ca3af;white-space:nowrap;">${label}</div>`:''}
+    </div>`;
+  // 1本 → 左右2本に分かれる
+  const splitDown=`<div style="position:relative;height:17px;">
+      <div style="position:absolute;left:50%;top:0;height:8px;width:2px;margin-left:-1px;background:${cL};"></div>
+      <div style="position:absolute;left:25%;width:50%;top:7px;height:2px;background:${cL};"></div>
+      <div style="position:absolute;left:25%;top:7px;height:10px;width:2px;margin-left:-1px;background:${cL};"></div>
+      <div style="position:absolute;left:75%;top:7px;height:10px;width:2px;margin-left:-1px;background:${cL};"></div>
+    </div>`;
+  // 左右2本 → 1本に合流する
+  const mergeDown=`<div style="position:relative;height:17px;">
+      <div style="position:absolute;left:25%;top:0;height:9px;width:2px;margin-left:-1px;background:${cL};"></div>
+      <div style="position:absolute;left:75%;top:0;height:9px;width:2px;margin-left:-1px;background:${cL};"></div>
+      <div style="position:absolute;left:25%;width:50%;top:8px;height:2px;background:${cL};"></div>
+      <div style="position:absolute;left:50%;top:8px;height:9px;width:2px;margin-left:-1px;background:${cL};"></div>
+    </div>`;
+  const flow=`<div style="margin:0 0 16px;">
+    ${bx('予選','1.5px solid #FDE68A','#FFF8E1','#7c5c05',14.5)}
+    ${splitDown}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        ${chip('予選の上位','#EAF6EF','#BFE3CE','#1f5136')}
+        ${vseg('height:10px;')}
+        <div style="width:100%;">${bx('決勝<br>トーナメント','1.5px solid #BFE3CE','#fff','#1f5136',13)}</div>
+        ${vseg('height:7px;')}
+        <div style="font-size:11px;font-weight:700;color:#9ca3af;line-height:1.5;">負けたら</div>
+        ${vseg('flex:1;min-height:7px;')}
       </div>
-      <div style="display:flex;flex-direction:column;justify-content:space-between;background:#fafafa;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 8px;">
-        <div style="font-size:11px;font-weight:800;color:#6b7280;letter-spacing:0.04em;">↓ それ以外</div>
-        <div style="font-size:12.5px;color:#9ca3af;line-height:1.5;padding:14px 4px;margin:7px 0;">そのまま</div>
-        <div style="font-size:11px;color:#9ca3af;line-height:1.5;">↓</div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        ${chip('それ以外','#f3f4f6','#e5e7eb','#6b7280')}
+        ${vseg('flex:1;min-height:72px;')}
       </div>
     </div>
-    <div style="text-align:center;font-size:11.5px;font-weight:800;color:#8a6d00;margin:7px 0 5px;">▼ どちらも、まずここへ合流します ▼</div>
-    <div style="${boxMain}">5位タイトーナメント</div>
-    ${arrow('負けたら')}
-    <div style="${boxSub}">15位タイトーナメント</div>
-    ${arrow('負けたら')}
-    <div style="${boxSub}">交流戦</div>
+    ${mergeDown}
+    ${bx('5位タイトーナメント','2px solid #FFB800','#fff','#7c5c05',14)}
+    ${conn('負けたら')}
+    ${bx('15位タイトーナメント','1.5px solid #e5e7eb','#fff','#374151',14)}
+    ${conn('負けたら')}
+    ${bx('交流戦','1.5px solid #e5e7eb','#fff','#374151',14)}
   </div>`;
   const appStep=(no,title,body)=>`<div style="background:#fff;border:1px solid #e9ebef;border-radius:12px;padding:15px 16px;margin:0 0 12px;">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">
@@ -2171,10 +2195,13 @@ function rBeginner(){
     +H('bg-l3-3','3. 予選で負けても、終わりません')
     +P('予選のあと、全チームが何かのトーナメントに進みます。')
     +flow
-    +NOTE('<b>決勝トーナメントで負けても、いきなり15位タイには行きません。</b><br>予選で上位に入ったチームも、そうでないチームも、<b>まずは5位タイトーナメントに合流します。</b>そこでさらに負けたときに、はじめて15位タイトーナメントへ進みます。')
-    +UL(['<b>5位タイトーナメント</b> … 勝ち続ければ5位になれます。決勝トーナメントで負けたチームも、ここに合流します',
-         '<b>15位タイトーナメント</b> … 5位タイでも負けたチームが進みます',
-         '<b>交流戦</b> … さらに負けたチームが行う、順位に影響しない親睦の試合です'])
+    +P('予選の成績によって、最初に進むトーナメントが決まります。')
+    +UL(['<b>予選で上位に入ったチーム</b> … <b>決勝トーナメント</b>へ進みます。ここで負けたチームは、<b>5位タイトーナメント</b>に合流します',
+         '<b>予選でそれ以外だったチーム</b> … はじめから<b>5位タイトーナメント</b>に入ります'])
+    +P('そのあとは、負けるたびに次のトーナメントへ移っていきます。')
+    +UL(['<b>5位タイトーナメント</b> … 勝ち続ければ5位になれます。ここで負けたチームは<b>15位タイトーナメント</b>へ進みます',
+         '<b>15位タイトーナメント</b> … ここでも負けたチームは<b>交流戦</b>へ進みます',
+         '<b>交流戦</b> … 順位に影響しない、親睦の試合です'])
     +P('2回負けても、まだ賞品とポイントの圏内です。どのトーナメントでも、勝ち進めば賞品とポイントがもらえます。')
     +P('大会によってはトーナメントの名前が一部違う場合があります。')
     +H3('何試合できますか')
@@ -2284,7 +2311,7 @@ function rBeginner(){
     +P('ポイントがつく大会かどうかは、大会名で分かります。')
     +UL(['「Season.◯-○」・・・つきます',
          '「vol.○」・・・つきません（単発の大会）'])
-    +P('配点はシーズンごとに変わりますので、Peatixの大会ページや、OCで送信されるポイントランキングのスプレッドシートでご確認ください。')
+    +P('配点はシーズンごとに変わりますので、Peatixの大会ページや、<b>LINEのオープンチャット（OC）</b>で送信されるポイントランキングのスプレッドシートでご確認ください。')
     +H3('CS（チャンピオンシップ）')
     +P('シーズンの最後に行われる、ポイント上位者だけが出られる個人戦です。<br>ここで優勝すると シーズン王者になります。')
     +H3('Mölkky Mania FINAL')
