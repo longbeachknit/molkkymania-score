@@ -92,7 +92,7 @@ const MAX=50,RST=25,MM=3,TURN_LIMIT=12;
 // ===== アプリのバージョン表記 =====
 // ファイル名（例: molkky_final_7_10.html）から自動でバージョン番号を取り出します。
 // 「7_10」や「7-10」→「7_10」と表示。読み取れないときは下の値を使います。
-const APP_VERSION_FALLBACK='8_1';
+const APP_VERSION_FALLBACK='8_2';
 const APP_VERSION=(function(){
   try{
     const m=(location.pathname||'').match(/m[oö]lkky_final_(\d+)[_-](\d+)/i);
@@ -150,6 +150,7 @@ let S={
   _roEarly:false,         // 結果のみ：時間切れで途中終了
   _roMolkoutWinner:null,  // 結果のみ：時間切れ同点時のモルックアウト勝者(0/1)
   _roSubmitting:false,_roSubmitError:'',
+  _submitError:'',_submitErrorHint:'', // 結果送信が失敗したときの理由と対処
   _bgView:null // 初めての方へ: null=メニュー / 'l1' / 'l2' / 'l3'
 };
 function fmtSec(sec){if(sec===null||sec===undefined)return'--';const m=Math.floor(sec/60),s=sec%60;return m>0?m+'分'+s+'秒':s+'秒';}
@@ -970,6 +971,20 @@ function resolveMatchId(id){
 }
 
 
+/* =========================================================================
+   ★個人成績（1投ずつの記録）を送るかどうかの切り替え
+
+     false … 「チーム結果受取」シートだけに送る（送信する量が軽くなる）
+     true  … これまで通り「個人結果受取」シートにも1投ずつの記録を送る
+
+   ここの false / true を書き換えるだけで切り替わります。
+   false のときは、
+     ・送信前の画面に「今回はチーム結果のみを送信します」と出ます
+     ・送信後の確認画面に「試合結果（チーム）のみ送信しました」と出ます
+     ・受け取り側（GAS）は、個人ぶんが空なら個人シートには一切触りません
+   ========================================================================= */
+const SEND_PERSONAL_DATA=false;
+
 const GAS_URL='https://script.google.com/macros/s/AKfycbwpNH-Z0i-vTVSltUxRCjAQN5v3auD-j5JZWES8NHtiMGr3GrlMd-uzLQmxOheW35zaow/exec';
 // QRに埋め込むアプリのベースURL（カメラアプリからの読み取り用）。末尾スラッシュ必須。
 const APP_BASE_URL='https://longbeachknit.github.io/molkkymania-score/';
@@ -1524,11 +1539,14 @@ async function submitResult(){
   });
 
   // ===== GASに1回のPOSTで全データ送信（高速化：コールドスタート1回のみ）=====
+  // 個人成績を送らない設定のときは、空にして送る（受け取り側は空なら個人シートに触らない）
+  const sendPersonal=SEND_PERSONAL_DATA?personalRows:[];
+  const sendSummary =SEND_PERSONAL_DATA?summaryRows:[];
   const body=new URLSearchParams({data:JSON.stringify({
     type:'all',
     teamRows,
-    personalRows,
-    summaryRows
+    personalRows:sendPersonal,
+    summaryRows:sendSummary
   })});
   const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
   const json=await res.json();
@@ -1539,7 +1557,7 @@ async function submitResult(){
     throw err;
   }
   if(json.status!=='ok')throw new Error(json.message||'送信エラー');
-  return {teamRows,personalRows,summaryRows};
+  return {teamRows,personalRows:sendPersonal,summaryRows:sendSummary};
 }
 
 // ===== 結果のみ送信：各セット点数からチーム結果行を組み立ててGASへ =====
@@ -1672,9 +1690,30 @@ async function handleResultOnlySubmit(){
   }
 }
 
+/* 送信に失敗したときの「次にどうすればいいか」を日本語で返す。
+   受け取り側(GAS)が返すメッセージを見分けて、現場で取れる行動に翻訳する。
+   ※GAS側の文言を変えたら、ここの見分け方も直すこと。 */
+function submitErrorHint_(msg){
+  const m=String(msg||'');
+  if(m.indexOf('枠が見つかりません')>=0){
+    return 'この試合ぶんの置き場所が、結果シートにまだ用意されていません。\n本部で対戦表の「対戦表を配信」をもう一度押してもらってください。そのあと、この画面で「結果を送信する」を押せば送れます。';
+  }
+  if(m.indexOf('超えています')>=0){
+    return '結果シートに用意された行数より、送ろうとしたデータのほうが多くなっています。\nこの画面のまま、本部のスタッフにお見せください。';
+  }
+  if(m.indexOf('試合IDが取得できませんでした')>=0){
+    return '試合IDが空のまま送信されています。\nいったんホームに戻り、コートのQRコードを読み直してから、もう一度お試しください。';
+  }
+  if(/load failed|failed to fetch|networkerror|timeout|abort/i.test(m)){
+    return 'インターネットにつながっていない可能性があります。\n電波を確認して、もう一度お試しください。それでも送れないときは本部へお声がけください。';
+  }
+  return '同じ操作を繰り返しても直らないときは、この画面を本部のスタッフにお見せください。';
+}
+
 async function handleSubmitAndReset(){
   const btn=document.getElementById('btn-submit-reset');
   if(btn){btn.disabled=true;btn.textContent='送信中...';}
+  S._submitError='';S._submitErrorHint='';
   let result=null;
   let isDup=false;
   try{
@@ -1682,9 +1721,13 @@ async function handleSubmitAndReset(){
   }catch(e){
     console.error(e);
     isDup=e.isDuplicate===true;
-    // 重複以外のエラー時のみ、再送信ボタンを表示する
-    if(!isDup && btn){
-      btn.disabled=false;btn.textContent='⚠️ 失敗 - もう一度送信する';btn.style.background='#E24B4A';
+    if(!isDup){
+      // 【8-2で修正】以前は console にしか出しておらず、画面には「失敗」としか出なかった。
+      // そのため何度押しても直らない理由が分からなかったので、理由と対処を画面に表示する。
+      S._submitError=String((e&&e.message)||e||'原因不明のエラー');
+      S._submitErrorHint=submitErrorHint_(S._submitError);
+      render();
+      return;
     }
   }
   if(result){
@@ -2881,6 +2924,13 @@ function rMatchOver(){
     <button class="btn btn-yellow" id="btn-ss-match-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-match" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">← 戻る（セット終了画面）</button>
 
+    ${S._submitError?`<div style="background:#fef2f2;border:1.5px solid #f87171;border-radius:10px;padding:13px 15px;margin-bottom:10px;text-align:left;">
+      <div style="font-size:14px;font-weight:800;color:#b91c1c;margin-bottom:6px;">⚠️ 送信できませんでした</div>
+      <div style="font-size:13px;color:#991b1b;line-height:1.75;">${escHtml(S._submitError)}</div>
+      ${S._submitErrorHint?`<div style="font-size:12.5px;color:#7f1d1d;line-height:1.8;margin-top:9px;padding-top:9px;border-top:1px solid #fecaca;white-space:pre-wrap;">${escHtml(S._submitErrorHint)}</div>`:''}
+      <div style="font-size:11.5px;color:#b91c1c;margin-top:9px;">試合ID: ${escHtml(S._matchId||'（未取得）')}</div>
+    </div>`:''}
+    ${!SEND_PERSONAL_DATA?`<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 13px;margin-bottom:10px;font-size:12.5px;color:#6b7280;line-height:1.75;text-align:left;">今回は<b>チーム結果のみ</b>を送信します（1投ずつの個人成績は送りません）。</div>`:''}
     <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信する</button>
   </div>`;
 }
@@ -2935,6 +2985,13 @@ function rEarlyMatchOver(){
     ${needMolkout&&S.molkoutWinner==null?`<button class="btn btn-orange" id="btn-go-molkout" style="width:100%;padding:14px;font-size:15px;margin-bottom:10px;">🎯 モルックアウトへ進む</button>`:''}
     <button class="btn btn-yellow" id="btn-ss-early-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-early" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">${needMolkout&&S.molkoutWinner!=null?'← 戻る（モルックアウト）':'← 戻る（セット終了画面）'}</button>
+    ${S._submitError?`<div style="background:#fef2f2;border:1.5px solid #f87171;border-radius:10px;padding:13px 15px;margin-bottom:10px;text-align:left;">
+      <div style="font-size:14px;font-weight:800;color:#b91c1c;margin-bottom:6px;">⚠️ 送信できませんでした</div>
+      <div style="font-size:13px;color:#991b1b;line-height:1.75;">${escHtml(S._submitError)}</div>
+      ${S._submitErrorHint?`<div style="font-size:12.5px;color:#7f1d1d;line-height:1.8;margin-top:9px;padding-top:9px;border-top:1px solid #fecaca;white-space:pre-wrap;">${escHtml(S._submitErrorHint)}</div>`:''}
+      <div style="font-size:11.5px;color:#b91c1c;margin-top:9px;">試合ID: ${escHtml(S._matchId||'（未取得）')}</div>
+    </div>`:''}
+    ${!SEND_PERSONAL_DATA?`<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 13px;margin-bottom:10px;font-size:12.5px;color:#6b7280;line-height:1.75;text-align:left;">今回は<b>チーム結果のみ</b>を送信します（1投ずつの個人成績は送りません）。</div>`:''}
     <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信する</button>
   </div>`;
 }
@@ -6436,7 +6493,12 @@ function rResultOnlyInput(){
     </div>`;
   }
 
-  const err=S._roSubmitError?`<div style="font-size:13px;color:#b91c1c;margin-bottom:10px;text-align:center;">⚠️ ${S._roSubmitError}</div>`:'';
+  const err=S._roSubmitError?`<div style="background:#fef2f2;border:1.5px solid #f87171;border-radius:10px;padding:13px 15px;margin-bottom:10px;text-align:left;">
+    <div style="font-size:14px;font-weight:800;color:#b91c1c;margin-bottom:6px;">⚠️ 送信できませんでした</div>
+    <div style="font-size:13px;color:#991b1b;line-height:1.75;">${escHtml(S._roSubmitError)}</div>
+    <div style="font-size:12.5px;color:#7f1d1d;line-height:1.8;margin-top:9px;padding-top:9px;border-top:1px solid #fecaca;white-space:pre-wrap;">${escHtml(submitErrorHint_(S._roSubmitError))}</div>
+    <div style="font-size:11.5px;color:#b91c1c;margin-top:9px;">試合ID: ${escHtml(S._matchId||'（未取得）')}</div>
+  </div>`:'';
   // 送信可能条件
   let canSubmit;
   if(early){
