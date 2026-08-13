@@ -1777,12 +1777,16 @@ function bool_(v){
   if(v===''||v===null||v===undefined)return null;
   return v===1||v==='1';
 }
-function buildSupabasePayload(){
-  const matchId=S._matchId||'';
-  const parts=matchId.split('_');
-  const eventCode=parts.length>=2?parts[0]+'_'+parts[1]:'';
+/* 試合IDから大会コードを取り出す（例: 01_0001_01_001 → 01_0001） */
+function eventCodeOf_(matchId){
+  const parts=String(matchId||'').split('_');
+  return parts.length>=2?parts[0]+'_'+parts[1]:'';
+}
 
-  const teams=buildTeamRows().map(r=>({
+/* チーム結果の行（A〜X の24項目）を、データベース用の形に直す。
+   「結果を送信する」と「点数だけ送信」の両方から使う。 */
+function teamRowsToSupabase_(rows){
+  return rows.map(r=>({
     team_no:String(r[1]||''),team_name:String(r[2]||''),
     // 表裏は「勝敗をつけない試合」。空欄ではなく『対象外』と書く。
     // 空欄は「まだ届いていない」の意味だけに使う。
@@ -1794,6 +1798,12 @@ function buildSupabasePayload(){
     first_win_sets:num_(r[20]),second_win_sets:num_(r[21]),
     first_loss_sets:num_(r[22]),second_loss_sets:num_(r[23])
   }));
+}
+
+function buildSupabasePayload(){
+  const matchId=S._matchId||'';
+  const eventCode=eventCodeOf_(matchId);
+  const teams=teamRowsToSupabase_(buildTeamRows());
 
   const throws=[];
   S.sets.forEach((s,si)=>{
@@ -1819,6 +1829,42 @@ function buildSupabasePayload(){
           teams:teams,throws:throws,summary:summary};
 }
 
+/* ある試合の行が、データベースに今いくつ入っているかを数える。
+   件数は本文ではなく Content-Range という返事の見出しに「0-0/件数」の形で入る。 */
+async function countInSupabase_(table,matchId){
+  const url=SB_URL+'/rest/v1/'+table+'?select=match_id&match_id=eq.'+encodeURIComponent(matchId);
+  const res=await fetch(url,{method:'GET',mode:'cors',
+    headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON,
+             'Prefer':'count=exact','Range-Unit':'items','Range':'0-0'}});
+  if(!res.ok&&res.status!==206)throw new Error('保存の確認ができませんでした（'+table+' / HTTP '+res.status+'）');
+  const cr=res.headers.get('Content-Range')||'';
+  const n=cr.split('/')[1];
+  if(!n||n==='*')throw new Error('保存の確認ができませんでした（'+table+' の件数を読み取れません）');
+  return parseInt(n,10);
+}
+
+/* ★送ったあと、データベースを読み直して数を突き合わせる。
+   ここを通ってはじめて「送信が完了しました」と出してよい。
+   数が合わなければ例外にして、画面には赤い枠で理由を出す。 */
+async function verifyInSupabase_(matchId,expect){
+  const got=await Promise.all([
+    countInSupabase_('team_results',matchId),
+    countInSupabase_('throws',matchId),
+    countInSupabase_('personal_summary',matchId)
+  ]);
+  const v={teams:got[0],throws:got[1],summary:got[2]};
+  /* 送っていない種類（0件で送ったもの）は数えても意味がないので確認しない。
+     「点数だけ送信」では投擲と集計を送らず、前に入っている投擲もわざと残すため。 */
+  const ng=['teams','throws','summary'].filter(k=>expect[k]>0&&v[k]!==expect[k]);
+  if(ng.length){
+    throw new Error('データベースに入った数が、送った数と合いませんでした'+
+      '（チーム '+v.teams+'/'+expect.teams+'、'+
+      '投擲 '+v.throws+'/'+expect.throws+'、'+
+      '集計 '+v.summary+'/'+expect.summary+'）');
+  }
+  return v;
+}
+
 async function postToSupabase_(payload){
   const res=await fetch(SB_URL+'/rest/v1/rpc/submit_match',{
     method:'POST',mode:'cors',
@@ -1829,7 +1875,22 @@ async function postToSupabase_(payload){
   const text=await res.text();
   let json=null;try{json=JSON.parse(text);}catch(e){}
   if(!res.ok)throw new Error((json&&(json.message||json.hint))||('HTTP '+res.status));
-  return json;
+
+  // ① データベースが「何行入れたか」を返してくるので、送った数と突き合わせる
+  const expect={teams:(payload.teams||[]).length,
+                throws:(payload.throws||[]).length,
+                summary:(payload.summary||[]).length};
+  if(!json||json.status!=='ok')throw new Error('保存されませんでした（データベースの返事が「ok」ではありません）');
+  if(Number(json.teams)!==expect.teams||Number(json.throws)!==expect.throws||Number(json.summary)!==expect.summary){
+    throw new Error('送った数と、保存された数が合いませんでした'+
+      '（チーム '+json.teams+'/'+expect.teams+'、'+
+      '投擲 '+json.throws+'/'+expect.throws+'、'+
+      '集計 '+json.summary+'/'+expect.summary+'）');
+  }
+
+  // ② それとは別に、もう一度データベースを読み直して実際に残っているかを数える
+  const verified=await verifyInSupabase_(payload.match_id,expect);
+  return {rpc:json,verified:verified};
 }
 
 /* ===== 最後の「結果を送信する」で呼ばれる（8-4） =====
@@ -1857,7 +1918,8 @@ async function submitResult(){
   }catch(e){console.warn('控えの組み立てに失敗しました:',e);}
 
   const personalRows=[].concat.apply([],lay.setRows);
-  return {teamRows:teamRows,personalRows:personalRows,summaryRows:lay.summary,supabase:sb};
+  return {teamRows:teamRows,personalRows:personalRows,summaryRows:lay.summary,
+          supabase:sb,verified:sb.verified};
 }
 
 // ===== 結果のみ送信：各セット点数からチーム結果行を組み立ててGASへ =====
@@ -1944,23 +2006,24 @@ async function submitResultOnly(){
     ];
   });
 
-  // 既存と同じ type:'all' で teamRows のみ送信（personalRows等は空）
-  const body=new URLSearchParams({data:JSON.stringify({
-    type:'all',
-    teamRows,
-    personalRows:[],
-    summaryRows:[]
-  })});
-  const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
-  const json=await res.json();
-  // 他端末が既に同じ試合を送信済み → エラーではなく「送信済み」として扱う
-  if(json.status==='duplicate'){
-    const err=new Error(json.message||'この試合は既に送信済みです');
-    err.isDuplicate=true;
-    throw err;
-  }
-  if(json.status!=='ok')throw new Error(json.message||'送信エラー');
-  return {teamRows};
+  /* 【8-4】以前は結果シートの「枠」に書き込んでいたが、その枠づくりはやめた。
+     ここも「結果を送信する」と同じく、Supabase を本命・スプレッドシートを控えにする。 */
+
+  // ① 本命：Supabaseへ送る。点数だけなので、投擲と集計は空で送る。
+  //    （データベース側は、投擲が空のときは既にある投擲を消さないようにしてある）
+  const sb=await postToSupabase_({
+    match_id:matchId,event_code:eventCodeOf_(matchId),format:S.fmt||'',
+    teams:teamRowsToSupabase_(teamRows),throws:[],summary:[]
+  });
+
+  // ② 保険：スプレッドシートの「チーム結果受取」の一番下に追記してもらう。
+  //    ここが失敗しても画面には何も出さない（本命は①で済んでいるため）。
+  try{
+    postToGas_({type:'teamAppend',matchId:matchId,teamRows:teamRows})
+      .catch(function(e){console.warn('スプレッドシートへの控えは失敗しました:',e);});
+  }catch(e){console.warn('控えの組み立てに失敗しました:',e);}
+
+  return {teamRows:teamRows,supabase:sb,verified:sb.verified};
 }
 
 async function handleResultOnlySubmit(){
@@ -1982,7 +2045,7 @@ async function handleResultOnlySubmit(){
     S.phase='setup';render();
   };
   if(result){
-    showSubmitConfirm(result.teamRows,[],resetRO);
+    showSubmitConfirm(result.teamRows,[],resetRO,result.verified);
   }else if(isDup){
     showDuplicateNotice(resetRO);
   }else{
@@ -2003,6 +2066,9 @@ function submitErrorHint_(msg){
   }
   if(m.indexOf('試合IDが取得できませんでした')>=0){
     return '試合IDが空のまま送信されています。\nいったんホームに戻り、コートのQRコードを読み直してから、もう一度お試しください。';
+  }
+  if(m.indexOf('保存の確認ができませんでした')>=0||m.indexOf('合いませんでした')>=0){
+    return '送ったあとの確認がうまくできませんでした。\nもう一度「結果を送信する」を押してください。同じ試合は上書きされるので、二重に登録されることはありません。\n何度押しても直らないときは、この画面を本部のスタッフにお見せください。';
   }
   if(/load failed|failed to fetch|networkerror|timeout|abort/i.test(m)){
     return 'インターネットにつながっていない可能性があります。\n電波を確認して、もう一度お試しください。それでも送れないときは本部へお声がけください。';
@@ -2031,7 +2097,7 @@ async function handleSubmitAndReset(){
     }
   }
   if(result){
-    showSubmitConfirm(result.teamRows,result.personalRows,()=>doReset());
+    showSubmitConfirm(result.teamRows,result.personalRows,()=>doReset(),result.verified);
   } else if(isDup){
     // 他端末が既に送信済み：エラーではないので、確認後リセットして最初へ戻す
     showDuplicateNotice(()=>doReset());
@@ -2059,7 +2125,9 @@ function showDuplicateNotice(onClose){
   };
 }
 
-function showSubmitConfirm(teamRows,personalRows,onClose){
+/* ★8-4：この画面は「データベースに入ったことを数えて確かめたあと」にしか出ない。
+   verified には、実際に数え直した行数が入っている。 */
+function showSubmitConfirm(teamRows,personalRows,onClose,verified){
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px;';
   const teamHtml=teamRows.map(r=>`
@@ -2074,8 +2142,11 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
   overlay.innerHTML=`<div style="background:#fff;border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto;">
     <div style="text-align:center;margin-bottom:14px;">
       <div style="font-size:28px;">✅</div>
-      <div style="font-size:17px;font-weight:700;color:#111;margin-top:4px;">結果を送信しました</div>
-      ${personalRows&&personalRows.length?`<div style="font-size:12px;color:#6b7280;margin-top:2px;">個人データ ${personalRows.length}行を含む</div>`:`<div style="font-size:12px;color:#6b7280;margin-top:2px;">試合結果（チーム）のみ送信しました</div>`}
+      <div style="font-size:17px;font-weight:700;color:#111;margin-top:4px;">送信が完了しました</div>
+      ${verified?`<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#166534;line-height:1.7;">
+        保存されたことを確認しました<br>
+        <span style="font-weight:700;">チーム結果 ${verified.teams}件${verified.throws?` / 投擲 ${verified.throws}件`:''}${verified.summary?` / 個人集計 ${verified.summary}件`:''}</span>
+      </div>`:`<div style="font-size:12px;color:#6b7280;margin-top:2px;">${personalRows&&personalRows.length?`個人データ ${personalRows.length}行を含む`:'試合結果（チーム）のみ送信しました'}</div>`}
     </div>
     ${teamHtml}
     <button id="confirm-close" class="btn btn-green" style="width:100%;padding:14px;font-size:16px;margin-top:8px;">最初から</button>
@@ -3165,7 +3236,7 @@ function rSetOver(){
         <span style="font-size:17px;font-weight:700;color:#111;">${wins[i]}勝</span>
       </div>`).join('')}
     </div>`:``}
-    <button class="btn btn-red-o" id="btn-undo-end" style="width:100%;margin-bottom:10px;padding:12px;font-size:15px;" ${cu?'':'disabled'}>↩ 最後の1投に戻す</button>
+    <button class="btn" id="btn-undo-end" style="width:100%;margin-bottom:10px;padding:12px;font-size:15px;" ${cu?'':'disabled'}>↩ 最後の1投に戻す</button>
     ${S.earlyEnd?`<div style="text-align:center;padding:12px 0 14px;background:#FEE2E2;border:1.5px solid #fca5a5;border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:#111;margin-bottom:4px;">試合終了</div><div style="font-size:14px;font-weight:700;color:#b91c1c;">⚠️ 結果が送信されるまで画面を進めてください</div></div>
       <button class="btn btn-green" id="btn-early-match-over" style="width:100%;padding:14px;font-size:16px;">試合結果送信画面へ →</button>`
     :mw!=null?`<div style="text-align:center;padding:12px 0 14px;background:#FEE2E2;border:1.5px solid #fca5a5;border-radius:10px;margin-bottom:10px;"><div style="font-size:18px;font-weight:700;color:#111;margin-bottom:4px;">試合終了</div><div style="font-size:14px;font-weight:700;color:#b91c1c;">⚠️ 結果が送信されるまで画面を進めてください</div></div>
