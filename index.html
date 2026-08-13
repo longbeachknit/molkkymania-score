@@ -1846,16 +1846,14 @@ async function submitResult(){
   //    同じ試合を送り直しても、古い内容を消してから入れ直すので積み上がらない。
   const sb=await postToSupabase_(buildSupabasePayload());
 
-  // ② 保険：今までのスプレッドシートへも、裏で静かに送っておく。
+  // ② 保険：スプレッドシートへは【チーム結果だけ】を裏で静かに送る。
+  //    ・個人データ（投擲・集計）はもう送らない（Supabase にあるため）
+  //    ・枠を探さず、シートの一番下に追記してもらう（7-8 のころと同じやり方）
   //    ここが失敗しても画面には何も出さない（本命は①で済んでいるため）。
   try{
-    if(lay.total<=PERSONAL_SLOT_ROWS){
-      postToGas_({
-        type:'all',matchId:matchId,teamRows:teamRows,
-        personalRows:[].concat.apply([],lay.setRows),
-        summaryRows:lay.summary
-      }).catch(function(e){console.warn('スプレッドシートへの控えは失敗しました:',e);});
-    }
+    postToGas_({
+      type:'teamAppend',matchId:matchId,teamRows:teamRows
+    }).catch(function(e){console.warn('スプレッドシートへの控えは失敗しました:',e);});
   }catch(e){console.warn('控えの組み立てに失敗しました:',e);}
 
   const personalRows=[].concat.apply([],lay.setRows);
