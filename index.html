@@ -92,7 +92,7 @@ const MAX=50,RST=25,MM=3,TURN_LIMIT=12;
 // ===== アプリのバージョン表記 =====
 // ファイル名（例: molkky_final_7_10.html）から自動でバージョン番号を取り出します。
 // 「7_10」や「7-10」→「7_10」と表示。読み取れないときは下の値を使います。
-const APP_VERSION_FALLBACK='8_2';
+const APP_VERSION_FALLBACK='8_4';
 const APP_VERSION=(function(){
   try{
     const m=(location.pathname||'').match(/m[oö]lkky_final_(\d+)[_-](\d+)/i);
@@ -150,8 +150,17 @@ let S={
   _roEarly:false,         // 結果のみ：時間切れで途中終了
   _roMolkoutWinner:null,  // 結果のみ：時間切れ同点時のモルックアウト勝者(0/1)
   _roSubmitting:false,_roSubmitError:'',
+  _bgView:null, // 初めての方へ: null=メニュー / 'l1' / 'l2' / 'l3'
   _submitError:'',_submitErrorHint:'', // 結果送信が失敗したときの理由と対処
-  _bgView:null // 初めての方へ: null=メニュー / 'l1' / 'l2' / 'l3'
+  // ★8-3：セットごとの分割送信で使う「どのセットをいつ送ったか」の控え
+  //   キー = セット番号（0始まり）／値 = { sig, offset }
+  //   sig … そのセットの中身を短くまとめた印。中身が変わると sig も変わるので、
+  //          「送ったあとに修正された」ことに気づける。
+  _bgSendNote:'',   // 裏送信でうまくいかなかったときの控え（最後にまとめて送り直す）
+  // スプレッドシート側が「セットごとの分割送信」に対応した版かどうか。
+  //   null … まだ分からない ／ true … 対応済み ／ false … 古いまま
+  // 分からない・古いときは、最後の送信で古い形のデータも一緒に入れて送る（記録が消えないように）。
+  _bgSendNote:''
 };
 function fmtSec(sec){if(sec===null||sec===undefined)return'--';const m=Math.floor(sec/60),s=sec%60;return m>0?m+'分'+s+'秒':s+'秒';}
 let _timerInterval=null;
@@ -971,19 +980,14 @@ function resolveMatchId(id){
 }
 
 
-/* =========================================================================
-   ★個人成績（1投ずつの記録）を送るかどうかの切り替え
-
-     false … 「チーム結果受取」シートだけに送る（送信する量が軽くなる）
-     true  … これまで通り「個人結果受取」シートにも1投ずつの記録を送る
-
-   ここの false / true を書き換えるだけで切り替わります。
-   false のときは、
-     ・送信前の画面に「今回はチーム結果のみを送信します」と出ます
-     ・送信後の確認画面に「試合結果（チーム）のみ送信しました」と出ます
-     ・受け取り側（GAS）は、個人ぶんが空なら個人シートには一切触りません
-   ========================================================================= */
-const SEND_PERSONAL_DATA=false;
+/* ===== Supabase（新しい保存先） =====
+   8-4 から、試合結果はここへ送る。スプレッドシートへは「保険」として裏で送るだけ。
+   ・枠（130行）を先に作る必要はない
+   ・同時に何十コートから送っても、互いに上書きしない
+   ・送り直しても積み上がらず、きれいに置き換わる                        */
+const SB_URL='https://lkhqrqhqouptjeteopwq.supabase.co';
+const SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxraHFycWhxb3VwdGpldGVvcHdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MDEwMzIsImV4cCI6MjEwMjA3NzAzMn0.9mC42gZfNk__zVmyfOMRmzRp8gRrJFs_TdxsKtd4X9s';
+const SB_SUBMIT_KEY='f3f7569d10abe3b74b69732b824669d5baec9e7d2c94ff28';
 
 const GAS_URL='https://script.google.com/macros/s/AKfycbwpNH-Z0i-vTVSltUxRCjAQN5v3auD-j5JZWES8NHtiMGr3GrlMd-uzLQmxOheW35zaow/exec';
 // QRに埋め込むアプリのベースURL（カメラアプリからの読み取り用）。末尾スラッシュ必須。
@@ -1133,18 +1137,156 @@ function runCourtSearch(teamNo,matchCode){
   return results;
 }
 
+/* ===== 成績データの取り出し（8-4：Supabaseから読む） =====
+   これまでは「分析を更新」で作られたスプレッドシートの表を読んでいたが、
+   Supabase では見るたびに数え直されるので、常に最新が返る。
+   画面側が受け取る形（項目の名前）は今までと同じにしてあるので、表示の作りは変えていない。 */
+
+// 列名の付け方を変換：total_sets → totalSets のように直す
+function toCamel_(o){
+  const r={};
+  for(const k in o) r[k.replace(/_([a-z0-9])/g,(m,c)=>c.toUpperCase())]=o[k];
+  return r;
+}
+// 選手の行は member を name として渡す（画面側が name を見ているため）
+function personRow_(o){
+  const r=toCamel_(o);
+  if(r.member!==undefined){r.name=r.member;delete r.member;}
+  return r;
+}
+
+// Supabase から取り出す。1000行ずつに区切って、全部そろうまで繰り返す。
+async function sbGet_(path){
+  const out=[];
+  let from=0;
+  for(;;){
+    const res=await fetch(SB_URL+'/rest/v1/'+path,{
+      cache:'no-store',mode:'cors',
+      headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON,
+               'Range-Unit':'items','Range':from+'-'+(from+999)}
+    });
+    if(!res.ok&&res.status!==206)throw new Error('HTTP '+res.status+' '+path);
+    const page=await res.json();
+    out.push.apply(out,page);
+    if(page.length<1000)break;
+    from+=1000;
+  }
+  return out;
+}
+const SB_METRIC={
+  matchWinRate:['match_win_rate','rank_match_win'],
+  setWinRate:['set_win_rate','rank_set_win'],
+  firstWinRate:['first_win_rate','rank_first_win'],
+  secondWinRate:['second_win_rate','rank_second_win'],
+  setPtsAvg:['set_pts_avg','rank_set_pts'],
+  agariAvg:['agari_avg','rank_agari'],
+  throwPtsAvg:['throw_pts_avg','rank_throw_pts'],
+  breakAvg:['break_avg','rank_break'],
+  s1Avg:['s1_avg','rank_s1'],
+  qhRate:['qh_rate','rank_qh'],
+  fRate:['f_rate','rank_f'],
+  throwTimeAvg:['throw_time_avg','rank_throw_time']
+};
+const pad3_=v=>String(v==null?'':v).trim().padStart(3,'0');
+const enc_=v=>encodeURIComponent(String(v==null?'':v));
+
+async function fetchFromSupabase_(action,p){
+  const ev=p.eventCode||'', nm=p.name||'', tn=p.teamNo||'';
+  const evq=ev?'event_code=eq.'+enc_(ev)+'&':'';
+
+  if(action==='getEvents'){
+    const r=await sbGet_('v_event_stat?select=event_code&order=event_code.desc');
+    return {events:r.map(x=>x.event_code)};
+  }
+  if(action==='getTeamList'){
+    const r=await sbGet_('v_team_event?'+evq+'select=team_no,team_name,members&order=team_no');
+    return {teams:r.map(x=>({teamNo:x.team_no,teamName:x.team_name,members:x.members||[]}))};
+  }
+  if(action==='getTeams'){
+    return {teams:(await sbGet_('v_team_event?'+evq+'order=team_no')).map(toCamel_)};
+  }
+  if(action==='getTeamDetail'){
+    const r=await sbGet_('v_team_event?'+evq+'team_no=eq.'+enc_(pad3_(tn))+'&limit=1');
+    return {team:r.length?toCamel_(r[0]):null};
+  }
+  if(action==='getPersonList'){
+    const r=await sbGet_('v_person_event?'+evq+'select=member,team_no,team_name&order=member');
+    return {persons:r.map(x=>({name:x.member,teamNo:x.team_no,teamName:x.team_name}))};
+  }
+  if(action==='getPersonal'){
+    const q=evq+(nm?'member=eq.'+enc_(nm)+'&':'')+'order=member';
+    return {persons:(await sbGet_('v_person_event?'+q)).map(personRow_)};
+  }
+  if(action==='getPersonDetail'){
+    const r=await sbGet_('v_person_event?'+evq+'member=eq.'+enc_(nm)+'&limit=1');
+    return {person:r.length?personRow_(r[0]):null};
+  }
+  if(action==='getCumulative'){
+    const q=(nm?'member=eq.'+enc_(nm)+'&':'')+'order=member';
+    return {persons:(await sbGet_('v_person_cumulative?'+q)).map(personRow_)};
+  }
+  if(action==='getEventStat'){
+    const r=await sbGet_('v_event_stat?'+evq+'limit=1');
+    return {stat:r.length?toCamel_(r[0]):null};
+  }
+  if(action==='getTeamRanking'||action==='getPersonRanking'||action==='getCumulativeRanking'){
+    const m=SB_METRIC[p.metric]||SB_METRIC.matchWinRate;
+    const byRank=(a,b)=>(Number(a.rank)||999)-(Number(b.rank)||999);
+    if(action==='getTeamRanking'){
+      const r=await sbGet_('v_team_event?'+evq+'select=team_no,team_name,'+m[0]+','+m[1]);
+      return {teams:r.map(x=>({teamNo:x.team_no,teamName:x.team_name,value:x[m[0]],rank:x[m[1]]})).sort(byRank)};
+    }
+    const view=action==='getPersonRanking'?'v_person_event?'+evq:'v_person_cumulative?';
+    const r=await sbGet_(view+'select=member,'+m[0]+','+m[1]);
+    return {persons:r.map(x=>({name:x.member,value:x[m[0]],rank:x[m[1]]})).sort(byRank)};
+  }
+  if(action==='getMatchList'){
+    const rows=await sbGet_('team_results?'+evq+'select=match_id,team_no,team_name,result,total_sets,win_sets,loss_sets&order=match_id');
+    const byMatch={};
+    rows.forEach(x=>{(byMatch[x.match_id]=byMatch[x.match_id]||[]).push(x);});
+    const want=tn?pad3_(tn):'';
+    const matches=[];
+    for(const mid in byMatch){
+      const ts=byMatch[mid];
+      const me=want?ts.find(t=>pad3_(t.team_no)===want):ts[0];
+      if(!me)continue;
+      const op=ts.find(t=>t.team_no!==me.team_no);
+      matches.push({
+        matchId:mid,teamNo:pad3_(me.team_no),teamName:me.team_name,result:me.result,
+        totalSets:me.total_sets,winSets:me.win_sets,loseSets:me.loss_sets,
+        opponentName:op?op.team_name:'',
+        matchNum:parseInt((mid.split('_')[2]||'0'),10)
+      });
+    }
+    matches.sort((a,b)=>b.matchNum-a.matchNum);
+    return {matches};
+  }
+  if(action==='getMatchScore'){
+    const mid=p.matchId||'';
+    if(!mid)return {rows:[],teams:[]};
+    const th=await sbGet_('throws?match_id=eq.'+enc_(mid)+'&order=set_no,seq');
+    const tr=await sbGet_('team_results?match_id=eq.'+enc_(mid)+'&order=team_no');
+    return {
+      rows:th.map(r=>({setNo:r.set_no,teamNo:r.team_no,teamName:r.team_name,name:r.member,
+                       turnNum:r.turn_no,throwNum:r.throw_no,pts:r.pts,cumul:r.cumul,
+                       aimed:r.aim,first:r.is_first?1:0})),
+      teams:tr.map(r=>({teamNo:r.team_no,teamName:r.team_name,result:r.result,
+                        totalSets:r.total_sets,winSets:r.win_sets,loseSets:r.loss_sets,
+                        setPts:r.set_pts||[],setTurns:r.set_turns||[]}))
+    };
+  }
+  throw new Error('未対応の項目: '+action);
+}
+
 async function fetchViewData(action,params={}){
   const cacheKey=action+JSON.stringify(params);
   if(_viewCache[cacheKey])return _viewCache[cacheKey];
-  const qs=new URLSearchParams({action,...params}).toString();
   try{
-    const res=await fetch(GAS_URL+'?'+qs,{cache:'no-store'});
-    if(!res.ok)throw new Error('HTTP '+res.status+' action='+action);
-    const data=await res.json();
+    const data=await fetchFromSupabase_(action,params);
     _viewCache[cacheKey]=data;
     return data;
   }catch(e){
-    console.error('fetchViewData失敗 action='+action+':',e);
+    console.error('成績データの取得に失敗 action='+action+':',e);
     return null;
   }
 }
@@ -1367,15 +1509,58 @@ function sendRowViaImage(params){
   });
 }
 
-async function submitResult(){
-  // 試合IDとチームNo（試合開始時に保存済み）
-  const matchId=S._matchId||'';
-  const teamNos=S._teamNos||['',''];
-  const tour=activeTour();
+/* =========================================================================
+   ★8-3：結果の送信を「セットごとの小分け」に変えた
 
-  // 勝者判定
-  const wins=[0,0];
-  S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});
+   ■ これまで（8-2まで）
+     試合がぜんぶ終わってから、最後の「結果を送信する」で
+     全セットぶんの記録をまとめて1回で送っていた。
+     最大5セットぶんが一度に飛ぶので重く、終了が重なると詰まりやすかった。
+
+   ■ これから（8-3）
+     ・1セット終わって「ゲーム開始 ▶」で次のセットに入るとき、
+       終わったばかりのセットぶんを、裏でこっそり送る。
+     ・最後のセットは「結果を見る／試合結果送信画面へ」を押したときに送る。
+     ・最後の「結果を送信する」では、チーム結果と個人の集計行を送り、
+       あわせて「送れていないセットが無いか」を確かめて、
+       足りないところだけを送り直す。
+
+   ■ 途中で前のセットを直したとき
+     セットの中身から短い「印（sig）」を作って控えている。
+     直すと印が変わるので、最後の送信のときに自動で送り直される。
+
+   ■ 置き場所の考え方（ここが要）
+     結果シートには1試合につき130行の「箱」が用意してある。
+     その中を、セット1のぶん → セット2のぶん → … → 最後に集計行、
+     という順に前から詰めて置く。何行目から置くかはアプリが数えて、
+     スプレッドシート側へ一緒に伝える。
+     こうすると場所を固定で区切らずに済むので、130行を1行も無駄にしない。
+   ========================================================================= */
+
+// 1試合ぶんの「箱」の行数。スプレッドシート側の PERSONAL_SLOT_SIZE と必ず合わせること。
+const PERSONAL_SLOT_ROWS=130;
+
+/* スプレッドシートへ送る共通部分。返事を見て、失敗なら例外にする。 */
+async function postToGas_(payload){
+  const body=new URLSearchParams({data:JSON.stringify(payload)});
+  const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
+  const json=await res.json();
+  // 他端末が既に同じ試合を送信済み → エラーではなく「送信済み」として扱う
+  if(json.status==='duplicate'){
+    const err=new Error(json.message||'この試合は既に送信済みです');
+    err.isDuplicate=true;
+    throw err;
+  }
+  if(json.status!=='ok')throw new Error(json.message||'送信エラー');
+  return json;
+}
+
+/* セットの中身から短い「印」を作る。中身が1つでも変われば印も変わる。
+   （送ったあとに修正されたかどうかを見分けるためだけに使う） */
+
+/* 試合の勝者を決める（引き分けなら null） */
+function decideMatchWinner_(){
+  const wins=[0,0];S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});
   let matchWin=mW();
   if(matchWin==null){
     const totals=S.sets.reduce((a,s)=>{a[0]+=s.teams[0].sc;a[1]+=s.teams[1].sc;return a;},[0,0]);
@@ -1385,9 +1570,18 @@ async function submitResult(){
     else if(totals[1]>totals[0])matchWin=1;
     else if(S.molkoutWinner!=null)matchWin=S.molkoutWinner;
   }
+  return matchWin;
+}
 
-  // ===== チーム結果データ（2行分）=====
-  const teamRows=[0,1].map(ti=>{
+/* ===== チーム結果データ（2行分）を作る ===== */
+function buildTeamRows(){
+  const matchId=S._matchId||'';
+  const teamNos=S._teamNos||['',''];
+  const matchWin=decideMatchWinner_();
+  const wins=[0,0];
+  S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});
+
+  return[0,1].map(ti=>{
     const result=S.fmt==='round2'?'':matchWin===null?'引き分け':matchWin===ti?'勝ち':'負け';
     const totalSets=S.sets.length;
     const lossSets=S.sets.filter(s=>s.wid!=null&&s.wid!==ti).length;
@@ -1449,11 +1643,18 @@ async function submitResult(){
       secondLoss        // X: 後攻セット敗北数
     ];
   });
+}
 
-  // ===== 個人結果データ（投擲ごとに1行）=====
+/* ===== 1セットぶんの個人投擲データ（投擲ごとに1行）を作る =====
+   ★8-3：もとは全セットまとめて作っていたものを、セット単位で作れるように分けた。
+     中身（列の並び・計算）はこれまでと1つも変えていない。 */
+function buildSetPersonalRows(si){
+  const matchId=S._matchId||'';
+  const teamNos=S._teamNos||['',''];
   const personalRows=[];
-  const summaryRows=[]; // 個人集計行（投擲データ送信後に別送信）
-  S.sets.forEach((s,si)=>{
+  const s=S.sets[si];
+  if(!s)return personalRows;
+  {
     // 両チームの投擲を時系列（ターン）順に並べる
     // ターンごとに先攻→後攻の順
     const fti=s.ftid; // 先攻チームID
@@ -1496,9 +1697,17 @@ async function submitResult(){
         ]);
       });
     }
-  });
+  }
+  return personalRows;
+}
 
-  // ===== 個人別集計行を追加（各投擲データの後に1人1行）=====
+/* ===== 個人別の集計行（1人1行）を作る =====
+   ★8-3：もとは投擲データの組み立てと同じ関数の中にあったものを、独立させた。
+     計算内容はこれまでと同じ。 */
+function buildSummaryRows(){
+  const matchId=S._matchId||'';
+  const teamNos=S._teamNos||['',''];
+  const summaryRows=[];
   [0,1].forEach(ti=>{
     // このチームに出場した全メンバーを収集
     const memberStats={};
@@ -1537,27 +1746,120 @@ async function submitResult(){
       summaryRows.push(row); // ← personalRowsではなくsummaryRowsへ
     });
   });
+  return summaryRows;
+}
 
-  // ===== GASに1回のPOSTで全データ送信（高速化：コールドスタート1回のみ）=====
-  // 個人成績を送らない設定のときは、空にして送る（受け取り側は空なら個人シートに触らない）
-  const sendPersonal=SEND_PERSONAL_DATA?personalRows:[];
-  const sendSummary =SEND_PERSONAL_DATA?summaryRows:[];
-  const body=new URLSearchParams({data:JSON.stringify({
-    type:'all',
-    teamRows,
-    personalRows:sendPersonal,
-    summaryRows:sendSummary
-  })});
-  const res=await fetch(GAS_URL,{method:'POST',mode:'cors',body});
-  const json=await res.json();
-  // 他端末が既に同じ試合を送信済み → エラーではなく「送信済み」として扱う
-  if(json.status==='duplicate'){
-    const err=new Error(json.message||'この試合は既に送信済みです');
-    err.isDuplicate=true;
-    throw err;
-  }
-  if(json.status!=='ok')throw new Error(json.message||'送信エラー');
-  return {teamRows,personalRows:sendPersonal,summaryRows:sendSummary};
+/* ===== 箱の中の「置き場所」を数える =====
+   セット1のぶん → セット2のぶん → … → 最後に集計行、の順に前から詰める。
+   戻り値：
+     setRows      … 各セットの行（配列の配列）
+     offsets      … 各セットが箱の何行目から始まるか（0始まり）
+     summary      … 集計行
+     summaryOffset… 集計行が箱の何行目から始まるか
+     total        … 全部で何行になるか                             */
+function personalLayout(){
+  const setRows=S.sets.map((s,si)=>buildSetPersonalRows(si));
+  const offsets=[];
+  let acc=0;
+  setRows.forEach(rows=>{offsets.push(acc);acc+=rows.length;});
+  const summary=buildSummaryRows();
+  return {setRows:setRows,offsets:offsets,summary:summary,summaryOffset:acc,total:acc+summary.length};
+}
+
+/* ===== Supabaseへ送る形にまとめる（8-4） =====
+   これまでの組み立て（buildTeamRows / buildSetPersonalRows / buildSummaryRows）は
+   1つも変えずに、その結果を Supabase 用の形に詰め替えるだけ。 */
+function num_(v){
+  if(v===''||v===null||v===undefined)return null;
+  const n=Number(v);return isNaN(n)?null:n;
+}
+function bool_(v){
+  if(v===''||v===null||v===undefined)return null;
+  return v===1||v==='1';
+}
+function buildSupabasePayload(){
+  const matchId=S._matchId||'';
+  const parts=matchId.split('_');
+  const eventCode=parts.length>=2?parts[0]+'_'+parts[1]:'';
+
+  const teams=buildTeamRows().map(r=>({
+    team_no:String(r[1]||''),team_name:String(r[2]||''),
+    // 表裏は「勝敗をつけない試合」。空欄ではなく『対象外』と書く。
+    // 空欄は「まだ届いていない」の意味だけに使う。
+    result:(String(r[3]||'').trim()==='')?'対象外':String(r[3]).trim(),
+    total_sets:num_(r[4]),win_sets:num_(r[5]),loss_sets:num_(r[6]),draw_sets:num_(r[7]),
+    set_pts:[8,9,10,11,12].map(i=>num_(r[i])),
+    set_turns:[13,14,15,16,17].map(i=>num_(r[i])),
+    first_sets:num_(r[18]),second_sets:num_(r[19]),
+    first_win_sets:num_(r[20]),second_win_sets:num_(r[21]),
+    first_loss_sets:num_(r[22]),second_loss_sets:num_(r[23])
+  }));
+
+  const throws=[];
+  S.sets.forEach((s,si)=>{
+    buildSetPersonalRows(si).forEach((r,seq)=>{
+      throws.push({
+        // seq は「そのセットの何投目か」。1 から数える。
+        set_no:si+1,seq:seq+1,
+        team_no:String(r[3]||''),team_name:String(r[4]||''),member:String(r[5]||''),
+        turn_no:num_(r[6]),throw_no:num_(r[7]),throw_sec:num_(r[8]),
+        pts:num_(r[9]),cumul:num_(r[10]),
+        aim:num_(r[20]),is_first:bool_(r[21])
+      });
+    });
+  });
+
+  const summary=buildSummaryRows().map(r=>({
+    member:String(r[5]||''),team_no:String(r[3]||''),team_name:String(r[4]||''),
+    sets:num_(r[13]),first_sets:num_(r[14]),second_sets:num_(r[15]),
+    first_win_sets:num_(r[16]),second_win_sets:num_(r[17]),set_total_pts:num_(r[18])
+  }));
+
+  return {match_id:matchId,event_code:eventCode,format:S.fmt||'',
+          teams:teams,throws:throws,summary:summary};
+}
+
+async function postToSupabase_(payload){
+  const res=await fetch(SB_URL+'/rest/v1/rpc/submit_match',{
+    method:'POST',mode:'cors',
+    headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON,
+             'Content-Type':'application/json'},
+    body:JSON.stringify({p_key:SB_SUBMIT_KEY,p_payload:payload})
+  });
+  const text=await res.text();
+  let json=null;try{json=JSON.parse(text);}catch(e){}
+  if(!res.ok)throw new Error((json&&(json.message||json.hint))||('HTTP '+res.status));
+  return json;
+}
+
+/* ===== 最後の「結果を送信する」で呼ばれる（8-4） =====
+   8-3 までは「セットごとに裏で少しずつ送る」ようにしていたが、
+   あれはスプレッドシートの重さをごまかすための工夫だった。
+   Supabase は過去データが増えても遅くならないので、
+   試合が終わったときに1回でまとめて送る形に戻した。            */
+async function submitResult(){
+  const matchId=S._matchId||'';
+  const teamRows=buildTeamRows();
+  const lay=personalLayout();
+
+  // ① 本命：Supabaseへ1回でまとめて送る。
+  //    同じ試合を送り直しても、古い内容を消してから入れ直すので積み上がらない。
+  const sb=await postToSupabase_(buildSupabasePayload());
+
+  // ② 保険：今までのスプレッドシートへも、裏で静かに送っておく。
+  //    ここが失敗しても画面には何も出さない（本命は①で済んでいるため）。
+  try{
+    if(lay.total<=PERSONAL_SLOT_ROWS){
+      postToGas_({
+        type:'all',matchId:matchId,teamRows:teamRows,
+        personalRows:[].concat.apply([],lay.setRows),
+        summaryRows:lay.summary
+      }).catch(function(e){console.warn('スプレッドシートへの控えは失敗しました:',e);});
+    }
+  }catch(e){console.warn('控えの組み立てに失敗しました:',e);}
+
+  const personalRows=[].concat.apply([],lay.setRows);
+  return {teamRows:teamRows,personalRows:personalRows,summaryRows:lay.summary,supabase:sb};
 }
 
 // ===== 結果のみ送信：各セット点数からチーム結果行を組み立ててGASへ =====
@@ -1722,8 +2024,8 @@ async function handleSubmitAndReset(){
     console.error(e);
     isDup=e.isDuplicate===true;
     if(!isDup){
-      // 【8-2で修正】以前は console にしか出しておらず、画面には「失敗」としか出なかった。
-      // そのため何度押しても直らない理由が分からなかったので、理由と対処を画面に表示する。
+      // 【8-3】以前は console にしか出しておらず、画面には「失敗」としか出なかった。
+      // 何度押しても直らない理由が分からなかったので、理由と対処を画面に表示する。
       S._submitError=String((e&&e.message)||e||'原因不明のエラー');
       S._submitErrorHint=submitErrorHint_(S._submitError);
       render();
@@ -1789,7 +2091,7 @@ function showSubmitConfirm(teamRows,personalRows,onClose){
 
 function doReset(){
   clearMatchState();
-  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:false,rule37Pending:false,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,_ssSaveDest:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null};render();
+  S={phase:'setup',fmt:S.fmt,turnLimit:S.turnLimit,playerMin:S.playerMin,playerMax:S.playerMax,teams:S.teams.map(t=>({...t,members:[...t.members]})),sets:[],cur:0,fid:0,showHist:false,pFirst:null,pIdx:null,pOrders:[[],[]],pExclude:[[],[]],iP:'',iM:'single',iA:'',useAimed:S.useAimed!==undefined?S.useAimed:false,rule37Pending:false,prev:null,ssIdx:0,endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,molkoutWinner:null,editSetIdx:null,editTi:null,editThIdx:null,afterEdit:null,_ucFrom:null,_ssSaveDest:null,throwStartTime:null,lastThrowSec:null,_matchId:'',_teamNos:['',''],_orderFromBack:false,_cameFromGame:false,_savedMatchIdData:null,_bgSendNote:'',_submitError:'',_submitErrorHint:''};render();
 }
 function goNext(ni){
   S.tlTieExtend=false;
@@ -2889,6 +3191,26 @@ function rSSSaveConfirm(){
   </div>`;
 }
 
+/* ★8-3：「結果を送信する」ボタンのすぐ上に出すお知らせ。
+   ・送信に失敗したときは、赤い枠で「理由」と「次にどうすればいいか」を出す。
+   ・裏送信でうまくいかなかったセットがあるときは、灰色の枠で静かに知らせる
+     （参加者が何かする必要はない。この画面の送信で一緒に送られる）。 */
+function SUBMIT_NOTE(){
+  let out='';
+  if(S._submitError){
+    out+=`<div style="background:#fef2f2;border:1.5px solid #f87171;border-radius:10px;padding:13px 15px;margin-bottom:10px;text-align:left;">
+      <div style="font-size:14px;font-weight:800;color:#b91c1c;margin-bottom:6px;">⚠️ 送信できませんでした</div>
+      <div style="font-size:13px;color:#991b1b;line-height:1.75;">${escHtml(S._submitError)}</div>
+      ${S._submitErrorHint?`<div style="font-size:12.5px;color:#7f1d1d;line-height:1.8;margin-top:9px;padding-top:9px;border-top:1px solid #fecaca;white-space:pre-wrap;">${escHtml(S._submitErrorHint)}</div>`:''}
+      <div style="font-size:11.5px;color:#b91c1c;margin-top:9px;">試合ID: ${escHtml(S._matchId||'（未取得）')}</div>
+    </div>`;
+  }
+  if(S._bgSendNote&&!S._submitError){
+    out+=`<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 13px;margin-bottom:10px;font-size:12.5px;color:#6b7280;line-height:1.75;text-align:left;">${escHtml(S._bgSendNote)}このまま「結果を送信する」を押してください。</div>`;
+  }
+  return out;
+}
+
 function rMatchOver(){
   const wins=[0,0];S.sets.forEach(s=>{if(s.wid!=null)wins[s.wid]++;});const mw=mW();
   const r2=S.fmt==='round2'?round2Stats():null;
@@ -2924,13 +3246,7 @@ function rMatchOver(){
     <button class="btn btn-yellow" id="btn-ss-match-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-match" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">← 戻る（セット終了画面）</button>
 
-    ${S._submitError?`<div style="background:#fef2f2;border:1.5px solid #f87171;border-radius:10px;padding:13px 15px;margin-bottom:10px;text-align:left;">
-      <div style="font-size:14px;font-weight:800;color:#b91c1c;margin-bottom:6px;">⚠️ 送信できませんでした</div>
-      <div style="font-size:13px;color:#991b1b;line-height:1.75;">${escHtml(S._submitError)}</div>
-      ${S._submitErrorHint?`<div style="font-size:12.5px;color:#7f1d1d;line-height:1.8;margin-top:9px;padding-top:9px;border-top:1px solid #fecaca;white-space:pre-wrap;">${escHtml(S._submitErrorHint)}</div>`:''}
-      <div style="font-size:11.5px;color:#b91c1c;margin-top:9px;">試合ID: ${escHtml(S._matchId||'（未取得）')}</div>
-    </div>`:''}
-    ${!SEND_PERSONAL_DATA?`<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 13px;margin-bottom:10px;font-size:12.5px;color:#6b7280;line-height:1.75;text-align:left;">今回は<b>チーム結果のみ</b>を送信します（1投ずつの個人成績は送りません）。</div>`:''}
+    ${SUBMIT_NOTE()}
     <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信する</button>
   </div>`;
 }
@@ -2985,13 +3301,7 @@ function rEarlyMatchOver(){
     ${needMolkout&&S.molkoutWinner==null?`<button class="btn btn-orange" id="btn-go-molkout" style="width:100%;padding:14px;font-size:15px;margin-bottom:10px;">🎯 モルックアウトへ進む</button>`:''}
     <button class="btn btn-yellow" id="btn-ss-early-edit" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">📋 スコアシートを確認・修正する</button>
     <button class="btn btn-gray" id="btn-bk-to-setover-early" style="width:100%;margin-bottom:10px;padding:12px;font-size:14px;">${needMolkout&&S.molkoutWinner!=null?'← 戻る（モルックアウト）':'← 戻る（セット終了画面）'}</button>
-    ${S._submitError?`<div style="background:#fef2f2;border:1.5px solid #f87171;border-radius:10px;padding:13px 15px;margin-bottom:10px;text-align:left;">
-      <div style="font-size:14px;font-weight:800;color:#b91c1c;margin-bottom:6px;">⚠️ 送信できませんでした</div>
-      <div style="font-size:13px;color:#991b1b;line-height:1.75;">${escHtml(S._submitError)}</div>
-      ${S._submitErrorHint?`<div style="font-size:12.5px;color:#7f1d1d;line-height:1.8;margin-top:9px;padding-top:9px;border-top:1px solid #fecaca;white-space:pre-wrap;">${escHtml(S._submitErrorHint)}</div>`:''}
-      <div style="font-size:11.5px;color:#b91c1c;margin-top:9px;">試合ID: ${escHtml(S._matchId||'（未取得）')}</div>
-    </div>`:''}
-    ${!SEND_PERSONAL_DATA?`<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 13px;margin-bottom:10px;font-size:12.5px;color:#6b7280;line-height:1.75;text-align:left;">今回は<b>チーム結果のみ</b>を送信します（1投ずつの個人成績は送りません）。</div>`:''}
+    ${SUBMIT_NOTE()}
     <button class="btn btn-green" id="btn-submit-reset" style="width:100%;padding:14px;font-size:16px;">📤 結果を送信する</button>
   </div>`;
 }
@@ -3540,13 +3850,13 @@ function rViewPortal(){
         <div class="card" style="padding:14px;margin-bottom:12px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
           ${grid(
-            sr('QH率',s.qhRate+'%','','#F2B705',100)+
-            sr('フォルト率',s.fRate+'%','','#F2B705',100)+
-            sr('上がりターン平均',s.agariAvg,'','#F2B705',12)+
-            sr('セット点数平均',s.setPtsAvg,'','#F2B705',50)+
-            sr('平均ブレーク本数',s.breakAvg,'','#F2B705',12)+
-            sr('平均投擲得点',s.throwPtsAvg,'','#F2B705',12)+
-            sr('平均投擲時間',s.throwTimeAvg,'秒','#F2B705',60)
+            sr('QH率',s.qhRate+'%','','#F2B705',100,(parseInt(s.dTotalThrows)||0)>0?`${s.totalAim??'?'}投 / ${s.dTotalThrows??'?'}投`:'')+
+            sr('フォルト率',s.fRate+'%','','#F2B705',100,(parseInt(s.totalThrows)||0)>0?`${s.totalFault??'?'}投 / ${s.totalThrows??'?'}投`:'')+
+            sr('上がりターン平均',s.agariAvg,'','#F2B705',12,(parseInt(s.agariCount)||0)>0?`上がり${s.agariCount}回`:'')+
+            sr('セット点数平均',s.setPtsAvg,'','#F2B705',50,(parseInt(s.totalSets)||0)>0?`${s.totalSets}セット`:'')+
+            sr('平均ブレーク本数',s.breakAvg,'','#F2B705',12,(parseInt(s.breakCount)||0)>0?`${s.breakCount}投`:'')+
+            sr('平均投擲得点',s.throwPtsAvg,'','#F2B705',12,(parseInt(s.totalThrows)||0)>0?`${s.totalThrows}投`:'')+
+            sr('平均投擲時間',s.throwTimeAvg,'秒','#F2B705',60,(parseInt(s.totalThrows)||0)>0?`${s.totalThrows}投`:'')
           )}
         </div>`;
     }
@@ -3693,11 +4003,12 @@ function rViewTeamDetail(){
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
       ${grid(
         sr('QH率',qhr+'%',t.rankQh,'#F2B705',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalAim??'?'}投 / ${t.dTotalThrows??'?'}投`:'')+
-        sr('フォルト率',fr+'%',t.rankF,'#F2B705',100,(parseInt(t.dTotalThrows)||0)>0?`${t.totalFault??'?'}投 / ${t.dTotalThrows??'?'}投`:'')+
+        sr('フォルト率',fr+'%',t.rankF,'#F2B705',100,(parseInt(t.totalThrows)||0)>0?`${t.totalFault??'?'}投 / ${t.totalThrows??'?'}投`:'')+
         sr('上がりターン平均',t.agariAvg,t.rankAgari,'#F2B705',12,(parseInt(t.agariCount)||0)>0?`上がり${t.agariCount}回`:'')+
         sr('セット点数平均',t.setPtsAvg,t.rankSetPts,'#F2B705',50,(parseInt(t.totalSets)||0)>0?`${t.totalSets}セット中`:'')+
-        sr('平均ブレーク本数',t.breakAvg,t.rankBreak,'#F2B705',12,(parseInt(t.firstSets)||0)>0?`${t.firstSets}投`:'')+
+        sr('平均ブレーク本数',t.breakAvg,t.rankBreak,'#F2B705',12,(parseInt(t.breakCount)||0)>0?`${t.breakCount}投`:'')+
         sr('平均投擲得点',t.throwPtsAvg,t.rankThrowPts,'#F2B705',12,(parseInt(t.totalThrows)||0)>0?`${t.totalThrows}投`:'')+
+        sr('後攻1投目平均',t.s1Avg,t.rankS1,'#F2B705',12,(parseInt(t.secondFirst1Count)||0)>0?`${t.secondFirst1Count}投`:'')+
         sr('平均投擲時間(秒)',t.throwTimeAvg,t.rankThrowTime,'#F2B705',60,(parseInt(t.totalThrows)||0)>0?`${t.totalThrows}投`:'')
       )}
     </div>
@@ -3792,7 +4103,9 @@ function rViewPersonDetail(){
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">スタッツ</div>
       ${grid(
         sr('QH率',qhr+'%',d.rankQh,'#F2B705',100,(parseInt(d.dTotalThrows)||0)>0?`${d.totalAim??'?'}投 / ${d.dTotalThrows??'?'}投`:'')+
-        sr('フォルト率',fr+'%',d.rankF,'#F2B705',100,(parseInt(d.totalThrows)||0)>0?`${d.totalThrows}投`:'')+
+        sr('フォルト率',fr+'%',d.rankF,'#F2B705',100,(parseInt(d.totalThrows)||0)>0?`${d.totalFault??'?'}投 / ${d.totalThrows??'?'}投`:'')+
+        sr('上がりターン平均',toP(d.agariAvg),d.rankAgari,'#F2B705',12,(parseInt(d.agariCount)||0)>0?`上がり${d.agariCount}回`:'')+
+        sr('セット点数平均',toP(d.setPtsAvg),d.rankSetPts,'#F2B705',50,(parseInt(d.totalSets)||0)>0?`${d.totalSets}セット`:'')+
         sr('平均ブレーク本数',toP(d.breakAvg),d.rankBreak,'#F2B705',12,(parseInt(d.breakCount)||0)>0?`${d.breakCount}投`:'')+
         sr('平均投擲得点',toP(d.throwPtsAvg),d.rankThrowPts,'#F2B705',12,(parseInt(d.totalThrows)||0)>0?`${d.totalThrows}投`:'')+
         sr('後攻1投目平均',toP(d.s1Avg),d.rankS1,'#F2B705',12,(parseInt(d.secondFirst1Count)||0)>0?`${d.secondFirst1Count}投`:'')+
@@ -6493,12 +6806,13 @@ function rResultOnlyInput(){
     </div>`;
   }
 
+  // ★8-3：ひとことだけの表示をやめ、理由と「次にどうすればいいか」を出す
   const err=S._roSubmitError?`<div style="background:#fef2f2;border:1.5px solid #f87171;border-radius:10px;padding:13px 15px;margin-bottom:10px;text-align:left;">
-    <div style="font-size:14px;font-weight:800;color:#b91c1c;margin-bottom:6px;">⚠️ 送信できませんでした</div>
-    <div style="font-size:13px;color:#991b1b;line-height:1.75;">${escHtml(S._roSubmitError)}</div>
-    <div style="font-size:12.5px;color:#7f1d1d;line-height:1.8;margin-top:9px;padding-top:9px;border-top:1px solid #fecaca;white-space:pre-wrap;">${escHtml(submitErrorHint_(S._roSubmitError))}</div>
-    <div style="font-size:11.5px;color:#b91c1c;margin-top:9px;">試合ID: ${escHtml(S._matchId||'（未取得）')}</div>
-  </div>`:'';
+      <div style="font-size:14px;font-weight:800;color:#b91c1c;margin-bottom:6px;">⚠️ 送信できませんでした</div>
+      <div style="font-size:13px;color:#991b1b;line-height:1.75;">${escHtml(S._roSubmitError)}</div>
+      <div style="font-size:12.5px;color:#7f1d1d;line-height:1.8;margin-top:9px;padding-top:9px;border-top:1px solid #fecaca;white-space:pre-wrap;">${escHtml(submitErrorHint_(S._roSubmitError))}</div>
+      <div style="font-size:11.5px;color:#b91c1c;margin-top:9px;">試合ID: ${escHtml(S._matchId||'（未取得）')}</div>
+    </div>`:'';
   // 送信可能条件
   let canSubmit;
   if(early){
@@ -6849,6 +7163,9 @@ function bind(){
     }
     const fid=S.pFirst!=null?S.pFirst:S.fid;if(S.sets.length===0)S.fid=fid;
     const si=S.pIdx!=null?S.pIdx:S.sets.length;
+    // ★8-3：2セット目以降を始めるとき、直前に終わったセットぶんの個人記録を裏で送る。
+    //   await しない（送信の返事を待たない）ので、参加者は待たされない。
+    //   ここで失敗しても、最後の「結果を送信する」でまとめて送り直される。
     S.sets.push(mkSet(si,fid,[...S.pOrders],[...S.pExclude.map(a=>[...a])]));
     S.cur=si;S.pFirst=null;S.pIdx=null;S.pOrders=[[],[]];S.pExclude=[[],[]];S._orderFromBack=false;S._cameFromGame=false;S.showHist=false;S.iP='';S.iM='single';S.iA='';if(S.useAimed===undefined)S.useAimed=false;S.endPending=false;S.tieExtend=false;S.tlTieExtend=false;S.lastThrowSec=null;startTimer();S.phase='game';render();
   };
@@ -8550,6 +8867,8 @@ function bind(){
   if(bns)bns.onclick=()=>{S.tlTieExtend=false;S.earlyEnd=false;goNext(parseInt(bns.dataset.next));};
   const bemo=document.getElementById('btn-early-match-over');if(bemo)bemo.onclick=()=>{
     S.earlyEnd=false;
+    // ★8-3：最後のセットぶんの個人記録を、ここで裏に送っておく。
+    //   「？」が残っているうちは中身が確定していないので送らない（あとで送られる）。
     // 「？」未確定があれば先に確認画面へ
     if(unknownSets().length>0){S.ssIdx=0;S.afterEdit=null;S._ucFrom=needsMolkout()&&S.molkoutWinner==null?'molkout':'ssSaveConfirm';S._ssSaveDest='earlyMatchOver';S.phase='unknownCheck';render();return;}
     // モルックアウトが必要かつ未決着なら、セット終了画面から直接モルックアウトへ
@@ -8558,6 +8877,8 @@ function bind(){
   };
   const bmo=document.getElementById('btn-match-over');if(bmo)bmo.onclick=()=>{
     S._ssSaveDest='matchOver';
+    // ★8-3：最後のセットぶんの個人記録を、ここで裏に送っておく。
+    //   「？」が残っているうちは中身が確定していないので送らない（あとで送られる）。
     if(unknownSets().length>0){S.ssIdx=0;S.afterEdit=null;S._ucFrom='ssSaveConfirm';S.phase='unknownCheck';render();return;}
     S.phase='ssSaveConfirm';render();
   };
