@@ -989,7 +989,12 @@ const SB_URL='https://lkhqrqhqouptjeteopwq.supabase.co';
 const SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxraHFycWhxb3VwdGpldGVvcHdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MDEwMzIsImV4cCI6MjEwMjA3NzAzMn0.9mC42gZfNk__zVmyfOMRmzRp8gRrJFs_TdxsKtd4X9s';
 const SB_SUBMIT_KEY='f3f7569d10abe3b74b69732b824669d5baec9e7d2c94ff28';
 
-const GAS_URL='https://script.google.com/macros/s/AKfycbwpNH-Z0i-vTVSltUxRCjAQN5v3auD-j5JZWES8NHtiMGr3GrlMd-uzLQmxOheW35zaow/exec';
+/* 【8-4・2026-08-13 変更】スプレッドシートへの控えの送り先。
+   前の住所（…MGr3GrlMd-uzLQmxOheW35zaow）は古いコードのまま動いていて、
+   新しい送り方（teamAppend）を知らなかったため、控えが1行も届いていなかった。
+   ※ 予備の 8-1 は今も前の住所を使う。あちらは古い「枠」の仕組みが要るため、
+     古いコードのまま動いている前の住所の方が正しい。ここだけを変えること。 */
+const GAS_URL='https://script.google.com/macros/s/AKfycbw-KUyzj888W6RBiIQhHjacHFAUV6PXr_InP8apMDSua7Codg_aCTzwJtcTZspPGbrnhg/exec';
 // QRに埋め込むアプリのベースURL（カメラアプリからの読み取り用）。末尾スラッシュ必須。
 const APP_BASE_URL='https://longbeachknit.github.io/molkkymania-score/';
 const _viewCache={}; // 成績閲覧用キャッシュ
