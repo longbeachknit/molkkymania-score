@@ -1512,11 +1512,27 @@ async function refreshLiveEvent(){
     if(S.phase==='setup')render();
   }
 }
-// ホーム表示時に呼ぶ：未取得なら即時、取得済みでも15秒経過後に再取得（過剰取得を防ぐ）
+/* ホームを描くたびに呼ばれる。取りに行くのは次の3つのときだけ（通信量を減らすため）：
+     ① ホーム画面を最初に開いたとき
+     ② 他の画面から、ホームに戻ってきたとき
+     ③ ①②のあとも、前回から3分たっていれば
+   ※ストアアプリ（molkkymania_app）と同じ考え方・同じ間隔にそろえてある。 */
+const LIVE_MIN_INTERVAL=180000;  // 3分。これより短い間隔では取りに行かない
+const LIVE_RETRY_WAIT=15000;     // 通信に失敗したときは、15秒あけてから次を試す
+let _lastPhaseForLive='';        // 直前に見ていた画面（ホーム以外）
+
 function maybeRefreshLiveEvent(){
   if(_liveEvtBusy)return;
-  if(S._liveEventCode===undefined){refreshLiveEvent();return;}
-  if(Date.now()-_liveEvtTs>15000)refreshLiveEvent();
+  const backToHome=(_lastPhaseForLive!=='');   // 他の画面から戻ってきた
+  _lastPhaseForLive='';
+  const waited=Date.now()-_liveEvtTs;
+  if(S._liveEventCode===undefined){
+    // ①はじめて開いた。※通信に失敗した直後は少し待つ（失敗しつづける状況で連打しないため）
+    if(_liveEvtTs===0||waited>LIVE_RETRY_WAIT)refreshLiveEvent();
+    return;
+  }
+  if(backToHome&&waited>3000){refreshLiveEvent();return;}         // ②戻ってきた
+  if(waited>LIVE_MIN_INTERVAL)refreshLiveEvent();                 // ③3分経過
 }
 
 function sendRowViaImage(params){
@@ -2260,6 +2276,8 @@ async function startQRScan(mode){
 function render(){
   const app=document.getElementById('app');
   const p=S.phase;
+  // ホーム以外の画面に移ったことを覚えておく（戻ってきたときに最新を取りに行くため）
+  if(p!=='setup')_lastPhaseForLive=p;
   if(p==='setup')app.innerHTML=rSetup();
   else if(p==='firstChoice')app.innerHTML=rFirst();
   else if(p==='orderSetup')app.innerHTML=rOrder();
