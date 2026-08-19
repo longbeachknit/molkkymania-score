@@ -139,7 +139,7 @@ let S={
   sets:[],cur:0,fid:0,showHist:false,
   pFirst:null,pIdx:null,pOrders:[[],[]],
   pExclude:[[],[]],
-  iP:'',iM:'single',iA:'',useAimed:false,rule37Pending:false,_tiView:null,_tiLoading:false,_tiError:null,_tiSchedule:[],_tiRegulation:'',_tiSections:null,_tiPrelim:[],_tiPrelimQuery:'',_tiPrelimSelected:null,_tiBracket:null,_tiBracketSide:'left',
+  iP:'',iM:'single',iA:'',useAimed:false,rule37Pending:false,_tiView:null,_tiLoading:false,_tiError:null,_tiSchedule:[],_tiRegulation:'',_tiSections:null,_tiPrelim:[],_tiPrelimMatches:3,_tiPrelimQuery:'',_tiPrelimSelected:null,_tiBracket:null,_tiBracketSide:'left',
   prev:null,ssIdx:0,
   endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,
   molkoutWinner:null,
@@ -656,6 +656,22 @@ function parseCombinedId(id){
     teamA,teamB,
     combinedId:id.trim()
   };
+}
+
+/* 予選が何試合の大会かを決める（3試合か5試合かを自動で判定する）
+   ・スプレッドシート側(GAS)が prelimMatchCount を送ってきていれば、それをそのまま使う
+   ・送ってきていない古い大会は、予選④⑤のデータが入っているかを見て判定する
+   ・どちらも分からなければ、これまでどおり3試合として表示する */
+function prelimMatchCountOf(json){
+  const n=Number(json&&json.prelimMatchCount);
+  if(n>=1&&n<=9)return n;
+  let max=3;
+  ((json&&json.teams)||[]).forEach(t=>{
+    for(let m=1;m<=9;m++){
+      if(String(t['opp'+m]||'')!==''||String(t['p'+m+'a']||'')!==''||String(t['p'+m+'b']||'')!=='')max=Math.max(max,m);
+    }
+  });
+  return max;
 }
 
 async function fetchTournamentInfo(action){
@@ -3739,7 +3755,7 @@ function rAdminTourEdit(){
           <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🏆 決勝トーナメントのチーム数</div>
           <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">決勝トーナメント表の形（ラウンド数・シードの有無）が自動で切り替わります。24・48チームでは上位チームが1回戦免除（シード）になります。</div>
           <select id="te-bracket-count" style="font-size:14px;">
-            ${[16,24,32,48,64].map(n=>`<option value="${n}" ${Number(tour.bracketTeamCount||64)===n?'selected':''}>${n}チーム</option>`).join('')}
+            ${[8,16,24,32,48,64].map(n=>`<option value="${n}" ${Number(tour.bracketTeamCount||64)===n?'selected':''}>${n}チーム</option>`).join('')}
           </select>
         </div>
       </div>
@@ -6143,9 +6159,7 @@ function rTournamentInfo(){
           </div>
         </div>
         <div style="font-size:14px;font-weight:700;color:#111;margin-bottom:10px;">各予選の結果</div>
-        ${setRow('予選①',sel.opp1,sel.p1a,sel.p1b)}
-        ${setRow('予選②',sel.opp2,sel.p2a,sel.p2b)}
-        ${setRow('予選③',sel.opp3,sel.p3a,sel.p3b)}
+        ${(()=>{const NUM=['①','②','③','④','⑤','⑥','⑦','⑧','⑨'];const n=Math.min(Math.max(Number(S._tiPrelimMatches)||3,1),9);let h='';for(let m=1;m<=n;m++){h+=setRow('予選'+NUM[m-1],sel['opp'+m]||'',sel['p'+m+'a']||'',sel['p'+m+'b']||'');}return h;})()}
       `;
     }
     else if(q){
@@ -8479,7 +8493,7 @@ function bind(){
       } else if(view==='prelim'){
         const json=await fetchTournamentInfo('getPrelim');
         if(json.error)throw new Error('GAS: '+json.error);
-        S._tiPrelim=json.teams||[];
+        S._tiPrelim=json.teams||[];S._tiPrelimMatches=prelimMatchCountOf(json);
         // パーソナライズ済みなら自分のチームNoを自動入力して検索結果を表示
         const myP=getValidMyTeam(eventCode);
         if(myP&&myP.teamId){
@@ -8996,7 +9010,7 @@ function bind(){
     try{
       const json=await fetchTournamentInfo('getPrelim');
       if(json.error)throw new Error('GAS: '+json.error);
-      S._tiPrelim=json.teams||[];
+      S._tiPrelim=json.teams||[];S._tiPrelimMatches=prelimMatchCountOf(json);
     }catch(e){S._tiError='取得に失敗しました: '+e.message;}
     S._tiLoading=false;render();
   };
