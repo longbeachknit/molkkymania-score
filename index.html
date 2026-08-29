@@ -2788,7 +2788,7 @@ function rBeginner(){
          ['<b>次の試合は何時から？</b>','🕐 タイムスケジュール'],
          ['<b>あと何回勝てば優勝？</b>','📊 残り試合数を確認'],
          ['<b>予選の順位は？</b>','🏅 予選結果を確認'],
-         ['<b>トーナメントの状況は？</b>','🏆 決勝トーナメント表'],
+         ['<b>トーナメントの状況は？</b>','🏆 トーナメント表'],
          ['<b>チームナンバーが分からない</b>','🪪 チームNoを検索'],
          ['<b>トイレ・駐車場・行き方は？</b>','📍 会場の詳細'],
          ['<b>自分の成績を見たい</b>','📊 成績を見る'],
@@ -2942,7 +2942,7 @@ function rSetup(){
       </button>
       <button id="btn-go-bracket" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🏆</span>
-        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">決勝<br>トーナメント表</div>
+        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">トーナメント表</div>
       </button>
       <button id="btn-go-teamsearch" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🪪</span>
@@ -5863,7 +5863,7 @@ function renderSystemChart(ch,editable){
 
   // 横スクロール不要で全体が収まるよう、幅を100%に固定し列幅を％配分する
   const labelPct=nCols>=5?11:(nCols>=4?12:14);   // 「第10試合」が折り返さない幅
-  const gapPct=nCols>=5?2.5:4;
+  const gapPct=nCols>=5?3:5.5;   // 矢印が縦に通れるだけのすき間をあける
   const cellPct=Math.max(6,(100-labelPct-(nCols-1)*gapPct)/nCols);
   const fs=nCols>=5?10:(nCols>=4?11:12);
   let cg='<colgroup>';
@@ -5921,10 +5921,11 @@ function renderSystemChart(ch,editable){
     h+='</tr>';
     // 行と行のあいだ（勝ち矢印 ↓ を置く場所。負け矢印は上に重ねる絵で描く）
     if(r<maxRows-1){
-      h+='<tr><td></td>';
+      // 行と行のあいだ ＝ 矢印の「通路」。data-arow で場所を測れるようにしておく
+      h+=`<tr data-arow="${r}"><td></td>`;
       for(let c=0;c<nCols;c++){
         const win=hasCell(c,r)&&hasCell(c,r+1);
-        h+=`<td style="text-align:center;padding:0;height:26px;">${win?'<span style="color:#E24B4A;font-size:13px;font-weight:900;">↓</span>':''}</td>`;
+        h+=`<td style="text-align:center;padding:0;height:36px;vertical-align:middle;">${win?'<span style="color:#E24B4A;font-size:13px;font-weight:900;">↓</span>':''}</td>`;
         if(c<nCols-1)h+=`<td></td>`;
       }
       h+='</tr>';
@@ -5943,13 +5944,23 @@ function renderSystemChart(ch,editable){
   const arrowLegend='<div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-bottom:10px;">'+
     '<span style="font-size:11px;color:#374151;"><span style="color:#E24B4A;font-weight:900;">↓</span> 勝ち（次の回戦へ）</span>'+
     '<span style="font-size:11px;color:#374151;"><span style="color:#2e72c4;font-weight:900;">━▶</span> 負け（別のトーナメントへ）</span>'+
-    '<span style="font-size:11px;color:#374151;"><span style="color:#555;font-weight:900;">━▶</span> 予選からの進み先</span>'+
-    '</div>';
+    '<span style="font-size:11px;color:#374151;"><span style="color:#333;font-weight:900;">━▶</span> 予選からの進み先</span>'+
+    '</div>'+
+    '<div style="font-size:10.5px;color:#9ca3af;text-align:center;margin-bottom:10px;line-height:1.6;">負けの矢印は、出発するトーナメントごとに色を分けています。<br>点線は、回戦を1つ飛ばして進む矢印です。</div>';
   return legend+arrowLegend+`<div class="sc-chart" data-sc-id="${regId}" style="position:relative;width:100%;padding:2px 0 6px;">${h}<svg class="sc-links" style="position:absolute;left:0;top:0;pointer-events:none;overflow:visible;"></svg></div>`;
 }
 
 /* 表の上に矢印を描く（表を画面に出したあとに呼ぶ）。
-   箱の位置は画面から実際に測るので、画面幅が変わっても正しくつながる。 */
+
+   【8-6 手直し2】線が箱の上を横切らないよう、通り道を決めてから引く。
+     ・箱の「下辺」から出て、行と行のあいだ（通路）へ下りる
+     ・通路を横に進む（箱の中は通らない）
+     ・回戦を飛ばす場合は、列と列のあいだ（すき間）を縦に下りる
+     ・箱の「上辺」から入る
+   出口と入口は箱の中心から左右にずらしてあるので、
+   勝ちの ↓ 矢印や、ほかの矢印と重なりにくい。
+   線の色は「出発するトーナメント」ごとに変えている。 */
+const SC_LINK_COLORS=['#2e72c4','#c2410c','#7c3aed','#0f766e','#b91c1c','#a16207'];
 function scPaint(root){
   try{
     const reg=SC_REG[root.getAttribute('data-sc-id')];if(!reg)return;
@@ -5960,39 +5971,73 @@ function scPaint(root){
     const rect=el=>{if(!el)return null;const b=el.getBoundingClientRect();
       return{x:b.left-rb.left,y:b.top-rb.top,w:b.width,h:b.height,cx:b.left-rb.left+b.width/2,cy:b.top-rb.top+b.height/2};};
     const boxOf=ref=>ref.k==='prelim'?rect(q('[data-prelim="'+ref.i+'"]')):rect(q('[data-cell="'+ref.c+','+ref.r+'"]'));
-    const gapCx=(gi,r)=>{const b=rect(q('[data-gap="'+gi+','+r+'"]'));return b?b.cx:null;};
-    const LOSE='#2e72c4',PLAIN='#555';
+    const gapBox=(gi,r)=>rect(q('[data-gap="'+gi+','+r+'"]'));
+    const arow=r=>rect(q('[data-arow="'+r+'"]'));
+    /* 通路の中の「上寄り」の高さ。
+       通路の真ん中には勝ちの ↓ が入るので、そこを避けて上側を横に通す。
+       箱への入り口はここから下りるので、矢印の先が十分な長さになる。 */
+    const corTop=r=>{const b=arow(r);return b?(b.y+6):null;};
+
+    const links=scCollectLinks(reg.ch,reg.cols);
+
+    // 同じすき間を縦に通る矢印は、少しずつ横へずらして重ならないようにする
+    const groups={},lane={};
+    links.forEach((l,i)=>{
+      if(l.from.k!=='cell'||l.to.k!=='cell')return;
+      if(l.to.r<=l.from.r+1)return;
+      const gi=(l.to.c>l.from.c)?(l.to.c-1):l.to.c;
+      (groups[gi]=groups[gi]||[]).push(i);
+    });
+    Object.keys(groups).forEach(gi=>{const a=groups[gi];a.forEach((idx,k)=>{lane[idx]=k-(a.length-1)/2;});});
+
+    const colorOf=l=>(l.from.k==='prelim')?'#333333':SC_LINK_COLORS[(l.from.c||0)%SC_LINK_COLORS.length];
+    const ckey=c=>c.replace('#','');
+    const used={};
+    links.forEach(l=>{used[colorOf(l)]=1;});
     const mid='scmk_'+root.getAttribute('data-sc-id');
-    const parts=['<defs>'
-      +'<marker id="'+mid+'_l" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="'+LOSE+'"/></marker>'
-      +'<marker id="'+mid+'_p" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="'+PLAIN+'"/></marker>'
-      +'</defs>'];
-    scCollectLinks(reg.ch,reg.cols).forEach(l=>{
+    let defs='<defs>';
+    Object.keys(used).forEach(c=>{
+      defs+='<marker id="'+mid+'_'+ckey(c)+'" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="'+c+'"/></marker>';
+    });
+    defs+='</defs>';
+    const parts=[defs];
+
+    links.forEach((l,idx)=>{
       const A=boxOf(l.from),B=boxOf(l.to);
       if(!A||!B)return;
-      const isLose=l.kind==='lose';
-      const col=isLose?LOSE:PLAIN;
-      const mk=isLose?(mid+'_l'):(mid+'_p');
-      let d,lx,ly,anchor='start';
+      const color=colorOf(l);
+      const mk=mid+'_'+ckey(color);
+      let d,lx,ly,anchor='middle',dash='';
+
       if(l.from.k==='prelim'||(l.from.k==='cell'&&l.to.k==='cell'&&l.from.c===l.to.c)){
-        // まっすぐ下へ（予選のバー → 下の箱 など）
+        // まっすぐ下へ（予選のバー → 下の箱）
         const x=B.cx;
         d='M'+x+','+(A.y+A.h+1)+' L'+x+','+(B.y-3);
         const toRight=(x>rb.width*0.55);
         lx=x+(toRight?-6:6);ly=(A.y+A.h+B.y)/2;anchor=toRight?'end':'start';
       }else{
         const right=l.to.c>l.from.c;
-        const ax=right?(A.x+A.w):A.x;
-        const bx=right?(B.x-3):(B.x+B.w+3);
-        let chx=gapCx(right?(l.to.c-1):l.to.c,l.to.r);
-        if(chx==null)chx=right?(B.x-8):(B.x+B.w+8);
-        d='M'+ax+','+A.cy+' L'+chx+','+A.cy+' L'+chx+','+B.cy+' L'+bx+','+B.cy;
-        lx=chx+(right?4:-4);ly=(A.cy+B.cy)/2;anchor=right?'start':'end';
-        if(Math.abs(A.cy-B.cy)<14){ly=A.cy-7;}   // 1行しか離れていないときは線の上に出す
+        const exX=A.cx+(right?A.w*0.30:-A.w*0.30);   // 出口（箱の下辺）
+        const enX=B.cx+(right?-B.w*0.30:B.w*0.30);   // 入口（箱の上辺）
+        let y1=corTop(l.from.r); if(y1==null)y1=A.y+A.h+9;
+        if(l.to.r===l.from.r+1){
+          d='M'+exX+','+(A.y+A.h+1)+' L'+exX+','+y1+' L'+enX+','+y1+' L'+enX+','+(B.y-3);
+          lx=(exX+enX)/2;ly=y1;anchor='middle';
+        }else{
+          const gi=right?(l.to.c-1):l.to.c;
+          const gb=gapBox(gi,l.to.r)||gapBox(gi,l.from.r);
+          const gw=gb?gb.w:14;
+          let chx=(gb?gb.cx:(right?(B.x-8):(B.x+B.w+8)))+(lane[idx]||0)*Math.min(7,Math.max(3,gw/3));
+          let y2=corTop(l.to.r-1); if(y2==null)y2=B.y-24;
+          d='M'+exX+','+(A.y+A.h+1)+' L'+exX+','+y1+' L'+chx+','+y1+' L'+chx+','+y2+' L'+enX+','+y2+' L'+enX+','+(B.y-3);
+          dash=' stroke-dasharray="5 3"';   // 回戦を飛ばして進む矢印は点線
+          // 文字は、行き先の箱の手前（空いている通路）に置く
+          lx=(chx+enX)/2;ly=y2;anchor='middle';
+        }
       }
-      parts.push('<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#'+mk+')"/>');
+      parts.push('<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'+dash+' marker-end="url(#'+mk+')"/>');
       const txt=l.label||'';
-      if(txt)parts.push('<text x="'+lx+'" y="'+ly+'" font-size="10" font-weight="700" fill="'+col+'" text-anchor="'+anchor+'" dominant-baseline="middle" stroke="#fff" stroke-width="3.5" paint-order="stroke" style="paint-order:stroke;">'+scEsc(txt)+'</text>');
+      if(txt)parts.push('<text x="'+lx+'" y="'+ly+'" font-size="10" font-weight="700" fill="'+color+'" text-anchor="'+anchor+'" dominant-baseline="middle" stroke="#fff" stroke-width="3.5" paint-order="stroke" style="paint-order:stroke;">'+scEsc(txt)+'</text>');
     });
     svg.setAttribute('width',rb.width);
     svg.setAttribute('height',rb.height);
