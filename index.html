@@ -2354,6 +2354,8 @@ function render(){
   else if(p==='beginner')app.innerHTML=rBeginner();
   bind();
   saveMatchState();
+  scPaintAll();   // 【8-6】試合システム図の矢印を、表の上に重ねて描く
+  setTimeout(scPaintAll,120);   // 文字の読み込みで幅が変わったときの描き直し
   if(p==='orderSetup')setTimeout(bindDrag,0);
 }
 
@@ -3696,7 +3698,7 @@ function ruleCardsHtml(obj){
       <button class="btn btn-blue btn-xs" id="btn-sc-autogen" style="padding:4px 10px;">ルールから自動生成</button>
       <button class="btn btn-gray btn-xs" id="btn-sc-tpl" style="padding:4px 10px;margin-left:6px;">テンプレを読み込む</button>
     </div>
-    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">「残り試合数を確認」で表示される図です。一度負けると右の列（トーナメント）へ移ります。<br>「ルールから自動生成」を押すと、いまの<strong>試合区分・トーナメント種類・ラウンド名・優先ルール</strong>（ラウンドごとの上書きを含む）にそろえて作り直します。<br>「テンプレを読み込む」を押すと、<strong>よく使う大会の形</strong>（66〜96チーム型・128チーム型など）をそのまま呼び出せます。いまの図に名前を付けて保存し、次の大会で呼び出すこともできます。<br>プレビューの <span style="color:#2e72c4;font-weight:900;">↘</span> をタップすると、<strong>負けたチームの行き先</strong>（となりのトーナメント／離れたトーナメント／行き先なし）を選べます。${scHasRules?'':'<br>※ 先に試合区分・トーナメント種類・ラウンド名を登録すると自動生成できます。'}</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">「残り試合数を確認」で表示される図です。一度負けると右の列（トーナメント）へ移ります。<br>「ルールから自動生成」を押すと、いまの<strong>試合区分・トーナメント種類・ラウンド名・優先ルール</strong>（ラウンドごとの上書きを含む）にそろえて作り直します。<br>「テンプレを読み込む」を押すと、<strong>よく使う大会の形</strong>（66〜96チーム型・128チーム型など）をそのまま呼び出せます。いまの図に名前を付けて保存し、次の大会で呼び出すこともできます。<br>プレビューの<strong>箱（試合）をタップ</strong>すると、<strong>負けたチームの行き先</strong>を選べます。左右どちらの列でも、2つ下の回戦でも指定できます。${scHasRules?'':'<br>※ 先に試合区分・トーナメント種類・ラウンド名を登録すると自動生成できます。'}</div>
 
     <details style="margin-bottom:10px;"${scText.trim()?'':' open'}>
       <summary style="cursor:pointer;font-size:13px;color:#2E8B57;padding:6px 0;">① 構成を編集する（トーナメント名・回戦）</summary>
@@ -5750,6 +5752,11 @@ function scApplyStructureText(obj,text){
     if(parsed.columns.some(c=>c.name===nm)&&parsed.columns.some(c=>c.name===oldTo[k]))to[k]=oldTo[k];
   });
   parsed.loseTo=to;
+  // 【8-6】テンプレが持っている追加の矢印（予選から次点32チームへ、など）も引き継ぐ
+  const oldLinks=(obj&&Array.isArray(obj.links))?obj.links:[];
+  const nameOK=v=>{const p=scSplitRef(v);return /^(予選|prelim|prelims)$/i.test(p.name)||parsed.columns.some(c=>c.name===p.name);};
+  parsed.links=oldLinks.filter(l=>l&&nameOK(l.from)&&nameOK(l.to));
+  if(obj&&obj.autoLose!==undefined)parsed.autoLose=obj.autoLose;
   // セル個別色も同様に、現存する列のものだけ引き継ぐ
   const oldCellColors=(obj&&obj.cellColors)?obj.cellColors:{};
   const cellColors={};
@@ -5758,9 +5765,89 @@ function scApplyStructureText(obj,text){
   return parsed;
 }
 
+/* =========================================================================
+   図オブジェクト → 表示HTML
+
+   【8-6 手直し】矢印の描き方を作り直した。
+     ・箱（試合）と予選のバーは、これまでどおり表（テーブル）で並べる。
+     ・矢印は、表の上に重ねた透明な絵（SVG）にあとから描く（scPaint）。
+       こうすると「箱から箱へ」きちんとつながる線が引けるので、
+         ・となりの列だけでなく、離れた列へ
+         ・右だけでなく、左へ
+         ・1つ下の行だけでなく、2つ下の行へ
+       も自由に矢印を出せる。
+     ・editable=true（管理者のプレビュー）では、箱をタップすると
+       「負けたチームの行き先」を選べる。
+   ========================================================================= */
+const SC_REG={};        // 描いた図を id で覚えておく（あとで矢印を描くときに使う）
+let SC_REG_SEQ=0;
+
+/* 行き先の書き方を読み解く
+     '交流戦'    → 名前だけ（行は「1つ下」）
+     '交流戦@3'  → 上から4番目の行（0から数えて3）の交流戦 */
+function scSplitRef(v){
+  const s=String(v==null?'':v);
+  const i=s.lastIndexOf('@');
+  if(i<0)return{name:s,row:null};
+  const n=parseInt(s.slice(i+1),10);
+  if(isNaN(n))return{name:s.slice(0,i),row:null};
+  return{name:s.slice(0,i),row:n};
+}
+/* '予選@2' や 'Bトーナメント@1' を、図の中の場所に変換する */
+function scRefToPos(v,cols){
+  const p=scSplitRef(v);
+  if(p.row==null)return null;
+  if(/^(予選|prelim|prelims)$/i.test(p.name))return{k:'prelim',i:p.row};
+  const c=cols.findIndex(x=>x.name===p.name);
+  if(c<0)return null;
+  return{k:'cell',c:c,r:p.row};
+}
+/* 図の中で「何試合目まであるか」 */
+function scMaxRows(cols){
+  let m=0;(cols||[]).forEach(col=>{m=Math.max(m,(col.startRow||0)+col.cells.length);});
+  return m;
+}
+/* 図に描く矢印を全部集める
+     ① これまでの「負け」矢印（自動＋ch.loseArrows／ch.loseTo による指定）
+     ② テンプレなどが持っている追加の矢印（ch.links）
+   返す形： {from,to,kind:'lose'|'plain',label} */
+function scCollectLinks(ch,cols){
+  const cellOf=(ci,ri)=>{const col=cols[ci];if(!col)return null;const i=ri-(col.startRow||0);return(i>=0&&i<col.cells.length)?col.cells[i]:null;};
+  const has=(ci,ri)=>{const v=cellOf(ci,ri);return v!=null&&v!=='';};
+  const out=[];
+  const maxRows=scMaxRows(cols);
+  for(let c=0;c<cols.length;c++){
+    for(let r=0;r<maxRows;r++){
+      if(!has(c,r))continue;
+      const key=cols[c].name+'@'+r;
+      let d=c+1,s=r+1;
+      const raw=ch.loseTo&&ch.loseTo[key];
+      if(raw){
+        const p=scSplitRef(raw);
+        const i=cols.findIndex(x=>x.name===p.name);
+        if(i>=0&&i!==c){d=i;s=(p.row==null)?r+1:p.row;}
+      }
+      const auto=(ch.autoLose!==false)&&d>=0&&d<cols.length&&has(d,s);
+      const ov=ch.loseArrows?ch.loseArrows[key]:undefined;
+      const on=(ov===true)?true:((ov===false)?false:auto);
+      if(!on)continue;
+      if(d<0||d>=cols.length||d===c||!has(d,s))continue;
+      out.push({from:{k:'cell',c:c,r:r},to:{k:'cell',c:d,r:s},kind:'lose',label:'負け'});
+    }
+  }
+  (ch.links||[]).forEach(l=>{
+    if(!l)return;
+    const a=scRefToPos(l.from,cols),b=scRefToPos(l.to,cols);
+    if(!a||!b)return;
+    if(b.k==='cell'&&!has(b.c,b.r))return;
+    if(a.k==='cell'&&!has(a.c,a.r))return;
+    out.push({from:a,to:b,kind:(l.kind==='lose'?'lose':'plain'),label:(l.label==null?'':String(l.label))});
+  });
+  return out;
+}
+
 function scIsConfigured(ch){return!!(ch&&((ch.columns&&ch.columns.length)||(ch.prelims&&ch.prelims.length)||ch.cornerLabel));}
 
-// 図オブジェクト → 表示HTML。editable=true で矢印クリック編集用の属性を付与。
 function renderSystemChart(ch,editable){
   if(!ch||!ch.columns||!ch.columns.length){
     return'<div style="font-size:13px;color:#9ca3af;padding:24px 12px;text-align:center;">試合システム図はまだ設定されていません。<br>管理者画面の「大会設定」または「ルールテンプレート」で登録してください。</div>';
@@ -5768,26 +5855,15 @@ function renderSystemChart(ch,editable){
   const cols=scRepairCols(ch.columns),nCols=cols.length;
   const cellOf=(c,r)=>{const col=cols[c];const i=r-(col.startRow||0);return(i>=0&&i<col.cells.length)?col.cells[i]:null;};
   const hasCell=(c,r)=>{const v=cellOf(c,r);return v!=null&&v!=='';};
-  const loseKey=(c,r)=>cols[c].name+'@'+r;
-  /* 【8-6】負けたチームの行き先の列。
-     ふつうは「すぐ右どなりの列」。ch.loseTo に列名を入れておくと、
-     間の列を飛び越えた先（例：Bトーナメントを飛び越えて交流戦）も指定できる。 */
-  const loseDest=(c,r)=>{
-    const v=ch.loseTo&&ch.loseTo[loseKey(c,r)];
-    if(v){const i=cols.findIndex(x=>x.name===v);if(i>c)return i;}
-    return c+1;
-  };
-  const loseAuto=(c,r)=>{const d=loseDest(c,r);return hasCell(c,r)&&d<nCols&&hasCell(d,r+1);};
-  const loseActive=(c,r)=>{const ov=ch.loseArrows&&ch.loseArrows[loseKey(c,r)];if(ov===true)return true;if(ov===false)return false;return loseAuto(c,r);};
-  // 行き先になりうる列があるか（編集画面で矢印をタップできるかの判定に使う）
-  const loseCands=(c,r)=>{const out=[];for(let d=c+1;d<nCols;d++){if(hasCell(d,r+1))out.push(d);}return out;};
-  let hasLongArrow=false;   // 列を飛び越える矢印を1本でも描いたか（凡例の出し分けに使う）
-  let maxRows=0;cols.forEach(col=>{maxRows=Math.max(maxRows,(col.startRow||0)+col.cells.length);});
+  const maxRows=scMaxRows(cols);
   const rowLabels=ch.rowLabels||[];
   const totalGrid=nCols*2-1;
+  const regId='sc'+(++SC_REG_SEQ);
+  SC_REG[regId]={ch:ch,cols:cols};
+
   // 横スクロール不要で全体が収まるよう、幅を100%に固定し列幅を％配分する
-  const labelPct=nCols>=5?9:11;
-  const gapPct=nCols>=5?2.5:3;
+  const labelPct=nCols>=5?11:(nCols>=4?12:14);   // 「第10試合」が折り返さない幅
+  const gapPct=nCols>=5?2.5:4;
   const cellPct=Math.max(6,(100-labelPct-(nCols-1)*gapPct)/nCols);
   const fs=nCols>=5?10:(nCols>=4?11:12);
   let cg='<colgroup>';
@@ -5812,10 +5888,10 @@ function renderSystemChart(ch,editable){
   // ── 予選（横長バー）──
   (ch.prelims||[]).forEach((p,i)=>{
     h+='<tr>';
-    h+=`<td style="text-align:center;padding:4px 1px;color:#444;white-space:normal;word-break:break-word;line-height:1.2;">予選${scCircled(i+1)}</td>`;
-    h+=`<td colspan="${totalGrid}" style="background:${SC_COLORS.gray.bg};border:1px solid ${SC_COLORS.gray.bd};text-align:center;padding:8px;color:#333;font-weight:600;">${scEsc(p)}</td>`;
+    h+=`<td style="text-align:center;padding:4px 1px;color:#444;white-space:nowrap;font-size:${Math.max(9,fs-1)}px;line-height:1.2;">予選${scCircled(i+1)}</td>`;
+    h+=`<td data-prelim="${i}" colspan="${totalGrid}" style="background:${SC_COLORS.gray.bg};border:1px solid ${SC_COLORS.gray.bd};text-align:center;padding:8px;color:#333;font-weight:600;">${scEsc(p)}</td>`;
     h+='</tr>';
-    h+=`<tr><td colspan="${totalGrid+1}" style="height:7px;"></td></tr>`;
+    h+=`<tr><td colspan="${totalGrid+1}" style="height:18px;"></td></tr>`;
   });
 
   // ── トーナメント本体 ──
@@ -5830,56 +5906,28 @@ function renderSystemChart(ch,editable){
       h+='</tr>';
     }
     h+='<tr>';
-    h+=`<td style="text-align:center;padding:3px 1px;color:#444;white-space:normal;word-break:break-word;line-height:1.2;">${scEsc(rowLabels[r]||('[第'+(r+1)+'試合]'))}</td>`;
+    h+=`<td style="text-align:center;padding:3px 1px;color:#444;white-space:nowrap;font-size:${Math.max(9,fs-1)}px;line-height:1.2;">${scEsc(rowLabels[r]||('第'+(r+1)+'試合'))}</td>`;
     for(let c=0;c<nCols;c++){
       if(hasCell(c,r)){
         const cc=scCellData(ch,cols[c],r);
-        h+=`<td style="background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};text-align:center;padding:7px 3px;font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.25;">${scEsc(cellOf(c,r))}</td>`;
+        const ed=editable?` class="sc-box" data-c="${c}" data-r="${r}" title="タップすると「負けたチームの行き先」を選べます"`:'';
+        const cur=editable?'cursor:pointer;':'';
+        h+=`<td data-cell="${c},${r}"${ed} style="${cur}background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};text-align:center;padding:7px 3px;font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.25;">${scEsc(cellOf(c,r))}</td>`;
       }else{
-        h+='<td></td>';
+        h+=`<td data-cell="${c},${r}"></td>`;
       }
-      if(c<nCols-1)h+=`<td></td>`;
+      if(c<nCols-1)h+=`<td data-gap="${c},${r}"></td>`;
     }
     h+='</tr>';
+    // 行と行のあいだ（勝ち矢印 ↓ を置く場所。負け矢印は上に重ねる絵で描く）
     if(r<maxRows-1){
       h+='<tr><td></td>';
       for(let c=0;c<nCols;c++){
         const win=hasCell(c,r)&&hasCell(c,r+1);
-        h+=`<td style="text-align:center;padding:0;height:16px;">${win?'<span style="color:#E24B4A;font-size:13px;font-weight:900;">↓</span>':''}</td>`;
-        if(c<nCols-1){
-          // すき間に描くのは「すぐ右どなりへ行く」負け矢印だけ
-          const active=loseActive(c,r)&&loseDest(c,r)===c+1;
-          const toggleable=hasCell(c,r)&&loseCands(c,r).length>0;
-          const arrow='<span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:4px;padding:0 2px;font-size:11px;font-weight:900;line-height:1.4;">↘</span>';
-          if(editable&&toggleable){
-            const auto=loseAuto(c,r)?1:0;
-            h+=`<td class="sc-arrow" data-k="${scEsc(loseKey(c,r))}" data-c="${c}" data-r="${r}" data-auto="${auto}" title="タップすると「負けたチームの行き先」を選べます" style="cursor:pointer;text-align:center;padding:0;vertical-align:middle;">${active?arrow:'<span style="opacity:0.28;font-size:12px;color:#2E8B57;font-weight:900;">↘</span>'}</td>`;
-          }else{
-            h+=`<td style="text-align:center;padding:0;vertical-align:middle;">${active?arrow:''}</td>`;
-          }
-        }
+        h+=`<td style="text-align:center;padding:0;height:26px;">${win?'<span style="color:#E24B4A;font-size:13px;font-weight:900;">↓</span>':''}</td>`;
+        if(c<nCols-1)h+=`<td></td>`;
       }
       h+='</tr>';
-      /* 【8-6】列を飛び越える負け矢印（例：決勝トーナメント1回戦で負け → 交流戦①）。
-         すき間の ↘ だけでは表せないので、出発の列から行き先の列まで届く
-         1本の長い矢印を、下に1行足して描く。 */
-      for(let c=0;c<nCols;c++){
-        if(!loseActive(c,r))continue;
-        const d=loseDest(c,r);
-        if(d<=c+1||d>=nCols)continue;
-        hasLongArrow=true;
-        h+='<tr><td></td>';
-        for(let k=0;k<2*c;k++)h+='<td></td>';
-        h+=`<td colspan="${2*(d-c)}" style="padding:1px 3px;vertical-align:middle;">`
-          +'<div style="display:flex;align-items:center;gap:3px;">'
-            +'<span style="flex:1;height:0;border-top:2px dashed #2e72c4;"></span>'
-            +'<span style="font-size:9px;color:#2e72c4;font-weight:700;white-space:nowrap;">負け</span>'
-            +'<span style="flex:1;height:0;border-top:2px dashed #2e72c4;"></span>'
-            +'<span style="color:#2e72c4;font-size:12px;font-weight:900;line-height:1;">&#9654;</span>'
-          +'</div></td>';
-        for(let k=0;k<2*(nCols-d)-1;k++)h+='<td></td>';
-        h+='</tr>';
-      }
     }
   }
   h+='</table>';
@@ -5892,14 +5940,67 @@ function renderSystemChart(ch,editable){
         return`<div style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:26px;height:14px;background:${cc.bg};border:1px solid ${cc.bd};border-radius:3px;"></span><span style="font-size:12px;color:#374151;">${scEsc(x.label)}</span></div>`;
       }).join('')+'</div>';
   }
-  // 矢印の凡例
   const arrowLegend='<div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-bottom:10px;">'+
     '<span style="font-size:11px;color:#374151;"><span style="color:#E24B4A;font-weight:900;">↓</span> 勝ち（次の回戦へ）</span>'+
-    '<span style="font-size:11px;color:#374151;"><span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:4px;padding:0 3px;font-weight:900;">↘</span> 負け（右のトーナメントへ）</span>'+
-    (hasLongArrow?'<span style="font-size:11px;color:#374151;"><span style="color:#2e72c4;font-weight:900;">┈&#9654;</span> 負け（離れたトーナメントへ）</span>':'')+
+    '<span style="font-size:11px;color:#374151;"><span style="color:#2e72c4;font-weight:900;">━▶</span> 負け（別のトーナメントへ）</span>'+
+    '<span style="font-size:11px;color:#374151;"><span style="color:#555;font-weight:900;">━▶</span> 予選からの進み先</span>'+
     '</div>';
-  return legend+arrowLegend+`<div style="width:100%;padding:2px 0 6px;">${h}</div>`;
+  return legend+arrowLegend+`<div class="sc-chart" data-sc-id="${regId}" style="position:relative;width:100%;padding:2px 0 6px;">${h}<svg class="sc-links" style="position:absolute;left:0;top:0;pointer-events:none;overflow:visible;"></svg></div>`;
 }
+
+/* 表の上に矢印を描く（表を画面に出したあとに呼ぶ）。
+   箱の位置は画面から実際に測るので、画面幅が変わっても正しくつながる。 */
+function scPaint(root){
+  try{
+    const reg=SC_REG[root.getAttribute('data-sc-id')];if(!reg)return;
+    const svg=root.querySelector('svg.sc-links');if(!svg)return;
+    const rb=root.getBoundingClientRect();
+    if(!rb.width||!rb.height){svg.innerHTML='';return;}
+    const q=sel=>root.querySelector(sel);
+    const rect=el=>{if(!el)return null;const b=el.getBoundingClientRect();
+      return{x:b.left-rb.left,y:b.top-rb.top,w:b.width,h:b.height,cx:b.left-rb.left+b.width/2,cy:b.top-rb.top+b.height/2};};
+    const boxOf=ref=>ref.k==='prelim'?rect(q('[data-prelim="'+ref.i+'"]')):rect(q('[data-cell="'+ref.c+','+ref.r+'"]'));
+    const gapCx=(gi,r)=>{const b=rect(q('[data-gap="'+gi+','+r+'"]'));return b?b.cx:null;};
+    const LOSE='#2e72c4',PLAIN='#555';
+    const mid='scmk_'+root.getAttribute('data-sc-id');
+    const parts=['<defs>'
+      +'<marker id="'+mid+'_l" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="'+LOSE+'"/></marker>'
+      +'<marker id="'+mid+'_p" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="'+PLAIN+'"/></marker>'
+      +'</defs>'];
+    scCollectLinks(reg.ch,reg.cols).forEach(l=>{
+      const A=boxOf(l.from),B=boxOf(l.to);
+      if(!A||!B)return;
+      const isLose=l.kind==='lose';
+      const col=isLose?LOSE:PLAIN;
+      const mk=isLose?(mid+'_l'):(mid+'_p');
+      let d,lx,ly,anchor='start';
+      if(l.from.k==='prelim'||(l.from.k==='cell'&&l.to.k==='cell'&&l.from.c===l.to.c)){
+        // まっすぐ下へ（予選のバー → 下の箱 など）
+        const x=B.cx;
+        d='M'+x+','+(A.y+A.h+1)+' L'+x+','+(B.y-3);
+        const toRight=(x>rb.width*0.55);
+        lx=x+(toRight?-6:6);ly=(A.y+A.h+B.y)/2;anchor=toRight?'end':'start';
+      }else{
+        const right=l.to.c>l.from.c;
+        const ax=right?(A.x+A.w):A.x;
+        const bx=right?(B.x-3):(B.x+B.w+3);
+        let chx=gapCx(right?(l.to.c-1):l.to.c,l.to.r);
+        if(chx==null)chx=right?(B.x-8):(B.x+B.w+8);
+        d='M'+ax+','+A.cy+' L'+chx+','+A.cy+' L'+chx+','+B.cy+' L'+bx+','+B.cy;
+        lx=chx+(right?4:-4);ly=(A.cy+B.cy)/2;anchor=right?'start':'end';
+        if(Math.abs(A.cy-B.cy)<14){ly=A.cy-7;}   // 1行しか離れていないときは線の上に出す
+      }
+      parts.push('<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#'+mk+')"/>');
+      const txt=l.label||'';
+      if(txt)parts.push('<text x="'+lx+'" y="'+ly+'" font-size="10" font-weight="700" fill="'+col+'" text-anchor="'+anchor+'" dominant-baseline="middle" stroke="#fff" stroke-width="3.5" paint-order="stroke" style="paint-order:stroke;">'+scEsc(txt)+'</text>');
+    });
+    svg.setAttribute('width',rb.width);
+    svg.setAttribute('height',rb.height);
+    svg.innerHTML=parts.join('');
+  }catch(e){}
+}
+function scPaintAll(){try{document.querySelectorAll('.sc-chart').forEach(scPaint);}catch(e){}}
+window.addEventListener('resize',function(){clearTimeout(window._scRepaintT);window._scRepaintT=setTimeout(scPaintAll,150);});
 
 
 /* =========================================================================
@@ -5910,26 +6011,39 @@ function renderSystemChart(ch,editable){
      c   … 出発の列の番号 / r … 行の番号
    選んだ結果は ch.loseTo（行き先の列名）と ch.loseArrows（表示する/しない）に入る。
    ========================================================================= */
-function showScArrowMenu(ch,key,c,r,done){
+function showScArrowMenu(ch,c,r,done){
   const cols=scRepairCols(ch.columns||[]);
+  if(!cols[c])return;
+  const key=cols[c].name+'@'+r;
   const cellOf=(ci,ri)=>{const col=cols[ci];if(!col)return null;const i=ri-(col.startRow||0);return(i>=0&&i<col.cells.length)?col.cells[i]:null;};
   const plain=s=>String(s==null?'':s).replace(/\\n|<br\s*\/?>/ig,' ');
+  // 行き先の候補＝ほかの列にある、これより下の行の箱（3行下まで）
   const cands=[];
-  for(let d=c+1;d<cols.length;d++){const v=cellOf(d,r+1);if(v!=null&&v!=='')cands.push({idx:d,name:cols[d].name,cell:v});}
-  const curTo=(ch.loseTo&&ch.loseTo[key])||'';
+  for(let s=r+1;s<=r+3;s++){
+    for(let d=0;d<cols.length;d++){
+      if(d===c)continue;
+      const v=cellOf(d,s);
+      if(v==null||v==='')continue;
+      cands.push({c:d,r:s,name:cols[d].name,cell:v});
+    }
+  }
+  // いまの設定
+  let curC=c+1,curR=r+1;
+  const raw=ch.loseTo&&ch.loseTo[key];
+  if(raw){const p=scSplitRef(raw);const i=cols.findIndex(x=>x.name===p.name);if(i>=0){curC=i;curR=(p.row==null)?r+1:p.row;}}
   const curOff=!!(ch.loseArrows&&ch.loseArrows[key]===false);
   const fromCell=cellOf(c,r)||'';
-  const btn=(label,val,on)=>`<button class="sc-dest-btn" data-name="${scEsc(val)}" style="width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border:2px solid ${on?'#1D9E75':'#e5e7eb'};border-radius:10px;background:${on?'#E1F5EE':'#fff'};font-size:14px;font-weight:600;color:#111;cursor:pointer;">${label}</button>`;
+  const btn=(label,val,on)=>`<button class="sc-dest-btn" data-v="${scEsc(val)}" style="width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border:2px solid ${on?'#1D9E75':'#e5e7eb'};border-radius:10px;background:${on?'#E1F5EE':'#fff'};font-size:14px;font-weight:600;color:#111;cursor:pointer;">${label}</button>`;
   let list='';
   cands.forEach(x=>{
-    const on=(!curOff)&&(curTo?curTo===x.name:x.idx===c+1);
-    list+=btn(scEsc(plain(x.name))+'　<span style="font-weight:400;color:#6b7280;">'+scEsc(x.cell)+'</span> へ',x.name,on);
+    const on=(!curOff)&&curC===x.c&&curR===x.r;
+    list+=btn(scEsc(plain(x.name))+'　<span style="font-weight:400;color:#6b7280;">'+scEsc(x.cell)+'</span> へ',x.c+','+x.r,on);
   });
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;';
   overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:400px;max-height:82vh;overflow-y:auto;">
     <div style="font-size:16px;font-weight:700;margin-bottom:4px;">負けたチームの行き先</div>
-    <div style="font-size:12px;color:#6b7280;margin-bottom:14px;line-height:1.6;">「${scEsc(plain(cols[c]?cols[c].name:''))}」の <b>${scEsc(fromCell)}</b> で負けたチームが、次にどこへ行くかを選びます。</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:14px;line-height:1.6;">「${scEsc(plain(cols[c].name))}」の <b>${scEsc(fromCell)}</b> で負けたチームが、次にどこへ行くかを選びます。左右どちらの列でも、2つ下の回戦でも選べます。</div>
     ${list||'<div style="font-size:13px;color:#9ca3af;margin-bottom:8px;">行き先になる試合がありません</div>'}
     ${btn('矢印を表示しない（ここで終わり）','',curOff)}
     <button id="sc-dest-close" style="width:100%;padding:11px;border:none;border-radius:10px;background:#f3f4f6;color:#374151;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;">閉じる</button>
@@ -5941,11 +6055,12 @@ function showScArrowMenu(ch,key,c,r,done){
   overlay.querySelectorAll('.sc-dest-btn').forEach(b=>{
     b.onclick=()=>{
       ch.loseArrows=ch.loseArrows||{};ch.loseTo=ch.loseTo||{};
-      const nm=b.dataset.name||'';
-      if(!nm){ ch.loseArrows[key]=false; delete ch.loseTo[key]; }
+      const v=b.dataset.v||'';
+      if(!v){ ch.loseArrows[key]=false; delete ch.loseTo[key]; }
       else{
-        const hit=cands.find(x=>x.name===nm);
-        if(hit&&hit.idx===c+1)delete ch.loseTo[key];else ch.loseTo[key]=nm;
+        const pr=v.split(',');const d=parseInt(pr[0],10),s=parseInt(pr[1],10);
+        if(d===c+1&&s===r+1)delete ch.loseTo[key];
+        else ch.loseTo[key]=cols[d].name+(s===r+1?'':('@'+s));
         ch.loseArrows[key]=true;
       }
       close();
@@ -5967,21 +6082,34 @@ const SC_BUILTIN_TEMPLATES=[
   {
     id:'sc_bi_6696',
     name:'66〜96チーム型（決勝トーナメント＋Bトーナメント＋交流戦）',
-    desc:'一次予選3試合 → 二次予選 → 決勝トーナメント。二次予選で負けたチームと次点のチームはBトーナメントへ。対戦表D（66〜96）用。',
+    desc:'一次予選3試合 →（上位64チーム）二次予選 → 決勝トーナメント。二次予選で負けたチームと、一次予選の次点32チームはBトーナメントへ。左が決勝トーナメント、真ん中が交流戦、右がBトーナメント。対戦表D（66〜96）用。',
     chart:{
       enabled:true,cornerLabel:'',
       prelims:['一次予選①','一次予選②','一次予選③'],
       rowLabels:['第4試合','第5試合','第6試合','第7試合','第8試合','第9試合','第10試合'],
       legend:[{label:'表裏',color:'gray'},{label:'3先',color:'pink'},{label:'2先',color:'green'}],
+      // 左：決勝トーナメント／真ん中：交流戦／右：Bトーナメント（交流戦へ左右両方から入る）
       columns:[
-        {name:'決勝\\nトーナメント',startRow:0,note:'上位64チーム',cells:['二次予選','1回戦','2回戦','3回戦','準決勝','決勝・3決']},
-        {name:'Bトーナメント',startRow:1,note:'次点32チーム',cells:['1回戦','2回戦','3回戦','4回戦','準決勝','決勝・3決']},
-        {name:'交流戦',startRow:2,note:'任意',cells:['交流戦①','交流戦②']}
+        {name:'決勝\\nトーナメント',startRow:0,note:'',cells:['二次予選','1回戦','2回戦','3回戦','準決勝','決勝・3決']},
+        {name:'交流戦',startRow:2,note:'任意参加',cells:['交流戦①','交流戦②']},
+        {name:'Bトーナメント',startRow:1,note:'',cells:['1回戦','2回戦','3回戦','4回戦','準決勝','決勝・3決']}
       ],
-      colors:{'決勝\\nトーナメント':'pink','Bトーナメント':'green','交流戦':'green'},
+      colors:{'決勝\\nトーナメント':'pink','交流戦':'green','Bトーナメント':'green'},
       cellColors:{'決勝\\nトーナメント@0':'green'},
-      loseArrows:{'決勝\\nトーナメント@1':true,'決勝\\nトーナメント@2':false,'決勝\\nトーナメント@3':false,'決勝\\nトーナメント@4':false,'決勝\\nトーナメント@5':false},
-      loseTo:{'決勝\\nトーナメント@1':'交流戦'}
+      // 矢印は自動では出さず、下の4本だけを出す
+      autoLose:false,
+      loseArrows:{'決勝\\nトーナメント@0':true,'決勝\\nトーナメント@1':true,'Bトーナメント@1':true,'Bトーナメント@2':true},
+      loseTo:{
+        '決勝\\nトーナメント@0':'Bトーナメント',   // 二次予選で負け → Bトーナメント1回戦
+        '決勝\\nトーナメント@1':'交流戦@3',        // 決勝T1回戦で負け → 交流戦②
+        'Bトーナメント@1':'交流戦',                // Bトーナメント1回戦で負け → 交流戦①
+        'Bトーナメント@2':'交流戦'                 // Bトーナメント2回戦で負け → 交流戦②
+      },
+      // 一次予選からの進み先（次点32チームが一次予選から直接Bトーナメントへ行くことを示す）
+      links:[
+        {from:'予選@2',to:'決勝\\nトーナメント@0',kind:'plain',label:'上位64チーム'},
+        {from:'予選@2',to:'Bトーナメント@1',kind:'plain',label:'次点32チーム'}
+      ]
     }
   },
   {
@@ -6021,7 +6149,8 @@ function showSystemChartTemplateModal(){
         ${desc?`<div style="font-size:12px;color:#6b7280;line-height:1.5;margin-top:2px;">${scEsc(desc)}</div>`:''}
       </div>
       <button class="sct-load" data-kind="${kind}" data-id="${scEsc(id)}" style="flex-shrink:0;padding:7px 12px;border:none;border-radius:8px;background:#2E86DE;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">読み込む</button>
-      ${kind==='saved'?`<button class="sct-del" data-id="${scEsc(id)}" style="flex-shrink:0;padding:7px 10px;border:1.5px solid #e5a5a5;border-radius:8px;background:#fff;color:#c0392b;font-size:13px;cursor:pointer;">削除</button>`:''}
+      ${kind==='saved'?`<button class="sct-ren" data-id="${scEsc(id)}" style="flex-shrink:0;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:13px;cursor:pointer;">名前</button>
+      <button class="sct-del" data-id="${scEsc(id)}" style="flex-shrink:0;padding:7px 10px;border:1.5px solid #e5a5a5;border-radius:8px;background:#fff;color:#c0392b;font-size:13px;cursor:pointer;">削除</button>`:''}
     </div>`;
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -6057,6 +6186,18 @@ function showSystemChartTemplateModal(){
       close();
       render();
       alert('✅ テンプレ「'+t.name+'」を読み込みました');
+    };
+  });
+  overlay.querySelectorAll('.sct-ren').forEach(b=>{
+    b.onclick=()=>{
+      const t=(AD.chartTemplates||[]).find(x=>x.id===b.dataset.id);
+      if(!t)return;
+      const name=prompt('新しい名前を入力してください',t.name||'');
+      if(name===null)return;
+      const nm=String(name).trim();
+      if(!nm){alert('名前を入力してください');return;}
+      t.name=nm;saveAdmin(AD);
+      close();showSystemChartTemplateModal();
     };
   });
   overlay.querySelectorAll('.sct-del').forEach(b=>{
@@ -8440,13 +8581,11 @@ function bind(){
   function scNormalize(ch){return(ch&&((ch.columns&&ch.columns.length)||(ch.prelims&&ch.prelims.length)||ch.cornerLabel))?ch:null;}
   // 矢印（負け）クリックで表示/非表示を切替
   function bindScArrows(){
-    document.querySelectorAll('#sc-preview .sc-arrow').forEach(el=>{
+    // 【8-6】プレビューの「箱」をタップすると、負けたチームの行き先を選べる
+    document.querySelectorAll('#sc-preview .sc-box').forEach(el=>{
       el.onclick=()=>{
         const _t=ruleEditTarget();if(!_t||!_t.obj||!_t.obj.systemChart)return;
-        const ch=_t.obj.systemChart;
-        // 【8-6】以前は「表示/非表示」の切り替えだけだったが、
-        //        行き先（となりのトーナメント／離れたトーナメント／なし）を選べるようにした。
-        showScArrowMenu(ch,el.dataset.k,parseInt(el.dataset.c,10),parseInt(el.dataset.r,10),()=>{
+        showScArrowMenu(_t.obj.systemChart,parseInt(el.dataset.c,10),parseInt(el.dataset.r,10),()=>{
           _t.save();renderAdminScPreview();
         });
       };
@@ -8457,6 +8596,7 @@ function bind(){
     const pv=document.getElementById('sc-preview');if(!pv)return;
     const _t=ruleEditTarget();const ch=_t&&_t.obj?_t.obj.systemChart:null;
     pv.innerHTML=renderSystemChart(ch,true);
+    scPaintAll();
     bindScArrows();
   }
   // 入力中のライブプレビュー（構成テキスト＋既存の色・矢印をマージ／クリック不可）
@@ -8467,6 +8607,7 @@ function bind(){
     const _t=ruleEditTarget();
     const merged=scApplyStructureText(_t&&_t.obj?_t.obj.systemChart:null,ta.value);
     pv.innerHTML=renderSystemChart(scNormalize(merged),false);
+    scPaintAll();
   }
   const scEdit=document.getElementById('sc-edit');
   if(scEdit){
