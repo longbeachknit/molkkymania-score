@@ -92,7 +92,10 @@ const MAX=50,RST=25,MM=3,TURN_LIMIT=12;
 // ===== アプリのバージョン表記 =====
 // ファイル名（例: molkky_final_7_10.html）から自動でバージョン番号を取り出します。
 // 「7_10」や「7-10」→「7_10」と表示。読み取れないときは下の値を使います。
-const APP_VERSION_FALLBACK='8_5';
+const APP_VERSION_FALLBACK='8_6';
+// ※公開ページでは、ファイル名がいつも index.html なので上の読み取りができません。
+//   そのため、公開ページに出るのは【必ずこの予備の値】です。
+//   新しい版を作ったら、ここの数字も必ず書き換えること。
 const APP_VERSION=(function(){
   try{
     const m=(location.pathname||'').match(/m[oö]lkky_final_(\d+)[_-](\d+)/i);
@@ -6211,24 +6214,38 @@ function rTournamentInfo(){
           </tr></thead>
           <tbody>${(()=>{
             /* 【8-6】決勝トーナメントとBトーナメントで途中から進み方が変わる大会に対応。
-               スプレッドシート側から type:'header'（＝時間が入っていない見出しの行）が届いたら、
-               表の途中に「ここから決勝トーナメント」という帯を入れて区切って表示する。
-               古い対戦表からは type が届かないので、その場合は今までどおりの表になる。 */
-            let zebra=0;
-            return rows.map(r=>{
-              const nm=String(r.name==null?'':r.name);
-              const tm=String(r.time==null?'':r.time);
-              const isHead=(r.type==='header')||(nm.trim()!==''&&tm.trim()==='');
-              if(isHead){
-                zebra=0;
-                return`<tr><td colspan="2" style="padding:11px 10px 9px;background:#E1F5EE;border-top:2px solid #1D9E75;border-bottom:1px solid #b7e2d2;font-size:14px;font-weight:800;color:#0a6e57;">${nm}</td></tr>`;
+               スプレッドシートから届く3種類を、それぞれこう表示する。
+                 type:'header' … 見出しの行（時間が入っていない行）→ 灰色の帯で区切る。前に1行空ける
+                 type:'gap'    … シートの空行            → そのまま1行空ける
+                 type:'row'    … ふつうの行              → 区分と時間を並べる
+               ※見出しの直前の空行は、見出し側で空きを入れるので二重にしない。
+               ※古い対戦表からは type が届かないので、その場合は今までどおりの表になる。 */
+            const items=rows.map(r=>{
+              const nm=String(r.name==null?'':r.name).trim();
+              const tm=String(r.time==null?'':r.time).trim();
+              if(r.type==='gap'||(nm===''&&tm===''))return{k:'gap'};
+              if(r.type==='header'||(nm!==''&&tm===''))return{k:'head',name:nm};
+              return{k:'row',name:nm,time:tm};
+            });
+            const spacer='<tr><td colspan="2" style="height:14px;padding:0;border:none;background:#fff;"></td></tr>';
+            let out='',zebra=0,started=false,pendingGap=false;
+            items.forEach(it=>{
+              if(it.k==='gap'){ if(started)pendingGap=true; return; }
+              if(it.k==='head'){
+                if(started)out+=spacer;      // 見出しの前は必ず1行分あける
+                pendingGap=false;zebra=0;started=true;
+                out+=`<tr><td colspan="2" style="padding:9px 10px;background:#ececec;border-top:2px solid #111;border-bottom:1px solid #cfcfcf;font-size:14px;font-weight:800;color:#111;">${it.name}</td></tr>`;
+                return;
               }
+              if(pendingGap){out+=spacer;pendingGap=false;zebra=0;}
               const bg=(zebra++%2===0)?'#fff':'#f9fafb';
-              return`<tr style="background:${bg};">
-                <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;">${nm}</td>
-                <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${tm}</td>
+              out+=`<tr style="background:${bg};">
+                <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;">${it.name}</td>
+                <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${it.time}</td>
               </tr>`;
-            }).join('');
+              started=true;
+            });
+            return out;
           })()}</tbody>
         </table>`}
     </div>`;
