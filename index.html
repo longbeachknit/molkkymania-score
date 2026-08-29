@@ -139,7 +139,7 @@ let S={
   sets:[],cur:0,fid:0,showHist:false,
   pFirst:null,pIdx:null,pOrders:[[],[]],
   pExclude:[[],[]],
-  iP:'',iM:'single',iA:'',useAimed:false,rule37Pending:false,_tiView:null,_tiLoading:false,_tiError:null,_tiSchedule:[],_tiRegulation:'',_tiSections:null,_tiPrelim:[],_tiPrelimMatches:3,_tiPrelimQuery:'',_tiPrelimSelected:null,_tiBracket:null,_tiBracketSide:'left',
+  iP:'',iM:'single',iA:'',useAimed:false,rule37Pending:false,_tiView:null,_tiLoading:false,_tiError:null,_tiSchedule:[],_tiRegulation:'',_tiSections:null,_tiPrelim:[],_tiPrelimMatches:3,_tiPrelimQuery:'',_tiPrelimSelected:null,_tiBracket:null,_tiBracketSide:'left',_tiBracketNo:1,
   prev:null,ssIdx:0,
   endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,
   molkoutWinner:null,
@@ -556,6 +556,9 @@ async function syncSettingsFromGitHub(eventCode,useRaw){
   if(data.eventPeriodEnd!==undefined)tour.eventPeriodEnd=data.eventPeriodEnd;
   if(data.receptionPw!==undefined)tour.receptionPw=data.receptionPw;
   if(data.bracketTeamCount!==undefined)tour.bracketTeamCount=Number(data.bracketTeamCount)||64;
+  if(data.bracket1Name!==undefined)tour.bracket1Name=data.bracket1Name;
+  if(data.bracket2TeamCount!==undefined)tour.bracket2TeamCount=Number(data.bracket2TeamCount)||0;
+  if(data.bracket2Name!==undefined)tour.bracket2Name=data.bracket2Name;
   if(data.sheetUrl!==undefined)tour.sheetUrl=data.sheetUrl;
   if(data.gasUrl)tour.gasUrl=data.gasUrl; // 空で上書きして消さないよう、値がある時だけ反映
   if(data.systemChart!==undefined)tour.systemChart=data.systemChart;
@@ -701,7 +704,13 @@ async function fetchTournamentInfo(action){
   }else if(action==='getBracket'){
     fileName='_bracket.json';
     // 決勝トーナメントは raw 経由（レート制限実質なし・一斉閲覧に強い）
-    transform=d=>({ rounds:(d&&d.rounds)||[] });
+    transform=d=>({ rounds:(d&&d.rounds)||[], title:(d&&d.title)||'' });
+  }else if(action==='getBracket2'){
+    /* ★2つめのトーナメント（Bトーナメント）。
+       対戦表D以降のGASが {大会コード}_bracket2.json を配信する。
+       古い対戦表にはこのファイルが無いので、その場合は「まだ配信されていません」と表示される。 */
+    fileName='_bracket2.json';
+    transform=d=>({ rounds:(d&&d.rounds)||[], title:(d&&d.title)||'' });
   }else{
     throw new Error('未知のaction: '+action);
   }
@@ -738,6 +747,23 @@ async function fetchTournamentInfo(action){
     await new Promise(r=>setTimeout(r,500));
     return await doFetch();
   }
+}
+
+/* トーナメント表を読み込んで表示する。
+   no=1 … トーナメント①（ふつうは決勝トーナメント。{大会コード}_bracket）
+   no=2 … トーナメント②（ふつうはBトーナメント。{大会コード}_bracket2）
+   ※トーナメントが1つだけの大会では no=1 しか使われないので、今までの大会は今までどおり動く。 */
+async function loadBracketNo(no){
+  S._tiBracketNo=(no===2?2:1);
+  S._tiView='bracket';S._tiLoading=true;S._tiError=null;S._tiBracket=null;
+  render();
+  try{
+    const json=await fetchTournamentInfo(S._tiBracketNo===2?'getBracket2':'getBracket');
+    if(json.error)throw new Error('GAS: '+json.error);
+    S._tiBracket={rounds:json.rounds||[]};
+  }catch(e){S._tiError='取得に失敗しました: '+e.message;}
+  if(S._tiView!=='bracket')return;
+  S._tiLoading=false;render();
 }
 
 // 受付データの送信／確認（試合情報と同じ tour.gasUrl 経由・キャッシュなし）
@@ -862,7 +888,10 @@ function makeTournament(overrides){
     teams:[],matches:[],
     eventPeriodStart:'',eventPeriodEnd:'',
     receptionPw:'',
-    bracketTeamCount:64,
+    bracketTeamCount:64,            // トーナメント①（決勝トーナメント）のチーム数
+    bracket1Name:'決勝トーナメント',  // トーナメント①のアプリでの表示名
+    bracket2TeamCount:0,            // トーナメント②（Bトーナメント）のチーム数。0＝②は無い大会
+    bracket2Name:'Bトーナメント',    // トーナメント②のアプリでの表示名
     systemChart:null,
     venue:null, // 会場の詳細（{code,name,detail}）。配信JSONに同梱して参加者へ届く
     tourInfo:{rules:'',notes:''}, // 大会の詳細（大会規約・大会における注意点）。配信JSONに同梱して参加者へ届く
@@ -888,6 +917,7 @@ function loadAdmin(){
         d.activeTourId=d.activeTourId||'tour_default';
       }
       if(!d.ruleTemplates)d.ruleTemplates=[];
+      if(!d.chartTemplates)d.chartTemplates=[]; // 試合システム図のテンプレート保存用
       if(!d.venueTemplates)d.venueTemplates=[]; // 会場詳細のテンプレート保存用
       if(!d.folders)d.folders=[]; // 大会整理用フォルダ
       if(!d.githubPat)d.githubPat='';
@@ -900,6 +930,7 @@ function loadAdmin(){
     activeTourId:null,
     activeEventCode:'',
     ruleTemplates:[],
+    chartTemplates:[],
     githubPat:''
   };
 }
@@ -3660,8 +3691,9 @@ function ruleCardsHtml(obj){
     <div style="display:flex;align-items:center;margin-bottom:8px;">
       <div style="flex:1;font-size:14px;font-weight:600;color:#111;">🗺 試合システム図</div>
       <button class="btn btn-blue btn-xs" id="btn-sc-autogen" style="padding:4px 10px;">ルールから自動生成</button>
+      <button class="btn btn-gray btn-xs" id="btn-sc-tpl" style="padding:4px 10px;margin-left:6px;">テンプレを読み込む</button>
     </div>
-    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">「残り試合数を確認」で表示される図です。一度負けると右の列（トーナメント）へ移ります。<br>「ルールから自動生成」を押すと、いまの<strong>試合区分・トーナメント種類・ラウンド名・優先ルール</strong>（ラウンドごとの上書きを含む）にそろえて作り直します。${scHasRules?'':'<br>※ 先に試合区分・トーナメント種類・ラウンド名を登録すると自動生成できます。'}</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">「残り試合数を確認」で表示される図です。一度負けると右の列（トーナメント）へ移ります。<br>「ルールから自動生成」を押すと、いまの<strong>試合区分・トーナメント種類・ラウンド名・優先ルール</strong>（ラウンドごとの上書きを含む）にそろえて作り直します。<br>「テンプレを読み込む」を押すと、<strong>よく使う大会の形</strong>（66〜96チーム型・128チーム型など）をそのまま呼び出せます。いまの図に名前を付けて保存し、次の大会で呼び出すこともできます。<br>プレビューの <span style="color:#2e72c4;font-weight:900;">↘</span> をタップすると、<strong>負けたチームの行き先</strong>（となりのトーナメント／離れたトーナメント／行き先なし）を選べます。${scHasRules?'':'<br>※ 先に試合区分・トーナメント種類・ラウンド名を登録すると自動生成できます。'}</div>
 
     <details style="margin-bottom:10px;"${scText.trim()?'':' open'}>
       <summary style="cursor:pointer;font-size:13px;color:#2E8B57;padding:6px 0;">① 構成を編集する（トーナメント名・回戦）</summary>
@@ -3770,11 +3802,27 @@ function rAdminTourEdit(){
           <input type="text" id="te-reception-pw" value="${tour.receptionPw||''}" placeholder="例: 1234" maxlength="4" inputmode="numeric" style="font-size:18px;letter-spacing:4px;text-align:center;"/>
         </div>
         <div style="border-top:1px solid #e5e7eb;margin-top:4px;padding-top:12px;">
-          <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🏆 決勝トーナメントのチーム数</div>
-          <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">決勝トーナメント表の形（ラウンド数・シードの有無）が自動で切り替わります。24・48チームでは上位チームが1回戦免除（シード）になります。</div>
-          <select id="te-bracket-count" style="font-size:14px;">
-            ${[8,16,24,32,48,64].map(n=>`<option value="${n}" ${Number(tour.bracketTeamCount||64)===n?'selected':''}>${n}チーム</option>`).join('')}
-          </select>
+          <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🏆 トーナメント表の設定</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:10px;line-height:1.7;">トーナメントは2つまで設定できます。<b>トーナメント①</b>はスプレッドシートの「決勝T送信」シートから、<b>トーナメント②</b>は「Bトーナメント送信」シートから配信されたものが表示されます。<br>トーナメントが1つだけの大会は、②を「なし」にしてください。参加者のアプリでは「トーナメント表」を押したときに、どちらを見るか選ぶ画面が出ます（②が「なし」のときは今までどおり、そのまま表が開きます）。<br>チーム数を選ぶと、表の形（ラウンド数・シードの有無）が自動で切り替わります。24・48チームでは上位チームが1回戦免除（シード）になります。</div>
+          <div style="background:#f9fafb;border-radius:8px;padding:10px;margin-bottom:8px;">
+            <div style="font-size:12px;font-weight:700;color:#111;margin-bottom:8px;">トーナメント①（決勝トーナメント）</div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:3px;">アプリでの表示名</div>
+            <input type="text" id="te-bracket1-name" value="${(tour.bracket1Name||'決勝トーナメント').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}" placeholder="決勝トーナメント" style="font-size:14px;"/>
+            <div style="font-size:12px;color:#6b7280;margin:8px 0 3px;">チーム数</div>
+            <select id="te-bracket-count" style="font-size:14px;">
+              ${[8,16,24,32,48,64].map(n=>`<option value="${n}" ${Number(tour.bracketTeamCount||64)===n?'selected':''}>${n}チーム</option>`).join('')}
+            </select>
+          </div>
+          <div style="background:#f9fafb;border-radius:8px;padding:10px;">
+            <div style="font-size:12px;font-weight:700;color:#111;margin-bottom:8px;">トーナメント②（Bトーナメント）</div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:3px;">アプリでの表示名</div>
+            <input type="text" id="te-bracket2-name" value="${(tour.bracket2Name||'Bトーナメント').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}" placeholder="Bトーナメント" style="font-size:14px;"/>
+            <div style="font-size:12px;color:#6b7280;margin:8px 0 3px;">チーム数</div>
+            <select id="te-bracket2-count" style="font-size:14px;">
+              <option value="0" ${Number(tour.bracket2TeamCount||0)>0?'':'selected'}>なし（トーナメントは1つだけ）</option>
+              ${[8,16,24,32,48,64].map(n=>`<option value="${n}" ${Number(tour.bracket2TeamCount||0)===n?'selected':''}>${n}チーム</option>`).join('')}
+            </select>
+          </div>
         </div>
       </div>
       <div style="font-size:11px;color:#9ca3af;margin-top:10px;">入力内容は自動で保存されます。「保存して戻る」を押すと全端末に配信されます。</div>
@@ -5121,6 +5169,9 @@ async function publishSettings(tour,opts){
     eventPeriodEnd: tour.eventPeriodEnd||'',
     receptionPw: tour.receptionPw||'',
     bracketTeamCount: Number(tour.bracketTeamCount)||64,
+    bracket1Name: tour.bracket1Name||'決勝トーナメント',
+    bracket2TeamCount: Number(tour.bracket2TeamCount)||0,
+    bracket2Name: tour.bracket2Name||'Bトーナメント',
     systemChart: tour.systemChart||null,
     venue: resolveVenue(tour), // 会場（場所）情報＋詳細を同梱して参加者へ配信
     tourInfo: tour.tourInfo||{rules:'',notes:''}, // 大会の詳細（規約・注意点）を同梱して参加者へ配信
@@ -5612,7 +5663,7 @@ function buildSystemChartFromRules(obj){
   usedFmts.forEach(f=>{if(!order.includes(f))legend.push({label:fmtLabel(f),color:fmtToColor(f)});});
   return{enabled:true,cornerLabel:'',prelims,rowLabels,
     legend:legend.length?legend:[{label:'2先',color:'green'}],
-    columns,colors,cellColors,loseArrows:{}};
+    columns,colors,cellColors,loseArrows:{},loseTo:{}};
 }
 
 // 図オブジェクト → 構成テキスト（※色・矢印は含めない＝別管理）
@@ -5633,7 +5684,7 @@ function systemChartToText(ch){
 // 構成テキスト → 図オブジェクト（色・矢印は含まない）
 // 列の書式: 新「名前 | 開始行 | 注記 | 回戦...」/ 旧「名前 | 色 | 開始行 | 注記 | 回戦...」両対応
 function systemChartFromText(txt){
-  const ch={enabled:true,cornerLabel:'',prelims:[],rowLabels:[],legend:[],columns:[],colors:{},loseArrows:{}};
+  const ch={enabled:true,cornerLabel:'',prelims:[],rowLabels:[],legend:[],columns:[],colors:{},loseArrows:{},loseTo:{}};
   (txt||'').split('\n').forEach(raw=>{
     const line=raw.trim();
     if(!line||line[0]==='#')return;
@@ -5688,6 +5739,14 @@ function scApplyStructureText(obj,text){
   const arrows={};
   Object.keys(oldArrows).forEach(k=>{const nm=k.split('@')[0];if(parsed.columns.some(c=>c.name===nm))arrows[k]=oldArrows[k];});
   parsed.loseArrows=arrows;
+  // 【8-6】「負けたチームの行き先」も、出発の列と行き先の列が両方とも残っているものだけ引き継ぐ
+  const oldTo=(obj&&obj.loseTo)?obj.loseTo:{};
+  const to={};
+  Object.keys(oldTo).forEach(k=>{
+    const nm=k.split('@')[0];
+    if(parsed.columns.some(c=>c.name===nm)&&parsed.columns.some(c=>c.name===oldTo[k]))to[k]=oldTo[k];
+  });
+  parsed.loseTo=to;
   // セル個別色も同様に、現存する列のものだけ引き継ぐ
   const oldCellColors=(obj&&obj.cellColors)?obj.cellColors:{};
   const cellColors={};
@@ -5707,8 +5766,19 @@ function renderSystemChart(ch,editable){
   const cellOf=(c,r)=>{const col=cols[c];const i=r-(col.startRow||0);return(i>=0&&i<col.cells.length)?col.cells[i]:null;};
   const hasCell=(c,r)=>{const v=cellOf(c,r);return v!=null&&v!=='';};
   const loseKey=(c,r)=>cols[c].name+'@'+r;
-  const loseAuto=(c,r)=>hasCell(c,r)&&(c+1<nCols)&&hasCell(c+1,r+1);
+  /* 【8-6】負けたチームの行き先の列。
+     ふつうは「すぐ右どなりの列」。ch.loseTo に列名を入れておくと、
+     間の列を飛び越えた先（例：Bトーナメントを飛び越えて交流戦）も指定できる。 */
+  const loseDest=(c,r)=>{
+    const v=ch.loseTo&&ch.loseTo[loseKey(c,r)];
+    if(v){const i=cols.findIndex(x=>x.name===v);if(i>c)return i;}
+    return c+1;
+  };
+  const loseAuto=(c,r)=>{const d=loseDest(c,r);return hasCell(c,r)&&d<nCols&&hasCell(d,r+1);};
   const loseActive=(c,r)=>{const ov=ch.loseArrows&&ch.loseArrows[loseKey(c,r)];if(ov===true)return true;if(ov===false)return false;return loseAuto(c,r);};
+  // 行き先になりうる列があるか（編集画面で矢印をタップできるかの判定に使う）
+  const loseCands=(c,r)=>{const out=[];for(let d=c+1;d<nCols;d++){if(hasCell(d,r+1))out.push(d);}return out;};
+  let hasLongArrow=false;   // 列を飛び越える矢印を1本でも描いたか（凡例の出し分けに使う）
   let maxRows=0;cols.forEach(col=>{maxRows=Math.max(maxRows,(col.startRow||0)+col.cells.length);});
   const rowLabels=ch.rowLabels||[];
   const totalGrid=nCols*2-1;
@@ -5774,18 +5844,39 @@ function renderSystemChart(ch,editable){
         const win=hasCell(c,r)&&hasCell(c,r+1);
         h+=`<td style="text-align:center;padding:0;height:16px;">${win?'<span style="color:#E24B4A;font-size:13px;font-weight:900;">↓</span>':''}</td>`;
         if(c<nCols-1){
-          const active=loseActive(c,r);
-          const toggleable=hasCell(c,r)&&hasCell(c+1,r+1);
+          // すき間に描くのは「すぐ右どなりへ行く」負け矢印だけ
+          const active=loseActive(c,r)&&loseDest(c,r)===c+1;
+          const toggleable=hasCell(c,r)&&loseCands(c,r).length>0;
           const arrow='<span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:4px;padding:0 2px;font-size:11px;font-weight:900;line-height:1.4;">↘</span>';
           if(editable&&toggleable){
             const auto=loseAuto(c,r)?1:0;
-            h+=`<td class="sc-arrow" data-k="${scEsc(loseKey(c,r))}" data-auto="${auto}" title="タップで負け矢印を表示／非表示" style="cursor:pointer;text-align:center;padding:0;vertical-align:middle;">${active?arrow:'<span style="opacity:0.28;font-size:12px;color:#2E8B57;font-weight:900;">↘</span>'}</td>`;
+            h+=`<td class="sc-arrow" data-k="${scEsc(loseKey(c,r))}" data-c="${c}" data-r="${r}" data-auto="${auto}" title="タップすると「負けたチームの行き先」を選べます" style="cursor:pointer;text-align:center;padding:0;vertical-align:middle;">${active?arrow:'<span style="opacity:0.28;font-size:12px;color:#2E8B57;font-weight:900;">↘</span>'}</td>`;
           }else{
             h+=`<td style="text-align:center;padding:0;vertical-align:middle;">${active?arrow:''}</td>`;
           }
         }
       }
       h+='</tr>';
+      /* 【8-6】列を飛び越える負け矢印（例：決勝トーナメント1回戦で負け → 交流戦①）。
+         すき間の ↘ だけでは表せないので、出発の列から行き先の列まで届く
+         1本の長い矢印を、下に1行足して描く。 */
+      for(let c=0;c<nCols;c++){
+        if(!loseActive(c,r))continue;
+        const d=loseDest(c,r);
+        if(d<=c+1||d>=nCols)continue;
+        hasLongArrow=true;
+        h+='<tr><td></td>';
+        for(let k=0;k<2*c;k++)h+='<td></td>';
+        h+=`<td colspan="${2*(d-c)}" style="padding:1px 3px;vertical-align:middle;">`
+          +'<div style="display:flex;align-items:center;gap:3px;">'
+            +'<span style="flex:1;height:0;border-top:2px dashed #2e72c4;"></span>'
+            +'<span style="font-size:9px;color:#2e72c4;font-weight:700;white-space:nowrap;">負け</span>'
+            +'<span style="flex:1;height:0;border-top:2px dashed #2e72c4;"></span>'
+            +'<span style="color:#2e72c4;font-size:12px;font-weight:900;line-height:1;">&#9654;</span>'
+          +'</div></td>';
+        for(let k=0;k<2*(nCols-d)-1;k++)h+='<td></td>';
+        h+='</tr>';
+      }
     }
   }
   h+='</table>';
@@ -5802,10 +5893,196 @@ function renderSystemChart(ch,editable){
   const arrowLegend='<div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-bottom:10px;">'+
     '<span style="font-size:11px;color:#374151;"><span style="color:#E24B4A;font-weight:900;">↓</span> 勝ち（次の回戦へ）</span>'+
     '<span style="font-size:11px;color:#374151;"><span style="display:inline-block;background:#DCEBFA;color:#2e72c4;border-radius:4px;padding:0 3px;font-weight:900;">↘</span> 負け（右のトーナメントへ）</span>'+
+    (hasLongArrow?'<span style="font-size:11px;color:#374151;"><span style="color:#2e72c4;font-weight:900;">┈&#9654;</span> 負け（離れたトーナメントへ）</span>':'')+
     '</div>';
   return legend+arrowLegend+`<div style="width:100%;padding:2px 0 6px;">${h}</div>`;
 }
 
+
+/* =========================================================================
+   【8-6】試合システム図：「負けたチームの行き先」を選ぶ小さな画面
+   管理者画面のプレビューで、うすい ↘ をタップすると出てくる。
+     ch  … 図のデータ
+     key … '列名@行番号'（どの試合の負けか）
+     c   … 出発の列の番号 / r … 行の番号
+   選んだ結果は ch.loseTo（行き先の列名）と ch.loseArrows（表示する/しない）に入る。
+   ========================================================================= */
+function showScArrowMenu(ch,key,c,r,done){
+  const cols=scRepairCols(ch.columns||[]);
+  const cellOf=(ci,ri)=>{const col=cols[ci];if(!col)return null;const i=ri-(col.startRow||0);return(i>=0&&i<col.cells.length)?col.cells[i]:null;};
+  const plain=s=>String(s==null?'':s).replace(/\\n|<br\s*\/?>/ig,' ');
+  const cands=[];
+  for(let d=c+1;d<cols.length;d++){const v=cellOf(d,r+1);if(v!=null&&v!=='')cands.push({idx:d,name:cols[d].name,cell:v});}
+  const curTo=(ch.loseTo&&ch.loseTo[key])||'';
+  const curOff=!!(ch.loseArrows&&ch.loseArrows[key]===false);
+  const fromCell=cellOf(c,r)||'';
+  const btn=(label,val,on)=>`<button class="sc-dest-btn" data-name="${scEsc(val)}" style="width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border:2px solid ${on?'#1D9E75':'#e5e7eb'};border-radius:10px;background:${on?'#E1F5EE':'#fff'};font-size:14px;font-weight:600;color:#111;cursor:pointer;">${label}</button>`;
+  let list='';
+  cands.forEach(x=>{
+    const on=(!curOff)&&(curTo?curTo===x.name:x.idx===c+1);
+    list+=btn(scEsc(plain(x.name))+'　<span style="font-weight:400;color:#6b7280;">'+scEsc(x.cell)+'</span> へ',x.name,on);
+  });
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:400px;max-height:82vh;overflow-y:auto;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">負けたチームの行き先</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:14px;line-height:1.6;">「${scEsc(plain(cols[c]?cols[c].name:''))}」の <b>${scEsc(fromCell)}</b> で負けたチームが、次にどこへ行くかを選びます。</div>
+    ${list||'<div style="font-size:13px;color:#9ca3af;margin-bottom:8px;">行き先になる試合がありません</div>'}
+    ${btn('矢印を表示しない（ここで終わり）','',curOff)}
+    <button id="sc-dest-close" style="width:100%;padding:11px;border:none;border-radius:10px;background:#f3f4f6;color:#374151;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;">閉じる</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>{if(overlay.parentNode)document.body.removeChild(overlay);};
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  const cb=overlay.querySelector('#sc-dest-close');if(cb)cb.onclick=close;
+  overlay.querySelectorAll('.sc-dest-btn').forEach(b=>{
+    b.onclick=()=>{
+      ch.loseArrows=ch.loseArrows||{};ch.loseTo=ch.loseTo||{};
+      const nm=b.dataset.name||'';
+      if(!nm){ ch.loseArrows[key]=false; delete ch.loseTo[key]; }
+      else{
+        const hit=cands.find(x=>x.name===nm);
+        if(hit&&hit.idx===c+1)delete ch.loseTo[key];else ch.loseTo[key]=nm;
+        ch.loseArrows[key]=true;
+      }
+      close();
+      if(done)done();
+    };
+  });
+}
+
+/* =========================================================================
+   【8-6】試合システム図のテンプレート
+
+   ・SC_BUILTIN_TEMPLATES … アプリに最初から入っている形。大会ごとにボタン1つで読み込める。
+   ・AD.chartTemplates    … 「いまの図」に名前を付けて保存したもの（この端末に保存される）。
+
+   図のデータは色や矢印の設定も丸ごと持っているので、読み込めばそのまま完成した形になる。
+   読み込んだあと、構成テキストや色・矢印を自由に直せる。
+   ========================================================================= */
+const SC_BUILTIN_TEMPLATES=[
+  {
+    id:'sc_bi_6696',
+    name:'66〜96チーム型（決勝トーナメント＋Bトーナメント＋交流戦）',
+    desc:'一次予選3試合 → 二次予選 → 決勝トーナメント。二次予選で負けたチームと次点のチームはBトーナメントへ。対戦表D（66〜96）用。',
+    chart:{
+      enabled:true,cornerLabel:'',
+      prelims:['一次予選①','一次予選②','一次予選③'],
+      rowLabels:['第4試合','第5試合','第6試合','第7試合','第8試合','第9試合','第10試合'],
+      legend:[{label:'表裏',color:'gray'},{label:'3先',color:'pink'},{label:'2先',color:'green'}],
+      columns:[
+        {name:'決勝\\nトーナメント',startRow:0,note:'上位64チーム',cells:['二次予選','1回戦','2回戦','3回戦','準決勝','決勝・3決']},
+        {name:'Bトーナメント',startRow:1,note:'次点32チーム',cells:['1回戦','2回戦','3回戦','4回戦','準決勝','決勝・3決']},
+        {name:'交流戦',startRow:2,note:'任意',cells:['交流戦①','交流戦②']}
+      ],
+      colors:{'決勝\\nトーナメント':'pink','Bトーナメント':'green','交流戦':'green'},
+      cellColors:{'決勝\\nトーナメント@0':'green'},
+      loseArrows:{'決勝\\nトーナメント@1':true,'決勝\\nトーナメント@2':false,'決勝\\nトーナメント@3':false,'決勝\\nトーナメント@4':false,'決勝\\nトーナメント@5':false},
+      loseTo:{'決勝\\nトーナメント@1':'交流戦'}
+    }
+  },
+  {
+    id:'sc_bi_128',
+    name:'128チーム型（決勝トーナメント＋5位タイ＋15位タイ＋交流戦）',
+    desc:'予選3試合のあと、4つのトーナメントに分かれる形。対戦表C（128）用の例です。中身は読み込んだあとで直せます。',
+    text:[
+      'タイトル: 128T',
+      '予選: 予選第1試合 | 予選第2試合 | 予選第3試合',
+      '行: 第4試合 | 第5試合 | 第6試合 | 第7試合 | 第8試合 | 第9試合',
+      '凡例: 表裏=gray | 3先=pink | 2先=green',
+      '',
+      '決勝トーナメント | pink | 1 | 上位64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 準決勝, 決勝、3決',
+      '5位タイ\\nトーナメント | green | 1 | 次点64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 5回戦, 5位タイ決定戦',
+      '15位タイ\\nトーナメント | green | 2 |  | 1回戦, 2回戦, 3回戦, 4回戦, 15位タイ決定戦',
+      '交流戦 | green | 3 |  | 1回戦, 2回戦'
+    ].join('\n')
+  }
+];
+
+// テンプレート1件から、図のデータを作って返す（元のテンプレートは変えない）
+function scTemplateChart(t){
+  if(!t)return null;
+  if(t.chart)return JSON.parse(JSON.stringify(t.chart));
+  return systemChartFromText(t.text||'');
+}
+
+// 「テンプレを読み込む」ボタンの中身
+function showSystemChartTemplateModal(){
+  const _t=(typeof ruleEditTarget==='function')?ruleEditTarget():null;
+  if(!_t||!_t.obj){alert('大会が選択されていません');return;}
+  if(!AD.chartTemplates)AD.chartTemplates=[];
+  const saved=AD.chartTemplates;
+  const row=(id,name,desc,kind)=>`<div style="display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid #f3f4f6;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:700;color:#111;line-height:1.4;">${scEsc(name)}</div>
+        ${desc?`<div style="font-size:12px;color:#6b7280;line-height:1.5;margin-top:2px;">${scEsc(desc)}</div>`:''}
+      </div>
+      <button class="sct-load" data-kind="${kind}" data-id="${scEsc(id)}" style="flex-shrink:0;padding:7px 12px;border:none;border-radius:8px;background:#2E86DE;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">読み込む</button>
+      ${kind==='saved'?`<button class="sct-del" data-id="${scEsc(id)}" style="flex-shrink:0;padding:7px 10px;border:1.5px solid #e5a5a5;border-radius:8px;background:#fff;color:#c0392b;font-size:13px;cursor:pointer;">削除</button>`:''}
+    </div>`;
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:460px;max-height:84vh;overflow-y:auto;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">試合システム図のテンプレ</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:14px;line-height:1.6;">読み込むと、いまの図はテンプレの中身に置き換わります（トーナメント名・回戦・色・矢印を含みます）。読み込んだあとから自由に直せます。</div>
+    <div style="font-size:12px;font-weight:700;color:#4a5d16;background:#F4F7E8;border-radius:6px;padding:5px 8px;">最初から入っている形</div>
+    ${SC_BUILTIN_TEMPLATES.map(t=>row(t.id,t.name,t.desc,'builtin')).join('')}
+    <div style="font-size:12px;font-weight:700;color:#4a5d16;background:#F4F7E8;border-radius:6px;padding:5px 8px;margin-top:16px;">保存した形（この端末）</div>
+    ${saved.length?saved.map(t=>row(t.id,t.name,t.desc||'','saved')).join(''):'<div style="font-size:13px;color:#9ca3af;padding:10px 0;">まだ保存されていません</div>'}
+    <button id="sct-save" style="width:100%;padding:12px;margin-top:16px;border:1.5px solid #1D9E75;border-radius:10px;background:#fff;color:#0a6e57;font-size:14px;font-weight:700;cursor:pointer;">💾 いまの図に名前を付けて保存する</button>
+    <button id="sct-close" style="width:100%;padding:11px;margin-top:8px;border:none;border-radius:10px;background:#f3f4f6;color:#374151;font-size:14px;font-weight:600;cursor:pointer;">閉じる</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>{if(overlay.parentNode)document.body.removeChild(overlay);};
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  const cb=overlay.querySelector('#sct-close');if(cb)cb.onclick=close;
+
+  overlay.querySelectorAll('.sct-load').forEach(b=>{
+    b.onclick=()=>{
+      const id=b.dataset.id;
+      const t=(b.dataset.kind==='builtin')
+        ? SC_BUILTIN_TEMPLATES.find(x=>x.id===id)
+        : (AD.chartTemplates||[]).find(x=>x.id===id);
+      if(!t)return;
+      const chart=scTemplateChart(t);
+      if(!chart||!chart.columns||!chart.columns.length){alert('このテンプレは中身が空でした');return;}
+      if(_t.obj.systemChart&&_t.obj.systemChart.columns&&_t.obj.systemChart.columns.length){
+        if(!confirm('「'+t.name+'」を読み込みます。\n\nいまの試合システム図は置き換わります（色・矢印の手動設定もテンプレの内容になります）。よろしいですか？'))return;
+      }
+      _t.obj.systemChart=chart;
+      _t.save();
+      close();
+      render();
+      alert('✅ テンプレ「'+t.name+'」を読み込みました');
+    };
+  });
+  overlay.querySelectorAll('.sct-del').forEach(b=>{
+    b.onclick=()=>{
+      const id=b.dataset.id;
+      const t=(AD.chartTemplates||[]).find(x=>x.id===id);
+      if(!t)return;
+      if(!confirm('保存した形「'+t.name+'」を削除します。よろしいですか？\n（いま設定されている大会の図はそのままです）'))return;
+      AD.chartTemplates=(AD.chartTemplates||[]).filter(x=>x.id!==id);
+      saveAdmin(AD);
+      close();
+      showSystemChartTemplateModal();
+    };
+  });
+  const sb=overlay.querySelector('#sct-save');
+  if(sb)sb.onclick=()=>{
+    const ch=_t.obj.systemChart;
+    if(!ch||!ch.columns||!ch.columns.length){alert('先に試合システム図を作ってください。');return;}
+    const name=prompt('この形に名前を付けてください（例: 66〜96チーム型）');
+    if(name===null)return;
+    const nm=String(name).trim();
+    if(!nm){alert('名前を入力してください');return;}
+    if(!AD.chartTemplates)AD.chartTemplates=[];
+    AD.chartTemplates.push({id:'sct_'+Date.now(),name:nm,desc:'',chart:JSON.parse(JSON.stringify(ch))});
+    saveAdmin(AD);
+    close();
+    alert('✅ 「'+nm+'」として保存しました');
+  };
+}
 
 // ===== チームNo検索：一覧HTML生成（キーワードでチーム名を部分一致絞り込み） =====
 function buildTeamSearchList(query){
@@ -5932,11 +6209,60 @@ function rTournamentInfo(){
             <th style="padding:8px 10px;border-bottom:2px solid #111;text-align:left;font-size:13px;color:#374151;">試合区分</th>
             <th style="padding:8px 10px;border-bottom:2px solid #111;text-align:left;font-size:13px;color:#374151;">時間</th>
           </tr></thead>
-          <tbody>${rows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f9fafb'};">
-            <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;">${r.name||''}</td>
-            <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;">${r.time||''}</td>
-          </tr>`).join('')}</tbody>
+          <tbody>${(()=>{
+            /* 【8-6】決勝トーナメントとBトーナメントで途中から進み方が変わる大会に対応。
+               スプレッドシート側から type:'header'（＝時間が入っていない見出しの行）が届いたら、
+               表の途中に「ここから決勝トーナメント」という帯を入れて区切って表示する。
+               古い対戦表からは type が届かないので、その場合は今までどおりの表になる。 */
+            let zebra=0;
+            return rows.map(r=>{
+              const nm=String(r.name==null?'':r.name);
+              const tm=String(r.time==null?'':r.time);
+              const isHead=(r.type==='header')||(nm.trim()!==''&&tm.trim()==='');
+              if(isHead){
+                zebra=0;
+                return`<tr><td colspan="2" style="padding:11px 10px 9px;background:#E1F5EE;border-top:2px solid #1D9E75;border-bottom:1px solid #b7e2d2;font-size:14px;font-weight:800;color:#0a6e57;">${nm}</td></tr>`;
+              }
+              const bg=(zebra++%2===0)?'#fff':'#f9fafb';
+              return`<tr style="background:${bg};">
+                <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;">${nm}</td>
+                <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${tm}</td>
+              </tr>`;
+            }).join('');
+          })()}</tbody>
         </table>`}
+    </div>`;
+  }
+
+  /* ── サブ画面：どちらのトーナメント表を見るか選ぶ ──
+     【8-6】トーナメントが2つある大会のために、表を開く前に1画面はさむ。
+     トーナメント②が「なし」の大会ではこの画面は出ず、今までどおりそのまま表が開く。 */
+  if(v==='bracketPick'){
+    const ptour=tour||activeTour();
+    const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const n1=(ptour&&ptour.bracket1Name)||'決勝トーナメント';
+    const n2=(ptour&&ptour.bracket2Name)||'Bトーナメント';
+    const c1=Number(ptour&&ptour.bracketTeamCount)||64;
+    const c2=Number(ptour&&ptour.bracket2TeamCount)||0;
+    const card=(id,icon,name,count)=>`<button id="${id}" style="width:100%;padding:18px 16px;border-radius:12px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;">
+        <span style="font-size:28px;">${icon}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:16px;font-weight:700;color:#111;">${esc(name)}</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:3px;">${count?count+'チーム':''}</div>
+        </div>
+        <span style="font-size:18px;color:#9ca3af;">▸</span>
+      </button>`;
+    return`<div style="padding:16px;max-width:480px;margin:0 auto;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
+        <div style="font-size:17px;font-weight:700;color:#111;">🏆 トーナメント表</div>
+      </div>
+      ${S._tiLoading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`
+      :`<div style="font-size:13px;color:#6b7280;margin-bottom:14px;">どちらのトーナメント表を見ますか？</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          ${card('btn-ti-bracket-1','🏆',n1,c1)}
+          ${c2?card('btn-ti-bracket-2','🥈',n2,c2):''}
+        </div>`}
     </div>`;
   }
 
@@ -5946,9 +6272,13 @@ function rTournamentInfo(){
     const err=S._tiError;
     const data=S._tiBracket;      // {rounds:[{name,matches:[{team1,team2,win1,win2}]}]}
 
-    // 対象大会の決勝Tチーム数（管理者画面で設定 → _settings.json 経由で配信）
+    /* 【8-6】トーナメントは最大2つ。いまどちらを見ているかは S._tiBracketNo（1 or 2）で決まる。
+       チーム数と表示名は、それぞれ管理者画面で設定したものを使う（_settings.json 経由で配信）。 */
     const _tourB=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):activeTour();
-    const teamCount=Number(_tourB&&_tourB.bracketTeamCount)||64;
+    const _bNo=Number(S._tiBracketNo)||1;
+    const _hasB2=Number(_tourB&&_tourB.bracket2TeamCount)>0;
+    const teamCount=(_bNo===2?Number(_tourB&&_tourB.bracket2TeamCount):Number(_tourB&&_tourB.bracketTeamCount))||64;
+    const _bName=_bNo===2?((_tourB&&_tourB.bracket2Name)||'Bトーナメント'):((_tourB&&_tourB.bracket1Name)||'決勝トーナメント');
 
     const rawRounds=(data&&Array.isArray(data.rounds))?data.rounds:[];
     function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -6118,8 +6448,8 @@ function rTournamentInfo(){
 
     return`<div style="padding:16px;max-width:820px;margin:0 auto;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
-        <div style="font-size:17px;font-weight:700;color:#111;">🏆 決勝トーナメント表</div>
+        <button id="${_hasB2?'btn-ti-bracket-back':'btn-ti-sub-back'}" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
+        <div style="font-size:17px;font-weight:700;color:#111;">🏆 ${esc(_bName)}表</div>
       </div>
       ${loading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`
       :err?`<div style="padding:16px;background:#fee2e2;border-radius:10px;color:#dc2626;font-size:13px;">${err}</div>`
@@ -8030,6 +8360,9 @@ function bind(){
     const peEl=document.getElementById('te-period-end');if(peEl)tour.eventPeriodEnd=peEl.value;
     const rpwEl=document.getElementById('te-reception-pw');if(rpwEl)tour.receptionPw=rpwEl.value.trim();
     const btcEl=document.getElementById('te-bracket-count');if(btcEl)tour.bracketTeamCount=Number(btcEl.value)||64;
+    const b1nEl=document.getElementById('te-bracket1-name');if(b1nEl)tour.bracket1Name=b1nEl.value.trim()||'決勝トーナメント';
+    const b2cEl=document.getElementById('te-bracket2-count');if(b2cEl)tour.bracket2TeamCount=Number(b2cEl.value)||0;
+    const b2nEl=document.getElementById('te-bracket2-name');if(b2nEl)tour.bracket2Name=b2nEl.value.trim()||'Bトーナメント';
     // コート図
     const clGrid=document.getElementById('cl-grid');
     if(clGrid){
@@ -8055,7 +8388,7 @@ function bind(){
     }
   }
   // 各入力欄を自動保存（途中で他操作をしても入力が消えないように）
-  ['te-venue','te-code','te-name','te-gasurl','te-sheeturl','te-tour-rules','te-tour-notes','te-period-start','te-period-end','te-reception-pw','te-bracket-count','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
+  ['te-venue','te-code','te-name','te-gasurl','te-sheeturl','te-tour-rules','te-tour-notes','te-period-start','te-period-end','te-reception-pw','te-bracket-count','te-bracket1-name','te-bracket2-count','te-bracket2-name','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.addEventListener('change',()=>{
       const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
@@ -8093,12 +8426,12 @@ function bind(){
     document.querySelectorAll('#sc-preview .sc-arrow').forEach(el=>{
       el.onclick=()=>{
         const _t=ruleEditTarget();if(!_t||!_t.obj||!_t.obj.systemChart)return;
-        const ch=_t.obj.systemChart;ch.loseArrows=ch.loseArrows||{};
-        const key=el.dataset.k;const auto=el.dataset.auto==='1';
-        const cur=(ch.loseArrows[key]!==undefined)?ch.loseArrows[key]:auto;
-        const next=!cur;
-        if(next===auto)delete ch.loseArrows[key];else ch.loseArrows[key]=next;
-        _t.save();renderAdminScPreview();
+        const ch=_t.obj.systemChart;
+        // 【8-6】以前は「表示/非表示」の切り替えだけだったが、
+        //        行き先（となりのトーナメント／離れたトーナメント／なし）を選べるようにした。
+        showScArrowMenu(ch,el.dataset.k,parseInt(el.dataset.c,10),parseInt(el.dataset.r,10),()=>{
+          _t.save();renderAdminScPreview();
+        });
       };
     });
   }
@@ -8148,6 +8481,8 @@ function bind(){
   });
   // 初回：編集用プレビューにクリックを有効化
   if(document.getElementById('sc-preview'))bindScArrows();
+  const scTpl=document.getElementById('btn-sc-tpl');
+  if(scTpl)scTpl.onclick=()=>showSystemChartTemplateModal();
   const scAuto=document.getElementById('btn-sc-autogen');
   if(scAuto)scAuto.onclick=()=>{
     const _t=ruleEditTarget();if(!_t||!_t.obj)return;
@@ -8536,7 +8871,7 @@ function bind(){
     else if(view==='regulation'){S._tiRegulation='';S._tiSections=null;}
     else if(view==='prelim'){S._tiPrelim=[];S._tiPrelimQuery='';S._tiPrelimSelected=null;}
     else if(view==='teamsearch')S._tsQuery='';
-    else if(view==='bracket'){S._tiBracket=null;S._tiBracketSide='left';}
+    else if(view==='bracket'||view==='bracketPick'){S._tiBracket=null;S._tiBracketSide='left';S._tiBracketNo=1;}
     S.phase='tournamentInfo';render();
 
     // 【会場のご案内】は端末内に保存済みのデータ（ホーム画面を開いたときに取得済み）だけで表示する。
@@ -8559,6 +8894,19 @@ function bind(){
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
     if(!stillHere())return;
+    /* 【8-6】トーナメント表：この大会にトーナメントが2つ設定されていれば「選ぶ画面」を出す。
+       1つだけ（＝これまでの大会）なら、今までどおりそのままトーナメント表を開く。 */
+    if(view==='bracketPick'){
+      if(Number(tour&&tour.bracket2TeamCount)>0){S._tiLoading=false;render();return;}
+      S._tiBracketNo=1;S._tiView='bracket';render();
+      try{
+        const json=await fetchTournamentInfo('getBracket');
+        if(json.error)throw new Error('GAS: '+json.error);
+        S._tiBracket={rounds:json.rounds||[]};
+      }catch(e){S._tiError='取得に失敗しました: '+e.message;}
+      if(S.phase!=='tournamentInfo'||S._tiView!=='bracket')return;
+      S._tiLoading=false;render();return;
+    }
     try{
       if(view==='schedule'){
         const json=await fetchTournamentInfo('getSchedule');
@@ -8629,7 +8977,7 @@ function bind(){
     S._matchIdInput='';S._matchIdError='';startQRScan('resultOnly');
   };
   const bgrem=document.getElementById('btn-go-remaining');if(bgrem)bgrem.onclick=()=>openTournamentInfoView('system');
-  const bgbr=document.getElementById('btn-go-bracket');if(bgbr)bgbr.onclick=()=>openTournamentInfoView('bracket');
+  const bgbr=document.getElementById('btn-go-bracket');if(bgbr)bgbr.onclick=()=>openTournamentInfoView('bracketPick');
   // ホーム：チームNoを検索
   const bgts=document.getElementById('btn-go-teamsearch');if(bgts)bgts.onclick=()=>openTournamentInfoView('teamsearch');
   // ホーム：大会スプレッドシート（大会設定のsheetUrlを開く）
@@ -9057,6 +9405,11 @@ function bind(){
   const btib=document.getElementById('btn-ti-back');if(btib)btib.onclick=()=>{S._tiView=null;S.phase='setup';render();};
   // サブ画面の戻る → メニュー画面へ（phaseはtournamentInfoのまま、_tiViewだけクリア）
   const btisb=document.getElementById('btn-ti-sub-back');if(btisb)btisb.onclick=()=>{S._tiView=null;S._tiLoading=false;S._tiError=null;S.phase='setup';render();};
+  // 【8-6】トーナメント表：どちらを見るかを選ぶボタン
+  const btb1=document.getElementById('btn-ti-bracket-1');if(btb1)btb1.onclick=()=>loadBracketNo(1);
+  const btb2=document.getElementById('btn-ti-bracket-2');if(btb2)btb2.onclick=()=>loadBracketNo(2);
+  // 【8-6】トーナメント表 →「選ぶ画面」へ戻る（トーナメントが2つある大会のみ）
+  const btbb=document.getElementById('btn-ti-bracket-back');if(btbb)btbb.onclick=()=>{S._tiView='bracketPick';S._tiLoading=false;S._tiError=null;render();};
   // タイムスケジュール
   const btisc=document.getElementById('btn-ti-schedule');
   if(btisc)btisc.onclick=async()=>{
