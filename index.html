@@ -5676,7 +5676,9 @@ function systemChartToText(ch){
   if(!ch)return'';
   const L=[];
   if(ch.cornerLabel)L.push('タイトル: '+ch.cornerLabel);
-  if(ch.prelims&&ch.prelims.length)L.push('予選: '+ch.prelims.join(' | '));
+  if(ch.prelims&&ch.prelims.length)L.push('予選: '+ch.prelims.map(p=>{
+    const n=scPrelimName(p),sp=scPrelimSpan(p);return sp?(n+'*'+sp):n;
+  }).join(' | '));
   if(ch.rowLabels&&ch.rowLabels.length)L.push('行: '+ch.rowLabels.join(' | '));
   if(ch.legend&&ch.legend.length)L.push('凡例: '+ch.legend.map(x=>x.label+'='+x.color).join(' | '));
   L.push('');
@@ -5696,7 +5698,14 @@ function systemChartFromText(txt){
     const km=line.match(/^([^|:：]+)[:：]\s*(.*)$/);
     const key=km?km[1].trim().toLowerCase():'';
     if(km&&/^(タイトル|title)$/.test(key)){ch.cornerLabel=km[2].trim();return;}
-    if(km&&/^(予選|prelim|prelims)$/.test(key)){ch.prelims=km[2].split(/[|,，]/).map(x=>x.trim()).filter(Boolean);return;}
+    if(km&&/^(予選|prelim|prelims)$/.test(key)){
+      // 「二次予選*1」と書くと、左から1列ぶんの幅の短いバーになる
+      ch.prelims=km[2].split(/[|,，]/).map(x=>x.trim()).filter(Boolean).map(x=>{
+        const m2=x.match(/^(.*?)\s*\*\s*(\d+)$/);
+        return m2?{name:m2[1].trim(),span:parseInt(m2[2],10)}:x;
+      });
+      return;
+    }
     if(km&&/^(行|行ラベル|rows|row)$/.test(key)){ch.rowLabels=km[2].split(/[|,，]/).map(x=>x.trim()).filter(Boolean);return;}
     if(km&&/^(凡例|legend)$/.test(key)){
       ch.legend=km[2].split('|').map(x=>x.trim()).filter(Boolean).map(p=>{const mm=p.split('=');return{label:(mm[0]||'').trim(),color:scColorOf(mm[1])};});
@@ -5755,6 +5764,7 @@ function scApplyStructureText(obj,text){
   // 【8-6】テンプレが持っている追加の矢印（予選から次点32チームへ、など）も引き継ぐ
   const oldLinks=(obj&&Array.isArray(obj.links))?obj.links:[];
   const nameOK=v=>{const p=scSplitRef(v);return /^(予選|prelim|prelims)$/i.test(p.name)||parsed.columns.some(c=>c.name===p.name);};
+  void scPrelimName;
   parsed.links=oldLinks.filter(l=>l&&nameOK(l.from)&&nameOK(l.to));
   if(obj&&obj.autoLose!==undefined)parsed.autoLose=obj.autoLose;
   // セル個別色も同様に、現存する列のものだけ引き継ぐ
@@ -5802,6 +5812,14 @@ function scRefToPos(v,cols){
   if(c<0)return null;
   return{k:'cell',c:c,r:p.row};
 }
+/* 予選のバーは「文字だけ」でも「{name, span} の形」でも書ける。
+   span＝左から何列ぶんの幅にするか（省略すると全部の列にまたがる横長のバー）。
+   例：二次予選は上位64チームだけが戦うので span:1（決勝トーナメントの列だけ）にする。
+   こうすると右側があくので、一次予選からBトーナメントへ矢印を通せる。 */
+function scPrelimName(p){return (p&&typeof p==='object')?String(p.name||''):String(p==null?'':p);}
+function scPrelimSpan(p){const n=(p&&typeof p==='object')?parseInt(p.span,10):NaN;return (n>=1)?n:0;}
+function scPrelimColor(p){const k=(p&&typeof p==='object')?p.color:null;return SC_COLORS[scColorOf(k||'gray')]||SC_COLORS.gray;}
+
 /* 図の中で「何試合目まであるか」 */
 function scMaxRows(cols){
   let m=0;(cols||[]).forEach(col=>{m=Math.max(m,(col.startRow||0)+col.cells.length);});
@@ -5839,9 +5857,12 @@ function scCollectLinks(ch,cols){
     if(!l)return;
     const a=scRefToPos(l.from,cols),b=scRefToPos(l.to,cols);
     if(!a||!b)return;
+    const nPre=((ch.prelims||[]).length);
     if(b.k==='cell'&&!has(b.c,b.r))return;
     if(a.k==='cell'&&!has(a.c,a.r))return;
-    out.push({from:a,to:b,kind:(l.kind==='lose'?'lose':'plain'),label:(l.label==null?'':String(l.label))});
+    if(a.k==='prelim'&&(a.i<0||a.i>=nPre))return;
+    if(b.k==='prelim'&&(b.i<0||b.i>=nPre))return;
+    out.push({from:a,to:b,kind:(l.kind==='lose'?'lose':'plain'),ci:(l.ci==null?null:Number(l.ci)),label:(l.label==null?'':String(l.label))});
   });
   return out;
 }
@@ -5887,11 +5908,18 @@ function renderSystemChart(ch,editable){
 
   // ── 予選（横長バー）──
   (ch.prelims||[]).forEach((p,i)=>{
+    const pname=scPrelimName(p);
+    let span=scPrelimSpan(p);
+    if(!span||span>nCols)span=nCols;             // 指定なし＝全部の列にまたがる
+    const barCells=Math.min(totalGrid,2*span-1); // 表の中で何マスぶんか
     h+='<tr>';
     h+=`<td style="text-align:center;padding:4px 1px;color:#444;white-space:nowrap;font-size:${Math.max(9,fs-1)}px;line-height:1.2;">予選${scCircled(i+1)}</td>`;
-    h+=`<td data-prelim="${i}" colspan="${totalGrid}" style="background:${SC_COLORS.gray.bg};border:1px solid ${SC_COLORS.gray.bd};text-align:center;padding:8px;color:#333;font-weight:600;">${scEsc(p)}</td>`;
+    const pc=scPrelimColor(p);
+    h+=`<td data-prelim="${i}" colspan="${barCells}" style="background:${pc.bg};border:1px solid ${pc.bd};text-align:center;padding:8px;color:${pc.tx};font-weight:600;">${scEsc(pname)}</td>`;
+    if(barCells<totalGrid)h+=`<td colspan="${totalGrid-barCells}"></td>`;
     h+='</tr>';
-    h+=`<tr><td colspan="${totalGrid+1}" style="height:18px;"></td></tr>`;
+    // 予選のバーの下の空き ＝ 矢印がここを横に通れる「通路」
+    h+=`<tr data-parow="${i}"><td colspan="${totalGrid+1}" style="height:26px;"></td></tr>`;
   });
 
   // ── トーナメント本体 ──
@@ -5960,7 +5988,10 @@ function renderSystemChart(ch,editable){
    出口と入口は箱の中心から左右にずらしてあるので、
    勝ちの ↓ 矢印や、ほかの矢印と重なりにくい。
    線の色は「出発するトーナメント」ごとに変えている。 */
-const SC_LINK_COLORS=['#2e72c4','#c2410c','#7c3aed','#0f766e','#b91c1c','#a16207'];
+/* 負けの矢印の色。ぜんぶ「青の仲間」でそろえてあるので、
+   色が違っても「これは負けの矢印だ」と分かる。
+   何番めの色になるかは「出発するトーナメント」で決まる。 */
+const SC_LINK_COLORS=['#1d4ed8','#0891b2','#38a3f0','#4f46e5','#0e7490','#60a5fa'];
 function scPaint(root){
   try{
     const reg=SC_REG[root.getAttribute('data-sc-id')];if(!reg)return;
@@ -5973,6 +6004,7 @@ function scPaint(root){
     const boxOf=ref=>ref.k==='prelim'?rect(q('[data-prelim="'+ref.i+'"]')):rect(q('[data-cell="'+ref.c+','+ref.r+'"]'));
     const gapBox=(gi,r)=>rect(q('[data-gap="'+gi+','+r+'"]'));
     const arow=r=>rect(q('[data-arow="'+r+'"]'));
+    const parow=i=>rect(q('[data-parow="'+i+'"]'));
     /* 通路の中の「上寄り」の高さ。
        通路の真ん中には勝ちの ↓ が入るので、そこを避けて上側を横に通す。
        箱への入り口はここから下りるので、矢印の先が十分な長さになる。 */
@@ -5990,7 +6022,11 @@ function scPaint(root){
     });
     Object.keys(groups).forEach(gi=>{const a=groups[gi];a.forEach((idx,k)=>{lane[idx]=k-(a.length-1)/2;});});
 
-    const colorOf=l=>(l.from.k==='prelim')?'#333333':SC_LINK_COLORS[(l.from.c||0)%SC_LINK_COLORS.length];
+    const colorOf=l=>{
+      if(l.kind!=='lose')return '#333333';                     // 予選からの進み先などは黒
+      const i=(l.ci!=null)?l.ci:(l.from.k==='cell'?(l.from.c||0):0);
+      return SC_LINK_COLORS[i%SC_LINK_COLORS.length];
+    };
     const ckey=c=>c.replace('#','');
     const used={};
     links.forEach(l=>{used[colorOf(l)]=1;});
@@ -6009,12 +6045,23 @@ function scPaint(root){
       const mk=mid+'_'+ckey(color);
       let d,lx,ly,anchor='middle',dash='';
 
-      if(l.from.k==='prelim'||(l.from.k==='cell'&&l.to.k==='cell'&&l.from.c===l.to.c)){
-        // まっすぐ下へ（予選のバー → 下の箱）
+      if(l.from.k==='prelim'&&!(B.cx>=A.x+4&&B.cx<=A.x+A.w-4)){
+        /* 予選のバーの真下に行き先が無い場合（バーが短いとき）。
+           バーの端から出て、バーの下の通路を横に進んでから、箱の上辺へ下りる。 */
+        const right=(B.cx>A.cx);
+        const exX=right?(A.x+A.w-12):(A.x+12);
+        const enX=B.cx+(right?-B.w*0.30:B.w*0.30);
+        const pb=parow(l.from.i);
+        const y1=pb?pb.cy:(A.y+A.h+12);
+        d='M'+exX+','+(A.y+A.h+1)+' L'+exX+','+y1+' L'+enX+','+y1+' L'+enX+','+(B.y-3);
+        lx=(exX+enX)/2;ly=y1;anchor='middle';
+      }else if(l.from.k==='prelim'||(l.from.k==='cell'&&l.to.k==='cell'&&l.from.c===l.to.c)){
+        // まっすぐ下へ（予選のバー → 真下の箱）
         const x=B.cx;
         d='M'+x+','+(A.y+A.h+1)+' L'+x+','+(B.y-3);
         const toRight=(x>rb.width*0.55);
-        lx=x+(toRight?-6:6);ly=(A.y+A.h+B.y)/2;anchor=toRight?'end':'start';
+        // 文字は線の出だし（バーのすぐ下）に置く。こうすると複数の矢印で高さがそろう。
+        lx=x+(toRight?-6:6);ly=A.y+A.h+13;anchor=toRight?'end':'start';
       }else{
         const right=l.to.c>l.from.c;
         const exX=A.cx+(right?A.w*0.30:-A.w*0.30);   // 出口（箱の下辺）
@@ -6127,33 +6174,36 @@ const SC_BUILTIN_TEMPLATES=[
   {
     id:'sc_bi_6696',
     name:'66〜96チーム型（決勝トーナメント＋Bトーナメント＋交流戦）',
-    desc:'一次予選3試合 →（上位64チーム）二次予選 → 決勝トーナメント。二次予選で負けたチームと、一次予選の次点32チームはBトーナメントへ。左が決勝トーナメント、真ん中が交流戦、右がBトーナメント。対戦表D（66〜96）用。',
+    desc:'一次予選3試合 →（上位64チーム）二次予選 → 決勝トーナメント。二次予選で負けたチームと、一次予選の次点32チームはBトーナメントへ。行は試合区分（第1試合〜第6試合）に合わせています。対戦表D（66〜96）用。',
     chart:{
       enabled:true,cornerLabel:'',
-      prelims:['一次予選①','一次予選②','一次予選③'],
-      rowLabels:['第4試合','第5試合','第6試合','第7試合','第8試合','第9試合','第10試合'],
+      // 一次予選①〜③は全チーム。二次予選は上位64チームだけなので、左側だけの短いバーにする（span:1）
+      prelims:['一次予選①','一次予選②','一次予選③',{name:'二次予選',span:1,color:'green'}],
+      // 行の名前は「試合区分」の設定に合わせる（第1試合〜第6試合）
+      rowLabels:['第1試合','第2試合','第3試合','第4試合','第5試合','第6試合'],
       legend:[{label:'表裏',color:'gray'},{label:'3先',color:'pink'},{label:'2先',color:'green'}],
       // 左：決勝トーナメント／真ん中：交流戦／右：Bトーナメント（交流戦へ左右両方から入る）
       columns:[
-        {name:'決勝\\nトーナメント',startRow:0,note:'',cells:['二次予選','1回戦','2回戦','3回戦','準決勝','決勝・3決']},
-        {name:'交流戦',startRow:2,note:'任意参加',cells:['交流戦①','交流戦②']},
-        {name:'Bトーナメント',startRow:1,note:'',cells:['1回戦','2回戦','3回戦','4回戦','準決勝','決勝・3決']}
+        {name:'決勝\\nトーナメント',startRow:0,note:'',cells:['1回戦','2回戦','3回戦','準決勝','決勝・3決']},
+        {name:'交流戦',startRow:1,note:'任意参加',cells:['交流戦①','交流戦②']},
+        {name:'Bトーナメント',startRow:0,note:'',cells:['1回戦','2回戦','3回戦','4回戦','準決勝','決勝・3決']}
       ],
       colors:{'決勝\\nトーナメント':'pink','交流戦':'green','Bトーナメント':'green'},
-      cellColors:{'決勝\\nトーナメント@0':'green'},
-      // 矢印は自動では出さず、下の4本だけを出す
+      cellColors:{},
+      // 矢印は自動では出さず、下の3本だけを出す
       autoLose:false,
-      loseArrows:{'決勝\\nトーナメント@0':true,'決勝\\nトーナメント@1':true,'Bトーナメント@1':true,'Bトーナメント@2':true},
+      loseArrows:{'決勝\\nトーナメント@0':true,'Bトーナメント@0':true,'Bトーナメント@1':true},
       loseTo:{
-        '決勝\\nトーナメント@0':'Bトーナメント',   // 二次予選で負け → Bトーナメント1回戦
-        '決勝\\nトーナメント@1':'交流戦@3',        // 決勝T1回戦で負け → 交流戦②
-        'Bトーナメント@1':'交流戦',                // Bトーナメント1回戦で負け → 交流戦①
-        'Bトーナメント@2':'交流戦'                 // Bトーナメント2回戦で負け → 交流戦②
+        '決勝\\nトーナメント@0':'交流戦@2',   // 決勝T1回戦で負け → 交流戦②
+        'Bトーナメント@0':'交流戦',           // Bトーナメント1回戦で負け → 交流戦①
+        'Bトーナメント@1':'交流戦'            // Bトーナメント2回戦で負け → 交流戦②
       },
-      // 一次予選からの進み先（次点32チームが一次予選から直接Bトーナメントへ行くことを示す）
+      // 予選からの進み先
       links:[
-        {from:'予選@2',to:'決勝\\nトーナメント@0',kind:'plain',label:'上位64チーム'},
-        {from:'予選@2',to:'Bトーナメント@1',kind:'plain',label:'次点32チーム'}
+        {from:'予選@2',to:'予選@3',kind:'plain',label:'上位64チーム'},
+        {from:'予選@2',to:'Bトーナメント@0',kind:'plain',label:'次点32チーム'},
+        {from:'予選@3',to:'決勝\\nトーナメント@0',kind:'plain',label:'勝ち'},
+        {from:'予選@3',to:'Bトーナメント@0',kind:'lose',ci:0,label:'負け'}
       ]
     }
   },
@@ -6164,7 +6214,7 @@ const SC_BUILTIN_TEMPLATES=[
     text:[
       'タイトル: 128T',
       '予選: 予選第1試合 | 予選第2試合 | 予選第3試合',
-      '行: 第4試合 | 第5試合 | 第6試合 | 第7試合 | 第8試合 | 第9試合',
+      '行: 第1試合 | 第2試合 | 第3試合 | 第4試合 | 第5試合 | 第6試合',
       '凡例: 表裏=gray | 3先=pink | 2先=green',
       '',
       '決勝トーナメント | pink | 1 | 上位64チーム | 1回戦, 2回戦, 3回戦, 4回戦, 準決勝, 決勝、3決',
@@ -6182,49 +6232,96 @@ function scTemplateChart(t){
   return systemChartFromText(t.text||'');
 }
 
+/* 最初から入っている形を、1回だけ「自分のテンプレ一覧」に入れる。
+   一覧に入れてしまえば、名前も説明も自由に変えられるし、いらなければ消せる。 */
+function scSeedTemplates(force){
+  if(!AD.chartTemplates)AD.chartTemplates=[];
+  if(!force&&AD.chartTplSeeded)return 0;
+  let added=0;
+  SC_BUILTIN_TEMPLATES.forEach(t=>{
+    if(AD.chartTemplates.some(x=>x.id===t.id))return;
+    AD.chartTemplates.push({id:t.id,name:t.name,desc:t.desc||'',chart:scTemplateChart(t)});
+    added++;
+  });
+  AD.chartTplSeeded=true;
+  saveAdmin(AD);
+  return added;
+}
+
+/* テンプレの名前と説明を書き換える小さな画面 */
+function showScTplEditModal(tpl,done){
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:420px;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px;">テンプレの名前と説明</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">名前</div>
+    <input type="text" id="sct-e-name" value="${scEsc(tpl.name||'')}" style="width:100%;font-size:15px;padding:9px 10px;border:1.5px solid #d1d5db;border-radius:8px;box-sizing:border-box;"/>
+    <div style="font-size:12px;color:#6b7280;margin:10px 0 4px;">説明（自分が分かりやすい言葉でどうぞ）</div>
+    <textarea id="sct-e-desc" rows="4" style="width:100%;font-size:14px;padding:9px 10px;border:1.5px solid #d1d5db;border-radius:8px;box-sizing:border-box;">${scEsc(tpl.desc||'')}</textarea>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button id="sct-e-cancel" style="flex:1;padding:11px;border:none;border-radius:10px;background:#f3f4f6;color:#374151;font-size:14px;font-weight:600;cursor:pointer;">やめる</button>
+      <button id="sct-e-save" style="flex:2;padding:11px;border:none;border-radius:10px;background:#1D9E75;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">保存する</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>{if(overlay.parentNode)document.body.removeChild(overlay);};
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  overlay.querySelector('#sct-e-cancel').onclick=close;
+  setTimeout(()=>{const i=overlay.querySelector('#sct-e-name');if(i)i.focus();},80);
+  overlay.querySelector('#sct-e-save').onclick=()=>{
+    const nm=String(overlay.querySelector('#sct-e-name').value||'').trim();
+    if(!nm){alert('名前を入力してください');return;}
+    tpl.name=nm;
+    tpl.desc=String(overlay.querySelector('#sct-e-desc').value||'').replace(/\s+$/,'');
+    saveAdmin(AD);
+    close();
+    if(done)done();
+  };
+}
+
 // 「テンプレを読み込む」ボタンの中身
 function showSystemChartTemplateModal(){
   const _t=(typeof ruleEditTarget==='function')?ruleEditTarget():null;
   if(!_t||!_t.obj){alert('大会が選択されていません');return;}
-  if(!AD.chartTemplates)AD.chartTemplates=[];
-  const saved=AD.chartTemplates;
-  const row=(id,name,desc,kind)=>`<div style="display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid #f3f4f6;">
+  scSeedTemplates(false);
+  const list=AD.chartTemplates||[];
+  const row=t=>`<div style="display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid #f3f4f6;">
       <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:700;color:#111;line-height:1.4;">${scEsc(name)}</div>
-        ${desc?`<div style="font-size:12px;color:#6b7280;line-height:1.5;margin-top:2px;">${scEsc(desc)}</div>`:''}
+        <div style="font-size:14px;font-weight:700;color:#111;line-height:1.4;">${scEsc(t.name||'（名前なし）')}</div>
+        ${t.desc?`<div style="font-size:12px;color:#6b7280;line-height:1.5;margin-top:2px;white-space:pre-wrap;">${scEsc(t.desc)}</div>`:''}
       </div>
-      <button class="sct-load" data-kind="${kind}" data-id="${scEsc(id)}" style="flex-shrink:0;padding:7px 12px;border:none;border-radius:8px;background:#2E86DE;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">読み込む</button>
-      ${kind==='saved'?`<button class="sct-ren" data-id="${scEsc(id)}" style="flex-shrink:0;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:13px;cursor:pointer;">名前</button>
-      <button class="sct-del" data-id="${scEsc(id)}" style="flex-shrink:0;padding:7px 10px;border:1.5px solid #e5a5a5;border-radius:8px;background:#fff;color:#c0392b;font-size:13px;cursor:pointer;">削除</button>`:''}
+      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
+        <button class="sct-load" data-id="${scEsc(t.id)}" style="padding:7px 12px;border:none;border-radius:8px;background:#2E86DE;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">読み込む</button>
+        <div style="display:flex;gap:4px;">
+          <button class="sct-edit" data-id="${scEsc(t.id)}" style="flex:1;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;cursor:pointer;">名前・説明</button>
+          <button class="sct-del" data-id="${scEsc(t.id)}" style="padding:5px 8px;border:1.5px solid #e5a5a5;border-radius:8px;background:#fff;color:#c0392b;font-size:12px;cursor:pointer;">削除</button>
+        </div>
+      </div>
     </div>`;
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;';
   overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:460px;max-height:84vh;overflow-y:auto;">
     <div style="font-size:16px;font-weight:700;margin-bottom:4px;">試合システム図のテンプレ</div>
-    <div style="font-size:12px;color:#6b7280;margin-bottom:14px;line-height:1.6;">読み込むと、いまの図はテンプレの中身に置き換わります（トーナメント名・回戦・色・矢印を含みます）。読み込んだあとから自由に直せます。</div>
-    <div style="font-size:12px;font-weight:700;color:#4a5d16;background:#F4F7E8;border-radius:6px;padding:5px 8px;">最初から入っている形</div>
-    ${SC_BUILTIN_TEMPLATES.map(t=>row(t.id,t.name,t.desc,'builtin')).join('')}
-    <div style="font-size:12px;font-weight:700;color:#4a5d16;background:#F4F7E8;border-radius:6px;padding:5px 8px;margin-top:16px;">保存した形（この端末）</div>
-    ${saved.length?saved.map(t=>row(t.id,t.name,t.desc||'','saved')).join(''):'<div style="font-size:13px;color:#9ca3af;padding:10px 0;">まだ保存されていません</div>'}
+    <div style="font-size:12px;color:#6b7280;margin-bottom:14px;line-height:1.6;">読み込むと、いまの図はテンプレの中身に置き換わります（トーナメント名・回戦・色・矢印を含みます）。読み込んだあとから自由に直せます。名前と説明も自由に書き換えられます。</div>
+    ${list.length?list.map(row).join(''):'<div style="font-size:13px;color:#9ca3af;padding:10px 0;">テンプレがありません。下の「最初から入っている形を入れ直す」を押すか、いまの図を保存してください。</div>'}
     <button id="sct-save" style="width:100%;padding:12px;margin-top:16px;border:1.5px solid #1D9E75;border-radius:10px;background:#fff;color:#0a6e57;font-size:14px;font-weight:700;cursor:pointer;">💾 いまの図に名前を付けて保存する</button>
+    <button id="sct-seed" style="width:100%;padding:11px;margin-top:8px;border:1.5px solid #d1d5db;border-radius:10px;background:#fff;color:#374151;font-size:13px;font-weight:600;cursor:pointer;">＋ 最初から入っている形を入れ直す</button>
     <button id="sct-close" style="width:100%;padding:11px;margin-top:8px;border:none;border-radius:10px;background:#f3f4f6;color:#374151;font-size:14px;font-weight:600;cursor:pointer;">閉じる</button>
   </div>`;
   document.body.appendChild(overlay);
   const close=()=>{if(overlay.parentNode)document.body.removeChild(overlay);};
+  const reopen=()=>{close();showSystemChartTemplateModal();};
   overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
   const cb=overlay.querySelector('#sct-close');if(cb)cb.onclick=close;
 
   overlay.querySelectorAll('.sct-load').forEach(b=>{
     b.onclick=()=>{
-      const id=b.dataset.id;
-      const t=(b.dataset.kind==='builtin')
-        ? SC_BUILTIN_TEMPLATES.find(x=>x.id===id)
-        : (AD.chartTemplates||[]).find(x=>x.id===id);
+      const t=(AD.chartTemplates||[]).find(x=>x.id===b.dataset.id);
       if(!t)return;
       const chart=scTemplateChart(t);
       if(!chart||!chart.columns||!chart.columns.length){alert('このテンプレは中身が空でした');return;}
       if(_t.obj.systemChart&&_t.obj.systemChart.columns&&_t.obj.systemChart.columns.length){
-        if(!confirm('「'+t.name+'」を読み込みます。\n\nいまの試合システム図は置き換わります（色・矢印の手動設定もテンプレの内容になります）。よろしいですか？'))return;
+        if(!confirm('「'+t.name+'」を読み込みます。\n\nいまの試合システム図は置き換わります（色・矢印の設定もテンプレの内容になります）。よろしいですか？'))return;
       }
       _t.obj.systemChart=chart;
       _t.save();
@@ -6233,43 +6330,38 @@ function showSystemChartTemplateModal(){
       alert('✅ テンプレ「'+t.name+'」を読み込みました');
     };
   });
-  overlay.querySelectorAll('.sct-ren').forEach(b=>{
+  overlay.querySelectorAll('.sct-edit').forEach(b=>{
     b.onclick=()=>{
       const t=(AD.chartTemplates||[]).find(x=>x.id===b.dataset.id);
       if(!t)return;
-      const name=prompt('新しい名前を入力してください',t.name||'');
-      if(name===null)return;
-      const nm=String(name).trim();
-      if(!nm){alert('名前を入力してください');return;}
-      t.name=nm;saveAdmin(AD);
-      close();showSystemChartTemplateModal();
+      showScTplEditModal(t,reopen);
     };
   });
   overlay.querySelectorAll('.sct-del').forEach(b=>{
     b.onclick=()=>{
-      const id=b.dataset.id;
-      const t=(AD.chartTemplates||[]).find(x=>x.id===id);
+      const t=(AD.chartTemplates||[]).find(x=>x.id===b.dataset.id);
       if(!t)return;
-      if(!confirm('保存した形「'+t.name+'」を削除します。よろしいですか？\n（いま設定されている大会の図はそのままです）'))return;
-      AD.chartTemplates=(AD.chartTemplates||[]).filter(x=>x.id!==id);
+      if(!confirm('テンプレ「'+t.name+'」を削除します。よろしいですか？\n（いま設定されている大会の図はそのままです）'))return;
+      AD.chartTemplates=(AD.chartTemplates||[]).filter(x=>x.id!==t.id);
       saveAdmin(AD);
-      close();
-      showSystemChartTemplateModal();
+      reopen();
     };
   });
   const sb=overlay.querySelector('#sct-save');
   if(sb)sb.onclick=()=>{
     const ch=_t.obj.systemChart;
     if(!ch||!ch.columns||!ch.columns.length){alert('先に試合システム図を作ってください。');return;}
-    const name=prompt('この形に名前を付けてください（例: 66〜96チーム型）');
-    if(name===null)return;
-    const nm=String(name).trim();
-    if(!nm){alert('名前を入力してください');return;}
+    const tpl={id:'sct_'+Date.now(),name:'新しいテンプレ',desc:'',chart:JSON.parse(JSON.stringify(ch))};
     if(!AD.chartTemplates)AD.chartTemplates=[];
-    AD.chartTemplates.push({id:'sct_'+Date.now(),name:nm,desc:'',chart:JSON.parse(JSON.stringify(ch))});
+    AD.chartTemplates.push(tpl);
     saveAdmin(AD);
-    close();
-    alert('✅ 「'+nm+'」として保存しました');
+    showScTplEditModal(tpl,reopen);
+  };
+  const sd=overlay.querySelector('#sct-seed');
+  if(sd)sd.onclick=()=>{
+    const n=scSeedTemplates(true);
+    reopen();
+    setTimeout(()=>alert(n?('✅ '+n+'件を入れ直しました'):'すでに全部そろっています'),50);
   };
 }
 
