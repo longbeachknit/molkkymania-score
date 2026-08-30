@@ -2316,7 +2316,7 @@ function render(){
   const app=document.getElementById('app');
   const p=S.phase;
   // ホーム以外の画面に移ったことを覚えておく（戻ってきたときに最新を取りに行くため）
-  if(p!=='setup')_lastPhaseForLive=p;
+  if(p!=='setup'){_lastPhaseForLive=p;_exhWasAway=true;}
   if(p==='setup')app.innerHTML=rSetup();
   else if(p==='firstChoice')app.innerHTML=rFirst();
   else if(p==='orderSetup')app.innerHTML=rOrder();
@@ -7041,23 +7041,63 @@ function exhOf(tour){
 }
 
 /* いま受付中かどうかを GitHub から確かめる。
-   30秒に1回までしか見にいかない（通信を増やしすぎないため）。 */
-let _exhOpenAt=0,_exhOpenCode='',_exhOpenBusy=false;
+
+   【速さのはなし】GitHub から読む道は2本ある。
+     ① api.github.com …「対戦表を配信」で使っているのと同じ道。
+        置いた“その瞬間”の中身がそのまま返るので、いちばん速い。
+        ただし1つの回線あたり1時間60回までという上限がある。
+     ② raw.githubusercontent.com … 上限は実質ないが、
+        途中のキャッシュのせいで数分ふるい内容が返ることがある。
+   受付の開始／終了はすぐ伝わってほしいので、まず①を使い、
+   ①がだめだったとき（上限に当たった等）だけ②に切り替える。
+   こうすると、ふだんは最速・もしもの時もボタンが出ないままにはならない。 */
+async function fetchExhibitionOpen_(code){
+  const fileName=toJsonFileCode(code)+'_exhibition.json';
+  // ① 速い道（対戦表の配信と同じ）
+  try{
+    const res=await fetch(GITHUB_DATA_BASE+'/'+fileName+'?t='+Date.now(),
+      {cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
+    if(res.status===404)return false;          // まだ一度も受付を開始していない
+    if(res.ok){
+      const api=await res.json();
+      const b64=String(api.content||'').replace(/\s/g,'');
+      const bin=atob(b64);
+      const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+      const d=JSON.parse(new TextDecoder('utf-8').decode(bytes));
+      return !!(d&&d.open===true);
+    }
+  }catch(e){}
+  // ② 控えの道（少し遅れることがある）
+  try{
+    const res2=await fetch(GITHUB_RAW_BASE+'/'+fileName+'?t='+Date.now(),{cache:'no-store'});
+    if(!res2.ok)return false;
+    const d2=await res2.json();
+    return !!(d2&&d2.open===true);
+  }catch(e){}
+  return false;
+}
+
+/* いつ見にいくか（「開催中の大会」の確認と同じ考え方）
+     ・ホーム画面をはじめて開いたとき
+     ・ほかの画面からホームに戻ってきたとき  ← ここが実質いちばん効く
+     ・ホームを開いたままのときは20秒おき（対戦表の取得と同じ間隔）
+   ※通信の回数を増やしすぎないよう、上の条件以外では見にいかない。 */
+let _exhOpenAt=0,_exhOpenCode='',_exhOpenBusy=false,_exhWasAway=false;
 function maybeRefreshExhibitionOpen(code){
   if(!code)return;
-  const now=Date.now();
   if(_exhOpenBusy)return;
-  if(_exhOpenCode===code&&(now-_exhOpenAt)<30000)return;
+  const first=(_exhOpenCode!==code);
+  const back=_exhWasAway;
+  _exhWasAway=false;
+  if(!first&&!back&&(Date.now()-_exhOpenAt)<CACHE_TTL)return;
   _exhOpenBusy=true;
-  const url=GITHUB_RAW_BASE+'/'+toJsonFileCode(code)+'_exhibition.json?t='+now;
-  const finish=open=>{
+  fetchExhibitionOpen_(code).then(open=>{
     _exhOpenCode=code;_exhOpenAt=Date.now();_exhOpenBusy=false;
     if(S._exhOpen!==open){S._exhOpen=open;if(S.phase==='setup')render();}
-  };
-  fetch(url,{cache:'no-store'})
-    .then(r=>r.ok?r.json():null)
-    .then(d=>finish(!!(d&&d.open===true)))
-    .catch(()=>finish(false));
+  }).catch(()=>{
+    _exhOpenAt=Date.now();_exhOpenBusy=false;
+  });
 }
 
 // 申請を対戦表（GAS）へ送る。受付の送信と同じ作り。
