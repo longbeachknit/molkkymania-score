@@ -895,6 +895,11 @@ function makeTournament(overrides){
     bracket1Name:'決勝トーナメント',  // トーナメント①のアプリでの表示名
     bracket2TeamCount:0,            // トーナメント②（Bトーナメント）のチーム数。0＝②は無い大会
     bracket2Name:'Bトーナメント',    // トーナメント②のアプリでの表示名
+    // 交流戦の参加申請（希望者だけが出るしくみ）
+    //   enabled … 申請フォームを作るかどうか
+    //   count   … 交流戦の試合数
+    //   games   … 各試合の名前と説明（説明は参加者の選択画面に出る）
+    exhibition:{enabled:false,count:2,games:[{name:'交流戦①',desc:''},{name:'交流戦②',desc:''}]},
     systemChart:null,
     venue:null, // 会場の詳細（{code,name,detail}）。配信JSONに同梱して参加者へ届く
     tourInfo:{rules:'',notes:''}, // 大会の詳細（大会規約・大会における注意点）。配信JSONに同梱して参加者へ届く
@@ -2341,6 +2346,7 @@ function render(){
   else if(p==='rcpFinal')app.innerHTML=rRcpFinal();
   else if(p==='rcpDone')app.innerHTML=rRcpDone();
   else if(p==='tournamentInfo')app.innerHTML=rTournamentInfo();
+  else if(p==='exhibition')app.innerHTML=rExhibition();
   else if(p==='scoreSearch')app.innerHTML=rScoreSearch();
   else if(p==='scoreMatchList')app.innerHTML=rScoreMatchList();
   else if(p==='scoreView')app.innerHTML=rScoreView();
@@ -2835,6 +2841,16 @@ function rSetup(){
     _myTeamObj=(_liveTour.teams||[]).find(t=>String(t.id)===String(_my.teamId))||null;
   }
   const courtLabel=_my?'対戦コート<br>を見る':'対戦コート<br>を検索';
+
+  /* 交流戦の参加申請ボタン。
+     ・大会設定で「申請フォームを作る」にしてあること
+     ・対戦表で「交流戦の募集を開始する」を押してあること（GitHub の open:true）
+     の両方がそろったときだけ出る。募集を終了すると消える。 */
+  const _exh=exhOf(_liveTour);
+  if(_liveTour&&_exh.enabled)maybeRefreshExhibitionOpen(_liveTour.eventCode);
+  const _exhBtn=(_liveTour&&_exh.enabled&&_exh.games.length&&S._exhOpen===true)
+    ? `<button id="btn-go-exhibition" style="width:100%;margin-top:8px;padding:13px 8px;font-size:14px;font-weight:800;background:#FFF3CC;border:1.5px solid #E0A800;border-radius:10px;color:#6b4e00;cursor:pointer;">🤝 交流戦 参加申請（受付中）</button>`
+    : '';
   const courtIcon=_my?'📍':'🔍';
   const scoreLabel=_my?'スコアシート<br>を見る':'スコアシート<br>を検索';
 
@@ -2896,6 +2912,7 @@ function rSetup(){
       <button id="btn-go-schedule" style="padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">🕐 タイムスケジュール</button>
       <button id="btn-go-regulation" style="padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">📜 レギュレーション</button>
     </div>
+    ${_exhBtn}
   </div>`;
 
   // 開催中の大会があるときだけカードを出す。無ければテンプレは表示しない。
@@ -3732,6 +3749,39 @@ function ruleCardsHtml(obj){
     +scSection+`</div>`;
 }
 
+/* 管理者画面：交流戦の参加申請の設定
+     (a) 申請フォームを作るかどうか
+     (b) 交流戦の試合数
+     (c) それぞれの名前
+     (d) それぞれの詳細説明（参加者の選択画面に出る） */
+function exhEditorHtml(tour){
+  const ex=exhOf(tour);
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const NUM=['①','②','③','④','⑤','⑥','⑦','⑧','⑨'];
+  const games=ex.games.map((g,i)=>`
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;">
+      <div style="font-size:12px;font-weight:700;color:#111;margin-bottom:6px;">交流戦${NUM[i]}</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:3px;">アプリでの表示名</div>
+      <input type="text" class="te-exh-name" data-i="${i}" value="${esc(g.name)}" placeholder="交流戦${NUM[i]}" style="font-size:14px;"/>
+      <div style="font-size:12px;color:#6b7280;margin:8px 0 3px;">詳細説明・メモ（開催時間など。参加者の選択画面に出ます）</div>
+      <textarea class="te-exh-desc" data-i="${i}" rows="2" placeholder="例: 12:30〜13:05／2セット先取" style="width:100%;">${esc(g.desc)}</textarea>
+    </div>`).join('');
+  return `<div style="border-top:1px solid #e5e7eb;margin-top:4px;padding-top:12px;">
+    <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🤝 交流戦の参加申請</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:10px;line-height:1.7;">交流戦を「出たいチームだけが申し込む」形にするための設定です。<br><b>「作る」にしても、それだけではアプリにボタンは出ません。</b>対戦表の「モルック管理」→<b>「交流戦の募集を開始する」</b>を押したときに出て、「募集を終了する」で消えます。<br>申し込みは対戦表の「運営用交流戦参加確認」シートに書き込まれます。</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:3px;">参加申請フォーム</div>
+    <select id="te-exh-enabled" style="font-size:14px;margin-bottom:10px;">
+      <option value="0" ${ex.enabled?'':'selected'}>作らない</option>
+      <option value="1" ${ex.enabled?'selected':''}>作る</option>
+    </select>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:3px;">交流戦の試合数</div>
+    <select id="te-exh-count" style="font-size:14px;margin-bottom:10px;">
+      ${[0,1,2,3,4,5].map(n=>`<option value="${n}" ${ex.count===n?'selected':''}>${n===0?'なし':(n+'試合')}</option>`).join('')}
+    </select>
+    ${games}
+  </div>`;
+}
+
 // 優先ルールの1行トグル
 function priorityToggleHtml(priority){
   const cur=priority||'tournament';
@@ -3829,6 +3879,7 @@ function rAdminTourEdit(){
             </select>
           </div>
         </div>
+        ${exhEditorHtml(tour)}
       </div>
       <div style="font-size:11px;color:#9ca3af;margin-top:10px;">入力内容は自動で保存されます。「保存して戻る」を押すと全端末に配信されます。</div>
     </div>
@@ -6958,6 +7009,154 @@ function rTournamentInfo(){
   </div>`;
 }
 
+/* =========================================================================
+   交流戦の参加申請（8-6 / 1-4 で追加）
+
+   これまで交流戦は「負けたら自動的に参加」だったが、
+   今回から「対象の人のうち、出たい人だけが申し込む」形にした。
+
+   流れ
+     ① 対戦表の「モルック管理」→「交流戦の募集を開始する」を押す
+        → GitHub に {大会コード}_exhibition.json（open:true）が置かれる
+     ② アプリのホームに「交流戦 参加申請」ボタンが出る
+        （大会設定で「申請フォームを作る」にしてある大会だけ）
+     ③ 参加者が チーム → 交流戦①/② を選んで「参加を申請する」
+        → 対戦表の「運営用交流戦参加確認」シートに「参加」と書き込まれる
+     ④ 募集を終了すると、アプリのボタンは消える
+   ========================================================================= */
+
+// 大会設定の交流戦のところを、抜けがない形に整えて返す
+function exhOf(tour){
+  const e=(tour&&tour.exhibition)||{};
+  const NUM=['①','②','③','④','⑤','⑥','⑦','⑧','⑨'];
+  let n=parseInt(e.count,10);
+  if(!(n>=0))n=0;
+  if(n>9)n=9;
+  const games=[];
+  for(let i=0;i<n;i++){
+    const g=(e.games&&e.games[i])||{};
+    games.push({name:String(g.name||('交流戦'+NUM[i])),desc:String(g.desc||'')});
+  }
+  return {enabled:e.enabled===true,count:n,games:games};
+}
+
+/* いま募集中かどうかを GitHub から確かめる。
+   30秒に1回までしか見にいかない（通信を増やしすぎないため）。 */
+let _exhOpenAt=0,_exhOpenCode='',_exhOpenBusy=false;
+function maybeRefreshExhibitionOpen(code){
+  if(!code)return;
+  const now=Date.now();
+  if(_exhOpenBusy)return;
+  if(_exhOpenCode===code&&(now-_exhOpenAt)<30000)return;
+  _exhOpenBusy=true;
+  const url=GITHUB_RAW_BASE+'/'+toJsonFileCode(code)+'_exhibition.json?t='+now;
+  const finish=open=>{
+    _exhOpenCode=code;_exhOpenAt=Date.now();_exhOpenBusy=false;
+    if(S._exhOpen!==open){S._exhOpen=open;if(S.phase==='setup')render();}
+  };
+  fetch(url,{cache:'no-store'})
+    .then(r=>r.ok?r.json():null)
+    .then(d=>finish(!!(d&&d.open===true)))
+    .catch(()=>finish(false));
+}
+
+// 申請を対戦表（GAS）へ送る。受付の送信と同じ作り。
+async function submitExhibition(payload){
+  const tour=activeTour()||{};
+  const gasUrl=(tour.gasUrl&&tour.gasUrl.trim())||GAS_URL;
+  if(!gasUrl||!gasUrl.startsWith('https://script.google.com/')){
+    throw new Error('この大会の送信先が設定されていません。本部にお伝えください。');
+  }
+  const body=new URLSearchParams({data:JSON.stringify({
+    type:'exhibition',
+    eventCode:tour.eventCode||'',
+    teamNo:payload.teamNo,
+    teamName:payload.teamName,
+    gameIndex:payload.gameIndex,   // 1始まり（1＝交流戦①）
+    gameName:payload.gameName,
+    at:new Date().toISOString()
+  })});
+  const res=await fetch(gasUrl,{method:'POST',mode:'cors',body});
+  const json=await res.json();
+  if(json.status!=='ok')throw new Error(json.message||'送信エラー');
+  return json;
+}
+
+function resetExhibition(){
+  S._exView='team';S._exTeamNo='';S._exTeamName='';S._exGame=null;
+  S._exSubmitting=false;S._exError='';
+}
+
+// ===== 交流戦 参加申請の画面 =====
+function rExhibition(){
+  const tour=activeTour()||{};
+  const ex=exhOf(tour);
+  const v=S._exView||'team';
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const wrap=inner=>`<div style="padding:16px;max-width:480px;margin:0 auto;">${inner}</div>`;
+  const head=(title,backId)=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+      <button id="${backId}" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;white-space:nowrap;">← 戻る</button>
+      <div style="font-size:17px;font-weight:700;color:#111;">🤝 ${title}</div>
+    </div>`;
+
+  // ── 送信できました ──
+  if(v==='done'){
+    const g=ex.games[S._exGame]||{name:''};
+    return wrap(`
+      <div style="text-align:center;padding:20px 8px 8px;">
+        <div style="font-size:56px;line-height:1;margin-bottom:12px;">✅</div>
+        <div style="font-size:20px;font-weight:800;color:#0a6e57;margin-bottom:8px;">送信が完了しました</div>
+        <div style="font-size:14px;color:#374151;line-height:1.8;">交流戦の参加申請を受け付けました。<br>当日は本部の案内をお待ちください。</div>
+      </div>
+      <div style="background:#E1F5EE;border-radius:12px;padding:16px;margin:18px 0;">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;"><span style="color:#6b7280;">チーム</span><span style="font-weight:700;color:#111;">No.${esc(S._exTeamNo)}　${esc(S._exTeamName)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-top:1px solid #b7e2d2;"><span style="color:#6b7280;">申し込んだ試合</span><span style="font-weight:700;color:#111;">${esc(g.name)}</span></div>
+      </div>
+      <button id="btn-ex-again" style="width:100%;padding:13px;margin-bottom:10px;border:1.5px solid #1D9E75;border-radius:10px;background:#fff;color:#0a6e57;font-size:14px;font-weight:700;cursor:pointer;">もう一方の交流戦にも申し込む</button>
+      <button id="btn-ex-home" style="width:100%;padding:15px;border:none;border-radius:12px;background:#1D9E75;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">ホームに戻る</button>
+    `);
+  }
+
+  // ── どの交流戦に出るかを選ぶ ──
+  if(v==='game'){
+    const sel=S._exGame;
+    const cards=ex.games.map((g,i)=>{
+      const on=sel===i;
+      return`<button class="ex-game" data-i="${i}" style="width:100%;text-align:left;padding:16px;margin-bottom:12px;border:2px solid ${on?'#1D9E75':'#e5e7eb'};border-radius:12px;background:${on?'#E1F5EE':'#fff'};cursor:pointer;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="width:22px;height:22px;border-radius:11px;border:2px solid ${on?'#1D9E75':'#d1d5db'};background:${on?'#1D9E75':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;">${on?'✓':''}</span>
+          <span style="font-size:16px;font-weight:800;color:#111;">${esc(g.name)}</span>
+        </div>
+        ${g.desc?`<div style="font-size:13px;color:#4b5563;line-height:1.7;margin:8px 0 0 32px;white-space:pre-wrap;">${esc(g.desc)}</div>`:''}
+      </button>`;
+    }).join('');
+    return wrap(head('交流戦 参加申請','btn-ex-back-team')+`
+      <div style="background:#f9fafb;border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:#374151;">
+        申し込むチーム：<b>No.${esc(S._exTeamNo)}　${esc(S._exTeamName)}</b>
+      </div>
+      <div style="font-size:14px;font-weight:700;color:#111;margin-bottom:10px;">出たい交流戦を選んでください</div>
+      ${cards||'<div style="font-size:13px;color:#9ca3af;padding:12px 0;">交流戦が設定されていません。</div>'}
+      ${S._exError?`<div style="padding:12px;background:#fee2e2;border-radius:10px;color:#dc2626;font-size:13px;line-height:1.7;margin-bottom:12px;">${esc(S._exError)}</div>`:''}
+      <button id="btn-ex-submit" ${(sel==null||S._exSubmitting)?'disabled':''} style="width:100%;padding:16px;border:none;border-radius:12px;background:${(sel==null||S._exSubmitting)?'#d1d5db':'#1D9E75'};color:#fff;font-size:17px;font-weight:800;cursor:${(sel==null||S._exSubmitting)?'default':'pointer'};">${S._exSubmitting?'送信中...':'参加を申請する'}</button>
+      <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:10px;line-height:1.7;">送信が対戦表に書き込まれたことを確認してから、完了画面が出ます。<br>両方に出たい場合は、送信後にもう一度申し込めます。</div>
+    `);
+  }
+
+  // ── 自分のチームを選ぶ ──
+  const teams=(tour.teams||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
+  const cur=String(S._exTeamNo||'');
+  return wrap(head('交流戦 参加申請','btn-ex-home2')+`
+    <div style="font-size:13px;color:#6b7280;line-height:1.8;margin-bottom:16px;">交流戦は<b>出たいチームだけ</b>が参加します。<br>まず、申し込むチームを選んでください。</div>
+    ${teams.length
+      ?`<select id="ex-team" style="width:100%;padding:12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:16px;background:#fff;">
+          <option value="">-- チームを選択 --</option>
+          ${teams.map(t=>`<option value="${esc(t.id)}" ${cur===String(t.id)?'selected':''}>No.${esc(t.id)}　${esc(t.name||'')}</option>`).join('')}
+        </select>`
+      :`<div style="font-size:13px;color:#9ca3af;padding:12px 0;">参加チームがまだ登録されていません。</div>`}
+    <button id="btn-ex-next" ${cur?'':'disabled'} style="width:100%;padding:15px;margin-top:16px;border:none;border-radius:12px;background:${cur?'#1D9E75':'#d1d5db'};color:#fff;font-size:16px;font-weight:700;cursor:${cur?'pointer':'default'};">次へ →</button>
+  `);
+}
+
 // ===== 大会受付：レイアウト共通ヘッダ =====
 function rcpHeader(title,backPhase){
   return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
@@ -8655,6 +8854,25 @@ function bind(){
     const peEl=document.getElementById('te-period-end');if(peEl)tour.eventPeriodEnd=peEl.value;
     const rpwEl=document.getElementById('te-reception-pw');if(rpwEl)tour.receptionPw=rpwEl.value.trim();
     const btcEl=document.getElementById('te-bracket-count');if(btcEl)tour.bracketTeamCount=Number(btcEl.value)||64;
+    // 交流戦の参加申請
+    const exEn=document.getElementById('te-exh-enabled');
+    const exCn=document.getElementById('te-exh-count');
+    if(exEn||exCn){
+      const cur=exhOf(tour);
+      const n=exCn?(parseInt(exCn.value,10)||0):cur.count;
+      const NUM=['①','②','③','④','⑤','⑥','⑦','⑧','⑨'];
+      const games=[];
+      for(let i=0;i<n;i++){
+        const nm=document.querySelector('.te-exh-name[data-i="'+i+'"]');
+        const ds=document.querySelector('.te-exh-desc[data-i="'+i+'"]');
+        const old=cur.games[i]||{};
+        games.push({
+          name:(nm?nm.value.trim():(old.name||''))||('交流戦'+NUM[i]),
+          desc:(ds?ds.value.replace(/\s+$/,''):(old.desc||''))
+        });
+      }
+      tour.exhibition={enabled:exEn?(exEn.value==='1'):cur.enabled,count:n,games:games};
+    }
     const b1nEl=document.getElementById('te-bracket1-name');if(b1nEl)tour.bracket1Name=b1nEl.value.trim()||'決勝トーナメント';
     const b2cEl=document.getElementById('te-bracket2-count');if(b2cEl)tour.bracket2TeamCount=Number(b2cEl.value)||0;
     const b2nEl=document.getElementById('te-bracket2-name');if(b2nEl)tour.bracket2Name=b2nEl.value.trim()||'Bトーナメント';
@@ -8683,13 +8901,27 @@ function bind(){
     }
   }
   // 各入力欄を自動保存（途中で他操作をしても入力が消えないように）
-  ['te-venue','te-code','te-name','te-gasurl','te-sheeturl','te-tour-rules','te-tour-notes','te-period-start','te-period-end','te-reception-pw','te-bracket-count','te-bracket1-name','te-bracket2-count','te-bracket2-name','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
+  ['te-venue','te-code','te-name','te-gasurl','te-sheeturl','te-tour-rules','te-tour-notes','te-period-start','te-period-end','te-reception-pw','te-bracket-count','te-bracket1-name','te-bracket2-count','te-bracket2-name','te-exh-enabled','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.addEventListener('change',()=>{
       const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
       captureBasicFields(tour);saveActiveTour(tour);
     });
   });
+  // 交流戦：試合数を変えたら入力欄の数を作り直す
+  const exCntEl=document.getElementById('te-exh-count');
+  if(exCntEl)exCntEl.addEventListener('change',()=>{
+    const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
+    captureBasicFields(tour);saveActiveTour(tour);render();
+  });
+  // 交流戦：名前・説明の入力を保存
+  document.querySelectorAll('.te-exh-name,.te-exh-desc').forEach(el=>{
+    el.addEventListener('change',()=>{
+      const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
+      captureBasicFields(tour);saveActiveTour(tour);
+    });
+  });
+
   // コート図プレビューをキー入力ごとにリアルタイム更新（フォーカスを失わないよう全体renderはしない）
   function updateCourtMapPreview(){
     const clGrid=document.getElementById('cl-grid');
