@@ -143,6 +143,8 @@ let S={
   pFirst:null,pIdx:null,pOrders:[[],[]],
   pExclude:[[],[]],
   iP:'',iM:'single',iA:'',useAimed:false,rule37Pending:false,_tiView:null,_tiLoading:false,_tiError:null,_tiSchedule:[],_tiRegulation:'',_tiSections:null,_tiPrelim:[],_tiPrelimMatches:3,_tiPrelimQuery:'',_tiPrelimSelected:null,_tiBracket:null,_tiBracketSide:'left',_tiBracketNo:1,
+  // 交流戦の参加申請
+  _exhOpen:false,_exView:'team',_exTeamNo:'',_exTeamName:'',_exGame:null,_exSubmitting:false,_exError:'',
   prev:null,ssIdx:0,
   endPending:false,tieExtend:false,tlTieExtend:false,earlyEnd:false,
   molkoutWinner:null,
@@ -562,6 +564,7 @@ async function syncSettingsFromGitHub(eventCode,useRaw){
   if(data.bracket1Name!==undefined)tour.bracket1Name=data.bracket1Name;
   if(data.bracket2TeamCount!==undefined)tour.bracket2TeamCount=Number(data.bracket2TeamCount)||0;
   if(data.bracket2Name!==undefined)tour.bracket2Name=data.bracket2Name;
+  if(data.exhibition!==undefined)tour.exhibition=data.exhibition;
   if(data.sheetUrl!==undefined)tour.sheetUrl=data.sheetUrl;
   if(data.gasUrl)tour.gasUrl=data.gasUrl; // 空で上書きして消さないよう、値がある時だけ反映
   if(data.systemChart!==undefined)tour.systemChart=data.systemChart;
@@ -2841,16 +2844,6 @@ function rSetup(){
     _myTeamObj=(_liveTour.teams||[]).find(t=>String(t.id)===String(_my.teamId))||null;
   }
   const courtLabel=_my?'対戦コート<br>を見る':'対戦コート<br>を検索';
-
-  /* 交流戦の参加申請ボタン。
-     ・大会設定で「申請フォームを作る」にしてあること
-     ・対戦表で「交流戦の受付を開始する」を押してあること（GitHub の open:true）
-     の両方がそろったときだけ出る。受付を終了すると消える。 */
-  const _exh=exhOf(_liveTour);
-  if(_liveTour&&_exh.enabled)maybeRefreshExhibitionOpen(_liveTour.eventCode);
-  const _exhBtn=(_liveTour&&_exh.enabled&&_exh.games.length&&S._exhOpen===true)
-    ? `<button id="btn-go-exhibition" style="width:100%;margin-top:8px;padding:13px 8px;font-size:14px;font-weight:800;background:#FFF3CC;border:1.5px solid #E0A800;border-radius:10px;color:#6b4e00;cursor:pointer;">交流戦 参加申請（受付中）</button>`
-    : '';
   const courtIcon=_my?'📍':'🔍';
   const scoreLabel=_my?'スコアシート<br>を見る':'スコアシート<br>を検索';
 
@@ -2861,6 +2854,15 @@ function rSetup(){
   const _period=fmtEventPeriod(_liveTour);
   // 大会カードのテーマ色：場所に設定があればその色、無ければ既定のゴールド
   const _theme=(_venue&&_venue.themeColor)?_venue.themeColor:'#FFC93D';
+  /* 交流戦の参加申請ボタン。
+     ・大会設定で「申請フォームを作る」にしてあること
+     ・対戦表で「交流戦の受付を開始する」を押してあること（GitHub の open:true）
+     の両方がそろったときだけ出る。受付を終了すると消える。 */
+  const _exh=exhOf(_liveTour);
+  if(_liveTour&&_exh.enabled)maybeRefreshExhibitionOpen(_liveTour.eventCode);
+  const _exhBtn=(_liveTour&&_exh.enabled&&_exh.games.length&&S._exhOpen===true)
+    ? `<button id="btn-go-exhibition" style="width:100%;margin-top:8px;padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">交流戦参加申請はこちら（受付中）</button>`
+    : '';
   const _themeBg=_theme+'2E';   // 背景ハイライト（薄め）
   const _themeSoft=_theme+'4D'; // 受付済みボックス（やや濃いめ）
   const _showVenueDetail=venueHasDetail(_venue);
@@ -5228,6 +5230,7 @@ async function publishSettings(tour,opts){
     bracket1Name: tour.bracket1Name||'決勝トーナメント',
     bracket2TeamCount: Number(tour.bracket2TeamCount)||0,
     bracket2Name: tour.bracket2Name||'Bトーナメント',
+    exhibition: exhOf(tour),   // 交流戦の参加申請の設定（他の端末へ届ける）
     systemChart: tour.systemChart||null,
     venue: resolveVenue(tour), // 会場（場所）情報＋詳細を同梱して参加者へ配信
     tourInfo: tour.tourInfo||{rules:'',notes:''}, // 大会の詳細（規約・注意点）を同梱して参加者へ配信
@@ -5809,7 +5812,12 @@ function scApplyStructureText(obj,text){
   const to={};
   Object.keys(oldTo).forEach(k=>{
     const nm=k.split('@')[0];
-    if(parsed.columns.some(c=>c.name===nm)&&parsed.columns.some(c=>c.name===oldTo[k]))to[k]=oldTo[k];
+    // 行き先は「交流戦」だけでなく「交流戦@2」（2つ下の回戦）と書けるので、
+    // ＠より前だけを取り出して列名と見くらべる。
+    // ※ここで＠を外し忘れていたため、「決勝トーナメント→交流戦②」の指定が
+    //   保存のたびに消えてしまっていた（8-6 の不具合）。
+    const dest=scSplitRef(oldTo[k]).name;
+    if(parsed.columns.some(c=>c.name===nm)&&parsed.columns.some(c=>c.name===dest))to[k]=oldTo[k];
   });
   parsed.loseTo=to;
   // 【8-6】テンプレが持っている追加の矢印（予選から次点32チームへ、など）も引き継ぐ
@@ -5818,6 +5826,15 @@ function scApplyStructureText(obj,text){
   void scPrelimName;
   parsed.links=oldLinks.filter(l=>l&&nameOK(l.from)&&nameOK(l.to));
   if(obj&&obj.autoLose!==undefined)parsed.autoLose=obj.autoLose;
+  // 予選バーの色は構成テキストに書けないので、同じ名前のものから引き継ぐ
+  const oldPre=(obj&&Array.isArray(obj.prelims))?obj.prelims:[];
+  parsed.prelims=(parsed.prelims||[]).map(p=>{
+    const nm=scPrelimName(p);
+    const src=oldPre.find(o=>scPrelimName(o)===nm);
+    const col=(src&&typeof src==='object')?src.color:null;
+    if(!col)return p;
+    return (typeof p==='object')?Object.assign({},p,{color:col}):{name:nm,color:col};
+  });
   // セル個別色も同様に、現存する列のものだけ引き継ぐ
   const oldCellColors=(obj&&obj.cellColors)?obj.cellColors:{};
   const cellColors={};
@@ -6224,6 +6241,7 @@ function showScArrowMenu(ch,c,r,done){
 const SC_BUILTIN_TEMPLATES=[
   {
     id:'sc_bi_6696',
+    ver:3,   // ★内容を直したらこの数字を1つ増やす（端末側に「最新に更新」ボタンが出る）
     name:'66〜96チーム型（決勝トーナメント＋Bトーナメント＋交流戦）',
     desc:'一次予選3試合 →（上位64チーム）二次予選 → 決勝トーナメント。二次予選で負けたチームと、一次予選の次点32チームはBトーナメントへ。行は試合区分（第1試合〜第6試合）に合わせています。対戦表D（66〜96）用。',
     chart:{
@@ -6260,6 +6278,7 @@ const SC_BUILTIN_TEMPLATES=[
   },
   {
     id:'sc_bi_128',
+    ver:2,   // ★内容を直したらこの数字を1つ増やす
     name:'128チーム型（決勝トーナメント＋5位タイ＋15位タイ＋交流戦）',
     desc:'予選3試合のあと、4つのトーナメントに分かれる形。対戦表C（128）用の例です。中身は読み込んだあとで直せます。',
     text:[
@@ -6291,12 +6310,22 @@ function scSeedTemplates(force){
   let added=0;
   SC_BUILTIN_TEMPLATES.forEach(t=>{
     if(AD.chartTemplates.some(x=>x.id===t.id))return;
-    AD.chartTemplates.push({id:t.id,name:t.name,desc:t.desc||'',chart:scTemplateChart(t)});
+    AD.chartTemplates.push({id:t.id,ver:t.ver||1,name:t.name,desc:t.desc||'',chart:scTemplateChart(t)});
     added++;
   });
   AD.chartTplSeeded=true;
   saveAdmin(AD);
   return added;
+}
+
+/* この端末に入っているテンプレが、アプリに入っている最新の形より古いか？
+   ※古くても勝手に書き換えない（名前や説明を自分で直している場合があるため）。
+     一覧に「最新に更新」ボタンを出して、押されたときだけ図を作り直す。 */
+function scTplOutdated(t){
+  if(!t)return false;
+  const b=SC_BUILTIN_TEMPLATES.find(x=>x.id===t.id);
+  if(!b)return false;
+  return (Number(b.ver||1)>Number(t.ver||1));
 }
 
 /* テンプレの名前と説明を書き換える小さな画面 */
@@ -6340,9 +6369,11 @@ function showSystemChartTemplateModal(){
       <div style="flex:1;min-width:0;">
         <div style="font-size:14px;font-weight:700;color:#111;line-height:1.4;">${scEsc(t.name||'（名前なし）')}</div>
         ${t.desc?`<div style="font-size:12px;color:#6b7280;line-height:1.5;margin-top:2px;white-space:pre-wrap;">${scEsc(t.desc)}</div>`:''}
+        ${scTplOutdated(t)?`<div style="font-size:11px;color:#a16207;margin-top:4px;line-height:1.5;">この端末に入っているのは古い形です。「最新に更新」で作り直せます（名前と説明はそのまま残ります）。</div>`:''}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
         <button class="sct-load" data-id="${scEsc(t.id)}" style="padding:7px 12px;border:none;border-radius:8px;background:#2E86DE;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">読み込む</button>
+        ${scTplOutdated(t)?`<button class="sct-upd" data-id="${scEsc(t.id)}" style="padding:5px 8px;border:1.5px solid #E0A800;border-radius:8px;background:#FFF9E6;color:#7a5c00;font-size:12px;font-weight:700;cursor:pointer;">最新に更新</button>`:''}
         <div style="display:flex;gap:4px;">
           <button class="sct-edit" data-id="${scEsc(t.id)}" style="flex:1;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;cursor:pointer;">名前・説明</button>
           <button class="sct-del" data-id="${scEsc(t.id)}" style="padding:5px 8px;border:1.5px solid #e5a5a5;border-radius:8px;background:#fff;color:#c0392b;font-size:12px;cursor:pointer;">削除</button>
@@ -6379,6 +6410,19 @@ function showSystemChartTemplateModal(){
       close();
       render();
       alert('✅ テンプレ「'+t.name+'」を読み込みました');
+    };
+  });
+  overlay.querySelectorAll('.sct-upd').forEach(b=>{
+    b.onclick=()=>{
+      const t=(AD.chartTemplates||[]).find(x=>x.id===b.dataset.id);
+      const src=SC_BUILTIN_TEMPLATES.find(x=>x.id===b.dataset.id);
+      if(!t||!src)return;
+      if(!confirm('「'+t.name+'」の図を、最新の形に作り直します。\n（名前と説明はそのまま残ります）よろしいですか？'))return;
+      t.chart=scTemplateChart(src);
+      t.ver=src.ver||1;
+      saveAdmin(AD);
+      reopen();
+      setTimeout(()=>alert('✅ 最新の形に更新しました。\n大会に反映するには、このあと「読み込む」を押してください。'),50);
     };
   });
   overlay.querySelectorAll('.sct-edit').forEach(b=>{
@@ -9360,6 +9404,66 @@ function bind(){
       render();
     }
   };
+  // ===== 交流戦 参加申請 =====
+  const bgex=document.getElementById('btn-go-exhibition');
+  if(bgex)bgex.onclick=async()=>{
+    const code=await resolveActiveEventCode();
+    if(!code){alert('現在、開催中の大会はありません。');return;}
+    await syncAllFromGitHub(code);
+    const t=(AD.tournaments||[]).find(x=>x.eventCode===code);
+    if(t){AD.activeTourId=t.id;saveAdmin(AD);}
+    resetExhibition();
+    // 受付済みなら自分のチームを最初から選んでおく
+    const my=getValidMyTeam(code);
+    if(my&&my.teamId){
+      const tm=((t&&t.teams)||[]).find(x=>String(x.id)===String(my.teamId));
+      if(tm){S._exTeamNo=String(tm.id);S._exTeamName=tm.name||'';}
+    }
+    S.phase='exhibition';render();
+  };
+  const exSel=document.getElementById('ex-team');
+  if(exSel)exSel.addEventListener('change',()=>{
+    const v=exSel.value;
+    S._exTeamNo=v;
+    const t=activeTour()||{};
+    const tm=(t.teams||[]).find(x=>String(x.id)===String(v));
+    S._exTeamName=tm?(tm.name||''):'';
+    render();
+  });
+  const bexn=document.getElementById('btn-ex-next');
+  if(bexn)bexn.onclick=()=>{if(!S._exTeamNo)return;S._exView='game';S._exError='';render();};
+  const bexbt=document.getElementById('btn-ex-back-team');
+  if(bexbt)bexbt.onclick=()=>{S._exView='team';S._exError='';render();};
+  const bexh2=document.getElementById('btn-ex-home2');
+  if(bexh2)bexh2.onclick=()=>{resetExhibition();S.phase='setup';render();};
+  document.querySelectorAll('.ex-game').forEach(el=>{
+    el.onclick=()=>{S._exGame=parseInt(el.dataset.i,10);S._exError='';render();};
+  });
+  const bexs=document.getElementById('btn-ex-submit');
+  if(bexs)bexs.onclick=async()=>{
+    if(S._exGame==null||S._exSubmitting)return;
+    const tour=activeTour()||{};
+    const g=exhOf(tour).games[S._exGame];
+    if(!g)return;
+    S._exSubmitting=true;S._exError='';render();
+    try{
+      // 対戦表への書き込みが終わってから完了画面を出す（試合結果の送信と同じ作り）
+      await submitExhibition({
+        teamNo:S._exTeamNo,teamName:S._exTeamName,
+        gameIndex:S._exGame+1,gameName:g.name
+      });
+      S._exSubmitting=false;S._exView='done';render();
+    }catch(e){
+      S._exSubmitting=false;
+      S._exError=(e&&e.message)?e.message:'送信に失敗しました。通信環境を確認して、もう一度お試しください。';
+      render();
+    }
+  };
+  const bexa=document.getElementById('btn-ex-again');
+  if(bexa)bexa.onclick=()=>{S._exGame=null;S._exError='';S._exView='game';render();};
+  const bexh=document.getElementById('btn-ex-home');
+  if(bexh)bexh.onclick=()=>{resetExhibition();S.phase='setup';render();};
+
   // 完了画面：ホームへ
   const brch=document.getElementById('btn-rcp-home');
   if(brch)brch.onclick=()=>{resetReception();S.phase='setup';render();};
