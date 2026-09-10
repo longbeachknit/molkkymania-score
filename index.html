@@ -467,13 +467,26 @@ function toJsonFileCode(eventCode){
   return parts.length>=2?parts[parts.length-1]:eventCode;
 }
 
-async function fetchMatchesJson(eventCode){
+async function fetchMatchesJson(eventCode,useRaw){
   const now=Date.now();
   if(_jsonCache[eventCode]&&(now-_jsonCache[eventCode].ts)<CACHE_TTL){
     return _jsonCache[eventCode].data;
   }
   try{
     const fileCode=toJsonFileCode(eventCode);
+    if(useRaw){
+      /* 【raw経由】開催前（まだ始まっていない）の大会用。
+         読み取り回数の上限（1台1時間60回）を使わない。
+         そのかわり、配信し直してから届くまで最大5分ほどかかることがある。
+         開催前は組み合わせがそう変わらないので、こちらで十分。
+         その大会が「開催中」になった時点で、自動的にAPI経由へ戻る。 */
+      const url=GITHUB_RAW_BASE+'/'+fileCode+'.json?t='+Date.now();
+      const res=await fetch(url,{cache:'no-store'});
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      const data=await res.json(); // raw は生JSONなのでbase64デコード不要
+      _jsonCache[eventCode]={ts:now,data};
+      return data;
+    }
     // 【API経由】対戦表は api.github.com 経由で取得（各端末60回/時の制限あり）
     const url=GITHUB_DATA_BASE+'/'+fileCode+'.json?t='+Date.now();
     const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
@@ -629,15 +642,22 @@ async function syncVenueFromGitHub(code){
 }
 
 // 設定→対戦カードの順で取得（設定で大会を先に作成してからmatchesを反映）
-async function syncAllFromGitHub(eventCode){
+/* useRaw を true にすると、設定も対戦カードも raw 経由で取る。
+   開催前（まだ始まっていない）の大会だけに使う。
+   ※QRコードから試合を始める経路など、開催中の大会を扱うところでは
+     これまでどおり useRaw を渡さない（＝API経由・即時反映）こと。 */
+async function syncAllFromGitHub(eventCode,useRaw){
   // 1) 先に設定を取得して大会を作成/更新
-  await syncSettingsFromGitHub(eventCode);
+  await syncSettingsFromGitHub(eventCode,useRaw);
   // 2) 大会が存在する状態でmatchesを取得
-  await syncMatchesFromGitHub(eventCode);
+  await syncMatchesFromGitHub(eventCode,useRaw);
 }
+/* この大会コードを raw で取ってよいか。
+   「開催中の大会」以外＝まだ始まっていない大会なら true。 */
+function useRawFor_(eventCode){return !isLiveEventCode(eventCode);}
 
-async function syncMatchesFromGitHub(eventCode){
-  const data=await fetchMatchesJson(eventCode);
+async function syncMatchesFromGitHub(eventCode,useRaw){
+  const data=await fetchMatchesJson(eventCode,useRaw);
   const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
   if(!tour)return false;
   // 取得成功時のみ上書き、失敗時は古いデータもクリア
@@ -708,7 +728,7 @@ async function fetchTournamentInfo(action){
   }else if(action==='getPrelim'){
     fileName='_prelim.json';
     transform=d=>({ teams:(d&&d.teams)||[] });
-    useApi=true;   // ★予選結果はAPI経由
+    useApi=true;   // ★予選結果はAPI経由（開催中の大会は即時性が要るため）
   }else if(action==='getBracket'){
     fileName='_bracket.json';
     // 決勝トーナメントは raw 経由（レート制限実質なし・一斉閲覧に強い）
@@ -723,6 +743,9 @@ async function fetchTournamentInfo(action){
     throw new Error('未知のaction: '+action);
   }
 
+  /* 開催前（まだ始まっていない）の大会は、読み取り回数を使わない raw 経由にする。
+     予選結果は開催中しか変わらないので、これで困ることはない。 */
+  if(useApi&&!isLiveEventCode(tour.eventCode))useApi=false;
   const url=(useApi?GITHUB_DATA_BASE:GITHUB_RAW_BASE)+'/'+fileCode+fileName+'?t='+Date.now();
 
   const doFetch=async()=>{
@@ -1614,7 +1637,7 @@ async function refreshLiveEvent(){
     if(remote){
       const up=String(remote.upcomingEventCode||'');
       if(up&&up!==code){
-        try{await syncSettingsFromGitHub(up);}catch(e){}
+        try{await syncSettingsFromGitHub(up,true);}catch(e){}   // 開催前なので raw 経由（読み取り回数を使わない）
         S._upcomingEventCode=up;
       }else{
         S._upcomingEventCode='';
@@ -9853,7 +9876,8 @@ function bind(){
     }
     S._csEventCode=String(eventCode);
     // 対象の大会コードでデータを同期（失敗してもローカルデータで続行）
-    await syncAllFromGitHub(eventCode);
+    // 開催前の大会なら raw 経由（読み取り回数を使わない）／開催中はこれまでどおりAPI経由
+    await syncAllFromGitHub(eventCode,useRawFor_(eventCode));
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     /* 「いまの大会」を切り替えるのは、開催中の大会のときだけ。
        開催前の大会を見ただけで受付の相手などがすり替わらないようにするため。 */
@@ -9902,7 +9926,7 @@ function bind(){
       return;
     }
     S._tiEventCode=String(eventCode);
-    await syncAllFromGitHub(eventCode);
+    await syncAllFromGitHub(eventCode,useRawFor_(eventCode));
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     // 「いまの大会」を切り替えるのは、開催中の大会のときだけ
     if(tour&&isLiveEventCode(eventCode)){AD.activeTourId=tour.id;saveAdmin(AD);}
@@ -9999,7 +10023,7 @@ function bind(){
       alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
       return;
     }
-    await syncAllFromGitHub(eventCode);
+    await syncAllFromGitHub(eventCode,useRawFor_(eventCode));
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
     if(tour&&isLiveEventCode(eventCode)){AD.activeTourId=tour.id;saveAdmin(AD);}
     const url=tour&&tour.sheetUrl&&tour.sheetUrl.trim();
@@ -10071,7 +10095,7 @@ function bind(){
     delete _jsonCache['settings_'+ec];     // 大会の設定
     delete _jsonCache['settings_raw_'+ec];
     bcsRef.textContent='取得中...';bcsRef.disabled=true;
-    await syncAllFromGitHub(ec);
+    await syncAllFromGitHub(ec,useRawFor_(ec));
     render();
   };
   // 対戦コート検索：チーム名／チームNoのタブ切替（入力中の試合区分・チームは保持）
