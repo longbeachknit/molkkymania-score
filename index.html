@@ -921,6 +921,11 @@ function makeTournament(overrides){
    未設定（過去の大会データ）は 'team'＝チーム戦。 */
 function isSinglesTour(tour){return !!tour&&String((tour&&tour.matchType)||'team')==='singles';}
 function isSinglesActive(){try{return isSinglesTour(activeTour());}catch(e){return false;}}
+/* 画面の言い方を「チーム」「選手」で切り替えるための道具。
+     wTeam()      … いま開催中の大会で判断する（対戦コート検索・予選結果など）
+     wTeam(tour)  … 渡された大会で判断する（スコアシート検索など、大会を選ぶ画面）
+   シングルスでない大会・分からない大会は、これまでどおり「チーム」。 */
+function wTeam(tour){return (tour===undefined?isSinglesActive():isSinglesTour(tour))?'選手':'チーム';}
 /* 成績閲覧など「大会コード（01_0601 形式）」しか手元に無い場面用。
    getEventName と同じ探し方で大会を見つけ、シングルスかどうかを返す。 */
 function isSinglesEventCode(eventCode){
@@ -4156,7 +4161,7 @@ function rViewPortal(){
 
   // 検索ボックス（チーム・個人タブのみ）
   const searchHtml=vs.tab==='team'?`<input type="text" id="view-search" value="${vs.searchTeam||''}" placeholder="チーム名・チームNoで検索..." style="font-size:14px;margin-bottom:10px;"/>`:
-    vs.tab==='person'?`<input type="text" id="view-search" value="${vs.searchPerson||''}" placeholder="個人名・チーム名で検索..." style="font-size:14px;margin-bottom:10px;"/>`:'';
+    vs.tab==='person'?`<input type="text" id="view-search" value="${vs.searchPerson||''}" placeholder="${_sglView?'選手名で検索...':'個人名・チーム名で検索...'}" style="font-size:14px;margin-bottom:10px;"/>`:'';
 
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
@@ -4780,21 +4785,26 @@ function ssTeamBlockHtml(ss,compact){
   const mode=ss.mode||'select';
   const tab=(v,l)=>`<button class="ss-mode-tab" data-mode="${v}" style="flex:1;padding:${compact?'8px':'9px'} 4px;font-size:${compact?12:13}px;font-weight:700;border:none;border-radius:8px;background:${mode===v?'#F2B705':'#f3f4f6'};color:${mode===v?'#3a2c00':'#6b7280'};cursor:pointer;">${l}</button>`;
   const lt=findTourByScoreEvent(ss.eventCode);
+  /* ここは「大会を選ぶ」画面なので、開催中の大会ではなく
+     選ばれた大会がシングルスかどうかで呼び方を決める。
+     その大会をまだ読み込んでいない端末では lt が見つからず、
+     これまでどおり「チーム」と表示される（＝チーム戦扱い）。 */
+  const sW=wTeam(lt||null);
   const teams=((lt&&lt.teams)||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
   let inner;
   if(mode==='select'){
     inner=teams.length>0
-      ?`<div style="font-size:${compact?12:13}px;color:#6b7280;margin-bottom:4px;font-weight:600;">チーム名を選択</div>
+      ?`<div style="font-size:${compact?12:13}px;color:#6b7280;margin-bottom:4px;font-weight:600;">${sW}名を選択</div>
         <select id="ss-team-select" style="font-size:${compact?13:15}px;margin-bottom:${compact?10:12}px;">
-          <option value="">-- チームを選択 --</option>
+          <option value="">-- ${sW}を選択 --</option>
           ${teams.map(t=>`<option value="${t.id}" ${String(ss.teamNo||'')===String(t.id)?'selected':''}>No.${t.id}　${t.name}</option>`).join('')}
         </select>`
-      :`<div style="font-size:12px;color:#92400e;background:#FFF7ED;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-bottom:${compact?10:12}px;">この大会のチーム一覧データがないため、「チームNoで入力」をご利用ください</div>`;
+      :`<div style="font-size:12px;color:#92400e;background:#FFF7ED;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-bottom:${compact?10:12}px;">この大会の${sW}一覧データがないため、「${sW}Noで入力」をご利用ください</div>`;
   }else{
-    inner=`<div style="font-size:${compact?12:13}px;color:#6b7280;margin-bottom:4px;font-weight:600;">チームNo</div>
+    inner=`<div style="font-size:${compact?12:13}px;color:#6b7280;margin-bottom:4px;font-weight:600;">${sW}No</div>
       <input type="text" id="ss-team-no" value="${ss.teamNo||''}" placeholder="例: 073" style="font-size:14px;margin-bottom:${compact?10:12}px;"/>`;
   }
-  return`<div style="display:flex;gap:8px;margin-bottom:10px;">${tab('select','チーム名から選ぶ')}${tab('no','チームNoで入力')}</div>${inner}`;
+  return`<div style="display:flex;gap:8px;margin-bottom:10px;">${tab('select',sW+'名から選ぶ')}${tab('no',sW+'Noで入力')}</div>${inner}`;
 }
 
 function rScoreMatchList(){
@@ -6516,13 +6526,14 @@ function buildTeamSearchList(query){
   const teams=(tour.teams||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
   const q=String(query||'').trim().toLowerCase();
   const filtered=q?teams.filter(t=>String(t.name||'').toLowerCase().includes(q)||String(t.id||'').includes(q)):teams;
+  const tsW=wTeam();   // シングルス大会なら「選手」、それ以外は「チーム」
   if(teams.length===0){
-    return`<div style="text-align:center;padding:24px;color:#9ca3af;font-size:14px;">参加チームが登録されていません</div>`;
+    return`<div style="text-align:center;padding:24px;color:#9ca3af;font-size:14px;">参加${tsW}が登録されていません</div>`;
   }
   if(filtered.length===0){
-    return`<div style="text-align:center;padding:24px;color:#9ca3af;font-size:14px;">「${query}」に一致するチームが見つかりませんでした</div>`;
+    return`<div style="text-align:center;padding:24px;color:#9ca3af;font-size:14px;">「${query}」に一致する${tsW}が見つかりませんでした</div>`;
   }
-  return`<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">${filtered.length}チーム${q?'が一致':'を表示中'}</div>`
+  return`<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">${filtered.length}${tsW}${q?'が一致':'を表示中'}</div>`
     +filtered.map(t=>`<div style="display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
       <div style="background:#FFF3CC;color:#8a6d00;border-radius:8px;padding:6px 10px;font-size:14px;font-weight:800;min-width:64px;text-align:center;">No.${t.id}</div>
       <div style="flex:1;font-size:15px;font-weight:700;color:#111;">${t.name||''}</div>
@@ -6962,24 +6973,25 @@ function rTournamentInfo(){
     // 検索ボックス＋結果表示（チーム名プルダウン／チームNo入力のタブ切替）
     const pMode=S._tiPrelimMode||'select';
     const pModeTab=(mv,l)=>`<button class="ti-prelim-mode-tab" data-mode="${mv}" style="flex:1;padding:9px 4px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:${pMode===mv?'#1D9E75':'#f3f4f6'};color:${pMode===mv?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
+    const pW=wTeam();   // シングルス大会なら「選手」、それ以外は「チーム」
     const pTeamsSorted=teams.slice().sort((a,b)=>parseInt(a.teamNo,10)-parseInt(b.teamNo,10));
     const pSelectedNo=sel?String(sel.teamNo):'';
     const pInputBlock=pMode==='select'
       ?(pTeamsSorted.length>0
         ?`<select id="ti-prelim-select" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;background:#fff;">
-            <option value="">-- チームを選択 --</option>
+            <option value="">-- ${pW}を選択 --</option>
             ${pTeamsSorted.map(t=>`<option value="${t.teamNo}" ${pSelectedNo===String(t.teamNo)?'selected':''}>No.${t.teamNo}　${t.teamName||''}</option>`).join('')}
           </select>`
-        :`<div style="font-size:13px;color:#9ca3af;padding:8px 0;">チームデータがありません</div>`)
+        :`<div style="font-size:13px;color:#9ca3af;padding:8px 0;">${pW}データがありません</div>`)
       :`<div style="display:flex;gap:8px;">
-          <input type="text" id="ti-prelim-input" value="${q}" placeholder="チームNo（例: 001）" inputmode="numeric"
+          <input type="text" id="ti-prelim-input" value="${q}" placeholder="${pW}No（例: 001）" inputmode="numeric"
             style="flex:1;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;"/>
           <button id="ti-prelim-search" style="padding:10px 18px;background:#6FD0A4;color:#08341f;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">検索</button>
         </div>`;
     const searchBox=`<div style="margin-bottom:16px;">
       <div style="display:flex;gap:8px;margin-bottom:10px;">
-        ${pModeTab('select','チーム名から選ぶ')}
-        ${pModeTab('no','チームNoで入力')}
+        ${pModeTab('select',pW+'名から選ぶ')}
+        ${pModeTab('no',pW+'Noで入力')}
       </div>
       ${pInputBlock}
     </div>`;
@@ -7034,10 +7046,10 @@ function rTournamentInfo(){
     return`<div style="padding:16px;max-width:480px;margin:0 auto;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
         <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
-        <div style="font-size:17px;font-weight:700;color:#111;">🪪 チームNoを検索</div>
+        <div style="font-size:17px;font-weight:700;color:#111;">🪪 ${wTeam()}Noを検索</div>
       </div>
       <div style="margin-bottom:12px;">
-        <input type="text" id="ts-input" value="${q}" placeholder="チーム名のキーワードを入力"
+        <input type="text" id="ts-input" value="${q}" placeholder="${wTeam()}名のキーワードを入力"
           style="width:100%;padding:11px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;"/>
       </div>
       <div id="ts-list">${S._tiLoading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`:buildTeamSearchList(q)}</div>
@@ -7690,25 +7702,26 @@ function rCourtSearch(){
   // 検索フォーム本体（チーム名プルダウン／チームNo入力のタブ切替）
   const csMode=S._csMode||'select';
   const csModeTab=(v,l)=>`<button class="cs-mode-tab" data-mode="${v}" style="flex:1;padding:9px 4px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:${csMode===v?'#1D9E75':'#f3f4f6'};color:${csMode===v?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
+  const csW=wTeam();   // シングルス大会なら「選手」、それ以外は「チーム」
   const csTeamsSorted=(tourSrc.teams||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
   const csTeamBlock=csMode==='select'
     ?`<div>
-        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チーム名を選択</div>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">${csW}名を選択</div>
         ${csTeamsSorted.length>0
           ?`<select id="cs-team-select" style="font-size:16px;">
-              <option value="">-- チームを選択 --</option>
+              <option value="">-- ${csW}を選択 --</option>
               ${csTeamsSorted.map(t=>`<option value="${t.id}" ${String(q.teamNo)===String(t.id)?'selected':''}>No.${t.id}　${t.name}</option>`).join('')}
             </select>`
-          :`<div style="font-size:13px;color:#9ca3af;padding:8px 0;">参加チームが登録されていません</div>`}
+          :`<div style="font-size:13px;color:#9ca3af;padding:8px 0;">参加${csW}が登録されていません</div>`}
       </div>`
     :`<div>
-        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チームNo</div>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">${csW}No</div>
         <input type="text" id="cs-team-no" value="${q.teamNo}" placeholder="例: 073" style="font-size:18px;letter-spacing:2px;text-align:center;"/>
       </div>`;
   const searchForm=`<div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:12px;">
-        ${csModeTab('select','チーム名から選ぶ')}
-        ${csModeTab('no','チームNoで入力')}
+        ${csModeTab('select',csW+'名から選ぶ')}
+        ${csModeTab('no',csW+'Noで入力')}
       </div>
       <div style="display:grid;gap:10px;">
         ${csTeamBlock}
@@ -7729,7 +7742,7 @@ function rCourtSearch(){
           <button class="btn btn-gray btn-sm" id="btn-cs-toggle" style="width:100%;margin-bottom:8px;font-size:13px;">▲ 検索を閉じる</button>
           ${searchForm}
         </div>`
-      :`<button class="btn btn-gray btn-sm" id="btn-cs-toggle" style="width:100%;margin-bottom:12px;font-size:13px;padding:9px;">🔍 他のチーム・試合区分を検索</button>`)
+      :`<button class="btn btn-gray btn-sm" id="btn-cs-toggle" style="width:100%;margin-bottom:12px;font-size:13px;padding:9px;">🔍 他の${csW}・試合区分を検索</button>`)
     :searchForm;
 
   const headerTitle=personalized?'対戦コートを見る':'対戦コートを検索';
