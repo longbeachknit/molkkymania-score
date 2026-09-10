@@ -3003,7 +3003,10 @@ function rSetup(){
   const _upVenue=resolveVenue(_upTour);
   const _upVenueName=_upVenue?String((_upVenue.detail&&_upVenue.detail.locationName)||_upVenue.name||'').trim():'';
   const _upPeriod=fmtEventPeriod(_upTour);
-  const _upTheme=(_upVenue&&_upVenue.themeColor)?_upVenue.themeColor:'#7FB3E8';
+  /* カードの色は開催中の大会とまったく同じ決め方。
+     「場所の管理」でその場所にテーマカラーを設定していればその色、
+     設定していなければ既定のゴールド（開催中のカードと同じ）。 */
+  const _upTheme=(_upVenue&&_upVenue.themeColor)?_upVenue.themeColor:'#FFC93D';
   const _upRaw=(_upTour&&_upTour.displayName&&_upTour.displayName.trim())?_upTour.displayName:(_upTour?_upTour.eventName:'');
   const _upNameHtml=escH(_upRaw).replace(/\\n/g,'<br>').replace(/\n/g,'<br>');
   const _upcomingCard=_upTour?`<div style="margin-bottom:20px;padding:14px 16px;background:${_upTheme}2E;border:1.5px solid ${_upTheme};border-radius:14px;">
@@ -3011,7 +3014,6 @@ function rSetup(){
     <div style="font-size:18px;font-weight:800;color:#1a1a1a;line-height:1.35;margin-top:3px;">${_upNameHtml}</div>
     ${_upVenueName?`<div style="font-size:13px;color:#6b7280;margin-top:7px;line-height:1.5;">📍 ${escH(_upVenueName)}</div>`:''}
     ${_upPeriod?`<div style="font-size:13px;color:#6b7280;margin-top:2px;line-height:1.5;">🗓 ${escH(_upPeriod)}</div>`:''}
-    <div style="font-size:12px;color:#6b7280;margin-top:7px;line-height:1.6;">この大会はまだ始まっていません。会場や対戦相手を、前もって確認できます。<br>受付と試合開始は、大会が始まってからです。</div>
     ${eventCardBtnsHtml(_upTour,_upTheme)}
   </div>`:'';
 
@@ -6704,11 +6706,14 @@ function showSystemChartTemplateModal(){
 
 // ===== チームNo検索：一覧HTML生成（キーワードでチーム名を部分一致絞り込み） =====
 function buildTeamSearchList(query){
-  const tour=activeTour()||{teams:[]};
+  /* 【8-7 修正】ここが activeTour()（＝開催中の大会）を直接見ていたため、
+     開催前の大会のカードから開いても、開催中の大会の一覧が出てしまっていた。
+     大会情報の画面が見ている大会（tiTour）に合わせる。 */
+  const tour=tiTour()||{teams:[]};
   const teams=(tour.teams||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
   const q=String(query||'').trim().toLowerCase();
   const filtered=q?teams.filter(t=>String(t.name||'').toLowerCase().includes(q)||String(t.id||'').includes(q)):teams;
-  const tsW=wTeam();   // シングルス大会なら「選手」、それ以外は「チーム」
+  const tsW=wTeam(tiTour()||null);   // シングルス大会なら「選手」、それ以外は「チーム」
   if(teams.length===0){
     return`<div style="text-align:center;padding:24px;color:#9ca3af;font-size:14px;">参加${tsW}が登録されていません</div>`;
   }
@@ -6908,7 +6913,7 @@ function rTournamentInfo(){
 
     /* 【8-6】トーナメントは最大2つ。いまどちらを見ているかは S._tiBracketNo（1 or 2）で決まる。
        チーム数と表示名は、それぞれ管理者画面で設定したものを使う（_settings.json 経由で配信）。 */
-    const _tourB=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):activeTour();
+    const _tourB=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):tiTour();
     const _bNo=Number(S._tiBracketNo)||1;
     const _hasB2=Number(_tourB&&_tourB.bracket2TeamCount)>0;
     const teamCount=(_bNo===2?Number(_tourB&&_tourB.bracket2TeamCount):Number(_tourB&&_tourB.bracketTeamCount))||64;
@@ -7229,10 +7234,10 @@ function rTournamentInfo(){
     return`<div style="padding:16px;max-width:480px;margin:0 auto;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
         <button id="btn-ti-sub-back" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-size:14px;color:#374151;">← 戻る</button>
-        <div style="font-size:17px;font-weight:700;color:#111;">🪪 ${wTeam()}Noを検索</div>
+        <div style="font-size:17px;font-weight:700;color:#111;">🪪 ${wTeam(tour||null)}Noを検索</div>
       </div>
       <div style="margin-bottom:12px;">
-        <input type="text" id="ts-input" value="${q}" placeholder="${wTeam()}名のキーワードを入力"
+        <input type="text" id="ts-input" value="${q}" placeholder="${wTeam(tour||null)}名のキーワードを入力"
           style="width:100%;padding:11px 12px;border:1.5px solid #d1d5db;border-radius:10px;font-size:15px;"/>
       </div>
       <div id="ts-list">${S._tiLoading?`<div style="text-align:center;padding:32px;color:#9ca3af;">読み込み中...</div>`:buildTeamSearchList(q)}</div>
@@ -7876,7 +7881,7 @@ function rCourtSearch(){
             </div>
           </div>
           ${_csLive?`<button class="btn btn-green cs-start-btn" data-matchid="${r.matchId}" style="width:100%;padding:12px;font-size:15px;font-weight:700;">この試合を開始する →</button>`
-            :`<div style="text-align:center;padding:9px;background:#f3f4f6;border-radius:8px;font-size:12px;color:#6b7280;">この大会はまだ始まっていません（下見用）</div>`}
+            :`<div style="text-align:center;padding:9px;background:#f3f4f6;border-radius:8px;font-size:12px;color:#6b7280;">この大会はまだ始まっていません</div>`}
           ${renderCourtMapBlock(tourSrc.courtLayout,courtNo,r.matchId)}
         </div>`;
       }).join('');
