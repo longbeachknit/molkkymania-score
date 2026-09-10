@@ -7542,15 +7542,10 @@ function rReception(){
      一覧では「モルックネーム（本名）」の形で出して本人が選びやすくする。 */
   const _sgl=isSinglesTour(tour);
   const _W=_sgl?'選手':'チーム';
-  const realName=(t)=>{
-    const m=String((t&&t.members)||'').split(/[,、]/).map(s=>s.trim()).filter(Boolean);
-    return m.length?m[0]:'';
-  };
-  const teamLabel=(t)=>{
-    const rn=_sgl?realName(t):'';
-    return t.name+(rn?'（'+rn+'）':'');
-  };
-  const teamOpts=teams.map(t=>`<option value="${t.id}" ${String(st.selectedTeamId)===String(t.id)?'selected':''}>No.${t.id}　${teamLabel(t)}</option>`).join('');
+  /* 名前の出し方は「No.○○　選手名（モルックネーム）」だけにする。
+     以前はシングルスのとき本名を括弧で添えていたが、
+     ほかの選手を選ぶ画面とそろえるため、本名は出さないことにした。 */
+  const teamOpts=teams.map(t=>`<option value="${t.id}" ${String(st.selectedTeamId)===String(t.id)?'selected':''}>No.${t.id}　${t.name}</option>`).join('');
 
   const modeTab=(v,l)=>`<button class="rcp-mode-tab" data-mode="${v}" style="flex:1;padding:10px 4px;font-size:14px;font-weight:700;border:none;border-radius:8px;background:${st.mode===v?'#1D9E75':'#f3f4f6'};color:${st.mode===v?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
 
@@ -7567,7 +7562,7 @@ function rReception(){
         const matched=teams.find(t=>String(t.id)===st.teamNo||String(parseInt(t.id,10))===String(parseInt(st.teamNo,10)));
         const preview=st.teamNo
           ?(matched
-            ?`<div style="margin-top:8px;padding:10px 12px;background:#E1F5EE;border-radius:8px;font-size:15px;font-weight:700;color:#085041;">✓ ${teamLabel(matched)}</div>`
+            ?`<div style="margin-top:8px;padding:10px 12px;background:#E1F5EE;border-radius:8px;font-size:15px;font-weight:700;color:#085041;">✓ ${matched.name}</div>`
             :`<div style="margin-top:8px;padding:10px 12px;background:#FCEBEB;border-radius:8px;font-size:13px;color:#b91c1c;">該当する${_W}が見つかりません</div>`)
           :'';
         return`<div>
@@ -7598,7 +7593,7 @@ function rRcpPw(){
   const t=rcpTeam();
   return`<div style="padding:8px 0 4px;">
     ${rcpHeader('大会受付','reception')}
-    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${t?rcpDisplayName(t)+'（No.'+t.id+'）':''}</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${t?t.name+'（No.'+t.id+'）':''}</div>
     <div class="card" style="padding:16px;margin-bottom:12px;">
       <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">受付パスワード（数字4桁／会場掲示）</div>
       <input type="text" id="rcp-pw" value="${st.pwInput}" placeholder="••••" maxlength="4" inputmode="numeric" style="font-size:22px;letter-spacing:10px;text-align:center;"/>
@@ -7609,15 +7604,6 @@ function rRcpPw(){
 }
 
 // 受付対象チームのオブジェクトを取得
-/* 受付画面で名前を出すときの共通の書き方。
-   シングルスは「モルックネーム（本名）」、チーム戦は今までどおりチーム名だけ。 */
-function rcpDisplayName(t){
-  if(!t)return'';
-  if(!isSinglesActive())return t.name;
-  const m=String(t.members||'').split(/[,、]/).map(s=>s.trim()).filter(Boolean);
-  return t.name+(m.length?'（'+m[0]+'）':'');
-}
-
 function rcpTeam(){
   const tour=activeTour()||{teams:[]};
   return(tour.teams||[]).find(t=>String(t.id)===String(_rcpState.selectedTeamId))||null;
@@ -7734,7 +7720,7 @@ function rRcpDone(){
         <div style="font-size:56px;margin-bottom:12px;">⚠️</div>
         <div style="font-size:21px;font-weight:800;color:#92400e;margin-bottom:14px;line-height:1.5;">詳細の確認を行いますので、<br>本部にお越しください</div>
         ${alreadyNote}
-        <div style="font-size:15px;color:#374151;line-height:1.6;">${t?rcpDisplayName(t)+'（No.'+t.id+'）':''}</div>
+        <div style="font-size:15px;color:#374151;line-height:1.6;">${t?t.name+'（No.'+t.id+'）':''}</div>
       </div>
       <button class="btn btn-green" id="btn-rcp-home" style="width:100%;padding:15px;font-size:16px;font-weight:700;">ホームに戻る</button>
     </div>`;
@@ -7744,7 +7730,7 @@ function rRcpDone(){
       <div style="font-size:56px;margin-bottom:12px;">✅</div>
       <div style="font-size:22px;font-weight:800;color:#1D9E75;margin-bottom:10px;">受付が完了しました</div>
       ${alreadyNote}
-      <div style="font-size:15px;color:#374151;line-height:1.6;">${t?rcpDisplayName(t)+'（No.'+t.id+'）':''}<br>受付ありがとうございました。</div>
+      <div style="font-size:15px;color:#374151;line-height:1.6;">${t?t.name+'（No.'+t.id+'）':''}<br>受付ありがとうございました。</div>
     </div>
     <button class="btn btn-green" id="btn-rcp-home" style="width:100%;padding:15px;font-size:16px;font-weight:700;">ホームに戻る</button>
   </div>`;
