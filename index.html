@@ -3594,25 +3594,56 @@ function rAdmin(){
 
 function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 // 大会1件の管理行（フォルダ移動ドロップダウン付き）
+/* 【8-7】番号順に並べるための比べ方。
+   「01」「02」…「10」のような数字のコードは、数として比べる
+   （文字のまま比べると「10」が「9」より前に来てしまうため）。
+   数字でないコードは、数字のものより後ろに置いて、文字順で並べる。 */
+function byCodeAsc_(getCode){
+  return (a,b)=>{
+    const ca=String(getCode(a)||'').trim(), cb=String(getCode(b)||'').trim();
+    const na=/^\d+$/.test(ca)?parseInt(ca,10):NaN;
+    const nb=/^\d+$/.test(cb)?parseInt(cb,10):NaN;
+    const aNum=!isNaN(na), bNum=!isNaN(nb);
+    if(aNum&&bNum)return na-nb;
+    if(aNum!==bNum)return aNum?-1:1;
+    return ca.localeCompare(cb,'ja');
+  };
+}
+/* 場所の一覧を番号順に並べたものを返す。
+   編集・削除ボタンは「元の並びの何番目か」を使うので、元の位置(i)も一緒に持たせる。 */
+function venuesSorted_(ad){
+  return ((ad&&ad.venues)||[]).map((v,i)=>({v,i})).sort(byCodeAsc_(x=>x.v.code));
+}
+// 大会の一覧を、大会コードの番号順に並べたものを返す
+function toursSorted_(list){
+  return (list||[]).slice().sort(byCodeAsc_(t=>t.eventCode));
+}
+
 function adminTourRowHtml(t,ad){
   const venue=(ad.venues||[]).find(v=>v.code===t.venueCode);
   const folderOpts='<option value="">未分類</option>'+(ad.folders||[]).map(f=>`<option value="${f.id}" ${String(t.folderId||'')===String(f.id)?'selected':''}>${escHtml(f.name)}</option>`).join('');
+  /* 【8-7 修正】名前とボタンを横1列に詰め込んでいたため、ボタンに場所を取られて
+     大会名が何行にも折り返し、1件がとても縦長になっていた。
+     1段目＝大会名（横幅いっぱい）、2段目＝ボタン（入りきらなければ折り返す）に分ける。
+     ボタンの文字は white-space:nowrap で、途中で折り返さないようにする。 */
+  const _bs='padding:3px 8px;white-space:nowrap;';
+  const _tag='font-size:11px;padding:2px 6px;border-radius:99px;white-space:nowrap;';
   return`<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:600;color:#111;">${t.eventName||'（大会名未設定）'}</div>
-        <div style="font-size:12px;color:#6b7280;margin-top:2px;">${venue?venue.name:'場所未設定'} / コード: ${t.eventCode||'未設定'}</div>
-        <div style="font-size:12px;color:#9ca3af;">チーム${(t.teams||[]).length}件 / 対戦${(t.matches||[]).length}件</div>
-      </div>
-      ${t.eventCode?`<button class="btn btn-gray btn-xs admin-refresh-tour" data-code="${t.venueCode?t.venueCode+'_'+t.eventCode:t.eventCode}" title="配信された最新の内容を取り込みます" style="padding:3px 8px;">⟳ 更新</button>`:''}
-      <button class="btn btn-gray btn-xs admin-edit-tour" data-id="${t.id}" style="padding:3px 8px;">編集</button>
-      <button class="btn btn-red-o btn-xs admin-del-tour" data-id="${t.id}" style="padding:2px 7px;font-size:11px;">削除</button>
+    <div style="min-width:0;">
+      <div style="font-size:14px;font-weight:600;color:#111;line-height:1.4;word-break:break-word;">${t.eventName||'（大会名未設定）'}</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px;">${venue?venue.name:'場所未設定'} / コード: ${t.eventCode||'未設定'}</div>
+      <div style="font-size:12px;color:#9ca3af;">チーム${(t.teams||[]).length}件 / 対戦${(t.matches||[]).length}件</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;">
+      ${t.eventCode?`<button class="btn btn-gray btn-xs admin-refresh-tour" data-code="${t.venueCode?t.venueCode+'_'+t.eventCode:t.eventCode}" title="配信された最新の内容を取り込みます" style="${_bs}">⟳ 更新</button>`:''}
+      <button class="btn btn-gray btn-xs admin-edit-tour" data-id="${t.id}" style="${_bs}">編集</button>
+      <button class="btn btn-red-o btn-xs admin-del-tour" data-id="${t.id}" style="padding:2px 7px;font-size:11px;white-space:nowrap;">削除</button>
       ${(ad.activeEventCode&&t.eventCode&&ad.activeEventCode===t.eventCode)?
-        '<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:99px;">📡 配信中</span>':
-        `<button class="btn btn-gray btn-xs admin-set-active" data-code="${t.eventCode}" style="padding:3px 8px;">📡 配信中にする</button>`}
+        `<span style="${_tag}background:#FEF3C7;color:#92400E;">📡 配信中</span>`:
+        `<button class="btn btn-gray btn-xs admin-set-active" data-code="${t.eventCode}" style="${_bs}">📡 配信中にする</button>`}
       ${(ad.upcomingEventCode&&t.eventCode&&ad.upcomingEventCode===t.eventCode)?
-        `<span style="font-size:11px;background:#EAF2FB;color:#24507d;padding:2px 6px;border-radius:99px;">🗓 次の大会</span><button class="btn btn-gray btn-xs admin-clear-upcoming" style="padding:3px 8px;">解除</button>`:
-        `<button class="btn btn-gray btn-xs admin-set-upcoming" data-code="${t.eventCode}" style="padding:3px 8px;">🗓 次の大会にする</button>`}
+        `<span style="${_tag}background:#EAF2FB;color:#24507d;">🗓 次の大会</span><button class="btn btn-gray btn-xs admin-clear-upcoming" style="${_bs}">解除</button>`:
+        `<button class="btn btn-gray btn-xs admin-set-upcoming" data-code="${t.eventCode}" style="${_bs}">🗓 次の大会にする</button>`}
     </div>
     <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
       <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">📁 フォルダ</span>
@@ -3654,7 +3685,9 @@ function rAdminTop(){
         <button class="btn btn-green btn-sm" id="btn-venue-import" style="white-space:nowrap;padding:8px 12px;">⬇️ 取り込む</button>
       </div>
       ${(ad.venues||[]).length===0?'<div style="font-size:13px;color:#9ca3af;">まだ登録がありません</div>':
-        (ad.venues||[]).map((v,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+        /* 【8-7 修正】登録した順ではなく、番号順に並べる。
+           編集・削除は「元の並びの何番目か」を使うので、元の位置(x.i)をそのまま渡す。 */
+        venuesSorted_(ad).map(({v,i})=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
           <span title="${v.themeColor?'テーマカラー設定あり':'テーマカラー未設定'}" style="width:14px;height:14px;border-radius:50%;flex-shrink:0;background:${v.themeColor||'#fff'};border:1px solid ${v.themeColor?'rgba(0,0,0,0.2)':'#d1d5db'};"></span>
           <div style="flex:1;font-size:14px;"><span style="font-weight:600;">${v.code}</span> : ${v.name}</div>
           <button class="btn btn-gray btn-xs admin-pub-venue" data-idx="${i}" title="この場所を配信します（他の端末が取り込めるようになります）" style="padding:3px 8px;">📡</button>
@@ -3693,7 +3726,8 @@ function rAdminTop(){
           <div style="margin-top:4px;">${recent.map(t=>adminTourRowHtml(t,ad)).join('')}</div>
         </details>`:'';
         const foldersHtml=folders.map(f=>{
-          const inF=tours.filter(t=>String(t.folderId||'')===String(f.id));
+          // 【8-7 修正】登録した順ではなく、大会コードの番号順に並べる
+          const inF=toursSorted_(tours.filter(t=>String(t.folderId||'')===String(f.id)));
           return`<details data-fold="${f.id}" ${_adminFolderOpen[f.id]?'open':''} style="margin-bottom:8px;border:1px solid #eee;border-radius:8px;padding:6px 10px;">
             <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#111;">📁 ${escHtml(f.name)} <span style="font-size:11px;color:#9ca3af;font-weight:400;">(${inF.length})</span></summary>
             <div style="display:flex;gap:6px;margin:6px 0 4px;">
@@ -3703,7 +3737,8 @@ function rAdminTop(){
             ${inF.length?inF.map(t=>adminTourRowHtml(t,ad)).join(''):'<div style="font-size:12px;color:#9ca3af;padding:4px 0;">この中に大会はありません</div>'}
           </details>`;
         }).join('');
-        const un=tours.filter(t=>!t.folderId);
+        // 【8-7 修正】未分類も大会コードの番号順（「最近使った大会」は新しい順のまま）
+        const un=toursSorted_(tours.filter(t=>!t.folderId));
         const unHtml=`<details data-fold="__uncat__" ${_adminFolderOpen['__uncat__']!==false?'open':''} style="margin-bottom:4px;">
           <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#111;">📄 未分類 <span style="font-size:11px;color:#9ca3af;font-weight:400;">(${un.length})</span></summary>
           <div style="margin-top:4px;">${un.length?un.map(t=>adminTourRowHtml(t,ad)).join(''):'<div style="font-size:12px;color:#9ca3af;padding:4px 0;">未分類の大会はありません</div>'}</div>
@@ -3920,7 +3955,8 @@ function rAdminTourEdit(){
     </div>`).join('');
   }
 
-  const venueOpts=(ad.venues||[]).map(v=>`<option value="${v.code}" ${tour.venueCode===v.code?'selected':''}>${v.code}: ${v.name}</option>`).join('');
+  // 【8-7】ここも番号順にそろえる
+  const venueOpts=venuesSorted_(ad).map(({v})=>`<option value="${v.code}" ${tour.venueCode===v.code?'selected':''}>${v.code}: ${v.name}</option>`).join('');
 
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
