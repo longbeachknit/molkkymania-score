@@ -5892,8 +5892,13 @@ function scApplyStructureText(obj,text){
     const nm=scPrelimName(p);
     const src=oldPre.find(o=>scPrelimName(o)===nm);
     const col=(src&&typeof src==='object')?src.color:null;
-    if(!col)return p;
-    return (typeof p==='object')?Object.assign({},p,{color:col}):{name:nm,color:col};
+    // 置き場所（offset）も構成テキストには書けないので、色と同じように名前で引き継ぐ
+    const off=(src&&typeof src==='object')?src.offset:null;
+    if(!col&&!off)return p;
+    const base=(typeof p==='object')?Object.assign({},p):{name:nm};
+    if(col)base.color=col;
+    if(off)base.offset=off;
+    return base;
   });
   // セル個別色も同様に、現存する列のものだけ引き継ぐ
   const oldCellColors=(obj&&obj.cellColors)?obj.cellColors:{};
@@ -5947,6 +5952,9 @@ function scRefToPos(v,cols){
 function scPrelimName(p){return (p&&typeof p==='object')?String(p.name||''):String(p==null?'':p);}
 function scPrelimSpan(p){const n=(p&&typeof p==='object')?parseInt(p.span,10):NaN;return (n>=1)?n:0;}
 function scPrelimColor(p){const k=(p&&typeof p==='object')?p.color:null;return SC_COLORS[scColorOf(k||'gray')]||SC_COLORS.gray;}
+/* 予選バーを「左から何列ぶん空けて」置くか。0（未指定）＝いちばん左。
+   例）3列の図で offset:1 なら、真ん中の列の上に置かれる。 */
+function scPrelimOffset(p){const n=(p&&typeof p==='object')?parseInt(p.offset,10):NaN;return (n>=1)?n:0;}
 
 /* 図の中で「何試合目まであるか」 */
 function scMaxRows(cols){
@@ -6043,8 +6051,15 @@ function renderSystemChart(ch,editable){
     h+='<tr>';
     h+=`<td style="text-align:center;padding:4px 1px;color:#444;white-space:nowrap;font-size:${Math.max(9,fs-1)}px;line-height:1.2;">予選${scCircled(i+1)}</td>`;
     const pc=scPrelimColor(p);
+    /* 左をどれだけ空けるか。列と列のあいだにも1マスあるので、1列ぶん＝2マス。
+       はみ出す指定は、右端に収まるところまで戻す。 */
+    let off=scPrelimOffset(p);
+    if(off+span>nCols)off=Math.max(0,nCols-span);
+    const leadCells=Math.min(Math.max(0,totalGrid-barCells),2*off);
+    if(leadCells>0)h+=`<td colspan="${leadCells}"></td>`;
     h+=`<td data-prelim="${i}" colspan="${barCells}" style="background:${pc.bg};border:1px solid ${pc.bd};text-align:center;padding:8px;color:${pc.tx};font-weight:600;">${scEsc(pname)}</td>`;
-    if(barCells<totalGrid)h+=`<td colspan="${totalGrid-barCells}"></td>`;
+    const usedCells=leadCells+barCells;
+    if(usedCells<totalGrid)h+=`<td colspan="${totalGrid-usedCells}"></td>`;
     h+='</tr>';
     // 予選のバーの下の空き ＝ 矢印がここを横に通れる「通路」
     h+=`<tr data-parow="${i}"><td colspan="${totalGrid+1}" style="height:26px;"></td></tr>`;
@@ -6337,6 +6352,42 @@ const SC_BUILTIN_TEMPLATES=[
     }
   },
   {
+    id:'sc_bi_singles_b',
+    ver:1,   // ★内容を直したらこの数字を1つ増やす（端末側に「最新に更新」ボタンが出る）
+    name:'シングルス112〜128人型（決勝トーナメント＋Lトーナメント＋Bトーナメント）',
+    desc:'シングルス対戦表B（112〜128）用。一次予選3試合のあと、1〜32位は決勝トーナメントへ直行、33〜96位は二次予選へ、97位以下はBトーナメントへ進みます。二次予選に勝てば決勝トーナメント、負ければBトーナメント。決勝トーナメント1回戦で負けた人はLトーナメントへ移ります。Lトーナメントの決勝だけ「3ソロ2先」（黄色）です。',
+    chart:{
+      enabled:true,cornerLabel:'',
+      // 一次予選①〜③は全員。二次予選は33〜96位だけなので、左側だけの短いバーにする（span:1）
+      // 二次予選は33〜96位だけ。図に合わせて真ん中（Lトーナメントの上）に置く
+      prelims:['一次予選①','一次予選②','一次予選③',{name:'二次予選',span:1,offset:1,color:'green'}],
+      rowLabels:['第1試合','第2試合','第3試合','第4試合','第5試合','第6試合','第7試合'],
+      // 「3ソロ2先」＝3人で同時に行う2セット先取。Lトーナメントの決勝だけこの形（黄色）
+      legend:[{label:'表裏',color:'gray'},{label:'3先',color:'pink'},{label:'2先',color:'green'},{label:'3ソロ2先',color:'yellow'}],
+      // 左：決勝トーナメント／真ん中：Lトーナメント／右：Bトーナメント
+      columns:[
+        {name:'決勝\\nトーナメント',startRow:0,note:'',cells:['1回戦','2回戦','3回戦','4回戦','準決勝','決勝・3決']},
+        {name:'Lトーナメント',startRow:1,note:'',cells:['1回戦','2回戦','3回戦','4回戦','準決勝','決勝']},
+        {name:'Bトーナメント',startRow:0,note:'',cells:['1回戦','2回戦','3回戦','4回戦','準決勝','決勝・3決']}
+      ],
+      colors:{'決勝\\nトーナメント':'pink','Lトーナメント':'green','Bトーナメント':'green'},
+      // Lトーナメントの決勝（上から7行目＝0から数えて6）だけ黄色にする
+      cellColors:{'Lトーナメント@6':'yellow'},
+      // 矢印は自動では出さず、下の1本だけを出す（決勝トーナメント1回戦で負けた人のみLへ）
+      autoLose:false,
+      loseArrows:{'決勝\\nトーナメント@0':true},
+      loseTo:{'決勝\\nトーナメント@0':'Lトーナメント'},
+      // 一次予選の順位ごとの進み先と、二次予選の勝ち負け
+      links:[
+        {from:'予選@2',to:'決勝\\nトーナメント@0',kind:'plain',label:'1〜32位'},
+        {from:'予選@2',to:'予選@3',kind:'plain',label:'※33〜96位'},
+        {from:'予選@2',to:'Bトーナメント@0',kind:'plain',label:'97位以下'},
+        {from:'予選@3',to:'決勝\\nトーナメント@0',kind:'plain',label:'勝ち'},
+        {from:'予選@3',to:'Bトーナメント@0',kind:'lose',ci:0,label:'負け'}
+      ]
+    }
+  },
+  {
     id:'sc_bi_128',
     ver:2,   // ★内容を直したらこの数字を1つ増やす
     name:'128チーム型（決勝トーナメント＋5位タイ＋15位タイ＋交流戦）',
@@ -6364,13 +6415,25 @@ function scTemplateChart(t){
 
 /* 最初から入っている形を、1回だけ「自分のテンプレ一覧」に入れる。
    一覧に入れてしまえば、名前も説明も自由に変えられるし、いらなければ消せる。 */
+// 8-6 までにアプリへ入っていた形。すでに使っている端末の引き継ぎ判定に使う。
+const SC_TPL_PRE_8_7_IDS=['sc_bi_6696','sc_bi_128'];
 function scSeedTemplates(force){
   if(!AD.chartTemplates)AD.chartTemplates=[];
-  if(!force&&AD.chartTplSeeded)return 0;
+  /* 【8-7】これまでは「一度でも入れたら、もう二度と入れない」しくみだったため、
+     アプリに新しい形を足しても、すでに使っている端末には出てきませんでした。
+     そこで「どの形を入れたか」を1つずつ覚えるようにして、
+     まだ一度も入れたことのない形だけを自動で足すようにしました。
+     自分で消した形は「入れた」と覚えたままなので、勝手には戻りません。 */
+  if(!Array.isArray(AD.chartTplSeededIds)){
+    // 8-6 までの端末からの引き継ぎ：昔からある2つは「入れた扱い」にしておく
+    AD.chartTplSeededIds=AD.chartTplSeeded?SC_TPL_PRE_8_7_IDS.slice():[];
+  }
   let added=0;
   SC_BUILTIN_TEMPLATES.forEach(t=>{
-    if(AD.chartTemplates.some(x=>x.id===t.id))return;
+    if(AD.chartTemplates.some(x=>x.id===t.id))return;              // すでに一覧にある
+    if(!force&&AD.chartTplSeededIds.indexOf(t.id)>=0)return;       // 自分で消した形は戻さない
     AD.chartTemplates.push({id:t.id,ver:t.ver||1,name:t.name,desc:t.desc||'',chart:scTemplateChart(t)});
+    if(AD.chartTplSeededIds.indexOf(t.id)<0)AD.chartTplSeededIds.push(t.id);
     added++;
   });
   AD.chartTplSeeded=true;
