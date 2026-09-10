@@ -1600,14 +1600,21 @@ async function refreshLiveEvent(){
     }else{
       S._liveEventCode=''; // 開催中の大会なし
     }
-    /* 開催前（次）の大会。設定だけ先に取り込んでおく。
+    /* 開催前（次）の大会。
+       【8-7 修正】ここで対戦カードまで取っていたため、ホームを開くたびの通信が
+       3回→5回に増えていた。GitHubの読み取りは1台1時間60回までなので、
+       当日に上限へ当たりやすくなる。
+       ホームで必要なのは大会名・会場・日付・選手一覧＝「設定」だけなので、
+       ここは設定だけにして、対戦カードは「対戦相手を検索」を押したときに取る。
+       （openCourtSearch の中で取り直すので、表示が古くなることはない）
+
        ここでは「いまの大会（activeTourId）」は変えない。
        変えてしまうと、受付の相手などが次の大会にすり替わってしまうため。
        通信に失敗（remoteがnull）したときは、前に出していたカードをそのまま残す。 */
     if(remote){
       const up=String(remote.upcomingEventCode||'');
       if(up&&up!==code){
-        try{await syncAllFromGitHub(up);}catch(e){}
+        try{await syncSettingsFromGitHub(up);}catch(e){}
         S._upcomingEventCode=up;
       }else{
         S._upcomingEventCode='';
@@ -10052,12 +10059,19 @@ function bind(){
   });
   const bcsRef=document.getElementById('btn-cs-refresh');
   if(bcsRef)bcsRef.onclick=async()=>{
-    const atour=activeTour();
+    /* 【8-7 修正】ここが activeTour()（＝いつも開催中の大会）を見ていたため、
+       開催前の大会を見ているときに押しても、開催中の大会を取り直すだけで、
+       画面の中身がいつまでも変わらなかった。
+       いま画面に出している大会（csTour）を更新する。 */
+    const atour=csTour();
     if(!atour||!atour.eventCode)return;
-    // キャッシュを無効化して強制更新
-    delete _jsonCache[atour.eventCode];
+    // 取っておいたデータを捨てて、必ず取り直す（設定と対戦カードの両方）
+    const ec=atour.eventCode;
+    delete _jsonCache[ec];                 // 対戦カード
+    delete _jsonCache['settings_'+ec];     // 大会の設定
+    delete _jsonCache['settings_raw_'+ec];
     bcsRef.textContent='取得中...';bcsRef.disabled=true;
-    await syncAllFromGitHub(atour.eventCode);
+    await syncAllFromGitHub(ec);
     render();
   };
   // 対戦コート検索：チーム名／チームNoのタブ切替（入力中の試合区分・チームは保持）
