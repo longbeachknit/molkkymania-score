@@ -690,7 +690,7 @@ async function fetchTournamentInfo(action){
   //   ・スケジュール/レギュ(_info.json) … raw.githubusercontent から読む（レート制限実質なし）
   //   ・予選結果(_prelim.json) ………… api.github.com から読む（各端末60回/時の制限あり・即時性重視）
   //   返り値の形は旧GASと同じ（{schedule} / {sections} / {teams}）に保つので呼び出し側は無変更。
-  const tour=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):activeTour();
+  const tour=S._editingTourId?AD.tournaments.find(t=>t.id===S._editingTourId):tiTour();
   if(!tour){ throw new Error('対象の大会が見つかりません。'); }
 
   const fileCode=toJsonFileCode(tour.eventCode||'');
@@ -921,6 +921,24 @@ function makeTournament(overrides){
    未設定（過去の大会データ）は 'team'＝チーム戦。 */
 function isSinglesTour(tour){return !!tour&&String((tour&&tour.matchType)||'team')==='singles';}
 function isSinglesActive(){try{return isSinglesTour(activeTour());}catch(e){return false;}}
+/* 【8-7】大会コードから大会を探す。 */
+function tourByCode(code){
+  if(!code)return null;
+  return (AD.tournaments||[]).find(t=>String(t.eventCode)===String(code))||null;
+}
+/* 【8-7】大会情報の画面（会場・大会の詳細・スケジュール・レギュ・No検索・トーナメント表・予選結果・残り試合数）が
+   いま見ている大会。大会カードのボタンから開いたときは、そのカードの大会。
+   指定がなければ、これまでどおり「いまの大会」。 */
+function tiTour(){
+  const t=tourByCode(S._tiEventCode);
+  if(t)return t;
+  return (AD.tournaments&&AD.activeTourId)?(AD.tournaments.find(x=>x.id===AD.activeTourId)||null):null;
+}
+/* 【8-7】対戦相手／対戦コートの検索画面が、いま見ている大会。
+   指定がなければ、これまでどおり開催中の大会。 */
+function csTour(){return tourByCode(S._csEventCode)||activeTour()||null;}
+/* 【8-7】その大会が「いま開催中（配信中）」かどうか。 */
+function isLiveEventCode(code){return !!code&&String(code)===String(S._liveEventCode||'');}
 /* 画面の言い方を「チーム」「選手」で切り替えるための道具。
      wTeam()      … いま開催中の大会で判断する（対戦コート検索・予選結果など）
      wTeam(tour)  … 渡された大会で判断する（スコアシート検索など、大会を選ぶ画面）
@@ -958,6 +976,7 @@ function loadAdmin(){
       if(!d.venueTemplates)d.venueTemplates=[]; // 会場詳細のテンプレート保存用
       if(!d.folders)d.folders=[]; // 大会整理用フォルダ
       if(!d.githubPat)d.githubPat='';
+      if(d.upcomingEventCode===undefined)d.upcomingEventCode=''; // 【8-7】開催前（次）の大会
       return d;
     }
   }catch(e){}
@@ -966,6 +985,7 @@ function loadAdmin(){
     tournaments:[],
     activeTourId:null,
     activeEventCode:'',
+    upcomingEventCode:'',   // 【8-7】開催前（次）の大会
     ruleTemplates:[],
     chartTemplates:[],
     githubPat:''
@@ -1207,7 +1227,8 @@ function findTourByScoreEvent(ec){
 }
 
 function runCourtSearch(teamNo,matchCode){
-  const searchSrc=(activeTour()||{matches:[]}).matches||[];
+  // 【8-7】いま検索対象にしている大会の対戦カードから探す
+  const searchSrc=(csTour()||{matches:[]}).matches||[];
   const results=searchSrc.filter(m=>{
     const mparts=m.matchId.split('_');
     const mCode=mparts[2]||'';
@@ -1567,7 +1588,10 @@ async function refreshLiveEvent(){
   if(_liveEvtBusy)return;
   _liveEvtBusy=true;
   try{
-    const code=await resolveActiveEventCode();
+    /* 【8-7】active.json を1回だけ読んで、開催中と開催前（次）の両方を取り出す。
+       （2回読むと通信が倍になるため） */
+    const remote=await fetchActiveEvent();
+    const code=(remote&&remote.hasOwnProperty('activeEventCode'))?(remote.activeEventCode||''):(AD.activeEventCode||'');
     if(code){
       await syncAllFromGitHub(code);
       const t=(AD.tournaments||[]).find(x=>x.eventCode===code);
@@ -1575,6 +1599,19 @@ async function refreshLiveEvent(){
       S._liveEventCode=code;
     }else{
       S._liveEventCode=''; // 開催中の大会なし
+    }
+    /* 開催前（次）の大会。設定だけ先に取り込んでおく。
+       ここでは「いまの大会（activeTourId）」は変えない。
+       変えてしまうと、受付の相手などが次の大会にすり替わってしまうため。
+       通信に失敗（remoteがnull）したときは、前に出していたカードをそのまま残す。 */
+    if(remote){
+      const up=String(remote.upcomingEventCode||'');
+      if(up&&up!==code){
+        try{await syncAllFromGitHub(up);}catch(e){}
+        S._upcomingEventCode=up;
+      }else{
+        S._upcomingEventCode='';
+      }
     }
   }catch(e){/* 取得失敗時は前回の値を維持 */}
   finally{
@@ -2859,6 +2896,25 @@ function rBeginner(){
 }
 
 
+/* 【8-7】大会カードの中のボタン。開催中の大会でも、開催前（次）の大会でも同じものを出す。
+   どのカードのボタンかは data-evcode（その大会のコード）で見分ける。
+   「対戦相手を検索」だけ横長（左右の幅を結合）にして、一番下に置く。 */
+function eventCardBtnsHtml(tour,theme){
+  const code=String((tour&&tour.eventCode)||'');
+  const w=isSinglesTour(tour)?'選手':'チーム';
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const b=(cls,label,wide)=>`<button class="${cls}" data-evcode="${esc(code)}" style="${wide?'grid-column:1 / -1;':''}padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">${label}</button>`;
+  return`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
+    ${b('card-btn-venue','📍 会場の詳細')}
+    ${b('card-btn-tourinfo','📋 大会の詳細')}
+    ${b('card-btn-schedule','🕐 タイムスケジュール')}
+    ${b('card-btn-regulation','📜 レギュレーション')}
+    ${b('card-btn-teamsearch','🪪 '+w+'Noを検索')}
+    ${b('card-btn-sheet','📑 大会スプレッドシート')}
+    ${b('card-btn-opponent','🔍 対戦相手を検索',true)}
+  </div>`;
+}
+
 function rSetup(){
   // 「今まさに開催中（配信中）の大会」をAPIで解決してから表示する
   maybeRefreshLiveEvent();
@@ -2936,14 +2992,28 @@ function rSetup(){
       </div>
       ${_rightSide}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
-      <button id="btn-go-venue" style="padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">📍 会場の詳細</button>
-      <button id="btn-go-tourinfo" style="padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">📋 大会の詳細</button>
-      <button id="btn-go-schedule" style="padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">🕐 タイムスケジュール</button>
-      <button id="btn-go-regulation" style="padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">📜 レギュレーション</button>
-    </div>
+    ${eventCardBtnsHtml(_liveTour,_theme)}
     ${_exhBtn}
   </div>`;
+
+  /* 【8-7】開催前（次）の大会のカード。
+     土曜の大会が開催中でも、日曜の大会の会場・対戦相手を前もって見られるようにするためのもの。
+     受付ボタンと交流戦ボタンは出さない（まだ始まっていないため）。 */
+  const _upTour=(S._upcomingEventCode&&S._upcomingEventCode!=='')?tourByCode(S._upcomingEventCode):null;
+  const _upVenue=resolveVenue(_upTour);
+  const _upVenueName=_upVenue?String((_upVenue.detail&&_upVenue.detail.locationName)||_upVenue.name||'').trim():'';
+  const _upPeriod=fmtEventPeriod(_upTour);
+  const _upTheme=(_upVenue&&_upVenue.themeColor)?_upVenue.themeColor:'#7FB3E8';
+  const _upRaw=(_upTour&&_upTour.displayName&&_upTour.displayName.trim())?_upTour.displayName:(_upTour?_upTour.eventName:'');
+  const _upNameHtml=escH(_upRaw).replace(/\\n/g,'<br>').replace(/\n/g,'<br>');
+  const _upcomingCard=_upTour?`<div style="margin-bottom:20px;padding:14px 16px;background:${_upTheme}2E;border:1.5px solid ${_upTheme};border-radius:14px;">
+    <div style="font-size:11px;color:#24507d;font-weight:800;letter-spacing:0.04em;">🗓 開催前の大会</div>
+    <div style="font-size:18px;font-weight:800;color:#1a1a1a;line-height:1.35;margin-top:3px;">${_upNameHtml}</div>
+    ${_upVenueName?`<div style="font-size:13px;color:#6b7280;margin-top:7px;line-height:1.5;">📍 ${escH(_upVenueName)}</div>`:''}
+    ${_upPeriod?`<div style="font-size:13px;color:#6b7280;margin-top:2px;line-height:1.5;">🗓 ${escH(_upPeriod)}</div>`:''}
+    <div style="font-size:12px;color:#6b7280;margin-top:7px;line-height:1.6;">この大会はまだ始まっていません。会場や対戦相手を、前もって確認できます。<br>受付と試合開始は、大会が始まってからです。</div>
+    ${eventCardBtnsHtml(_upTour,_upTheme)}
+  </div>`:'';
 
   // 開催中の大会があるときだけカードを出す。無ければテンプレは表示しない。
   const topBlock=_liveTour
@@ -2975,10 +3045,6 @@ function rSetup(){
         <span style="font-size:22px;">📤</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">試合結果のみ<br>を送信</div>
       </button>
-      <button id="btn-go-court-search" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
-        <span style="font-size:22px;">${courtIcon}</span>
-        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">${courtLabel}</div>
-      </button>
       <button id="btn-go-prelim" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🏅</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">予選結果<br>を確認</div>
@@ -2987,19 +3053,17 @@ function rSetup(){
         <span style="font-size:22px;">📊</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">残り試合数<br>を確認</div>
       </button>
-      <button id="btn-go-bracket" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
+      <button id="btn-go-bracket" style="grid-column:1 / -1;padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
         <span style="font-size:22px;">🏆</span>
         <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">トーナメント表</div>
       </button>
-      <button id="btn-go-teamsearch" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
-        <span style="font-size:22px;">🪪</span>
-        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">チームNo<br>を検索</div>
-      </button>
-      <button id="btn-go-spreadsheet" style="padding:12px 6px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
-        <span style="font-size:22px;">📑</span>
-        <div style="font-size:13px;font-weight:700;text-align:center;line-height:1.3;">大会<br>スプレッドシート</div>
+      <!-- 【8-7】対戦コートの検索は当日いちばんよく使うので、一番下に横長（左右の幅を結合）で置く -->
+      <button id="btn-go-court-search" style="grid-column:1 / -1;padding:14px 10px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:10px;cursor:pointer;">
+        <span style="font-size:24px;">${courtIcon}</span>
+        <div style="font-size:15px;font-weight:800;text-align:center;line-height:1.3;">${String(courtLabel).replace(/<br>/g,'')}</div>
       </button>
     </div>
+    ${_upcomingCard}
     <div style="font-size:11px;font-weight:800;color:#242528;letter-spacing:0.08em;margin-bottom:8px;border-left:3px solid #FFB800;padding-left:7px;">成績・記録</div>
     <div style="display:flex;gap:8px;">
       <button id="btn-go-view-portal" style="flex:1;padding:10px 6px;background:#FFB347;color:#2b2100;border:none;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
@@ -3545,6 +3609,9 @@ function adminTourRowHtml(t,ad){
       ${(ad.activeEventCode&&t.eventCode&&ad.activeEventCode===t.eventCode)?
         '<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:99px;">📡 配信中</span>':
         `<button class="btn btn-gray btn-xs admin-set-active" data-code="${t.eventCode}" style="padding:3px 8px;">📡 配信中にする</button>`}
+      ${(ad.upcomingEventCode&&t.eventCode&&ad.upcomingEventCode===t.eventCode)?
+        `<span style="font-size:11px;background:#EAF2FB;color:#24507d;padding:2px 6px;border-radius:99px;">🗓 次の大会</span><button class="btn btn-gray btn-xs admin-clear-upcoming" style="padding:3px 8px;">解除</button>`:
+        `<button class="btn btn-gray btn-xs admin-set-upcoming" data-code="${t.eventCode}" style="padding:3px 8px;">🗓 次の大会にする</button>`}
     </div>
     <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
       <span style="font-size:11px;color:#9ca3af;white-space:nowrap;">📁 フォルダ</span>
@@ -5191,12 +5258,26 @@ function showSaveRuleTemplateModal(){
 // ===== 設定をGitHub Pagesに配信 =====
 
 // ===== 配信中大会の管理 =====
+/* 【8-7】active.json は「開催中の大会」と「開催前（次）の大会」の2つを持つ。
+     { activeEventCode:'0913', upcomingEventCode:'0914' }
+   片方だけ書き換えるときに、もう片方を消してしまわないよう、
+   いまの中身を読んでから、変えるところだけ差し替える。 */
 async function publishActiveEvent(eventCode){
+  return publishActiveJson_({activeEventCode:eventCode},eventCode?('Set active event: '+eventCode):'Stop broadcast');
+}
+async function publishUpcomingEvent(eventCode){
+  return publishActiveJson_({upcomingEventCode:eventCode},eventCode?('Set upcoming event: '+eventCode):'Clear upcoming event');
+}
+async function publishActiveJson_(patch,msg){
   if(!AD.githubPat||!AD.githubPat.startsWith('ghp_')){
     alert('GitHub Personal Access Tokenが設定されていません。');
     return false;
   }
-  const jsonBody=JSON.stringify({activeEventCode:eventCode},null,2);
+  let cur=null;
+  try{cur=await fetchActiveEvent();}catch(e){}
+  const merged=Object.assign({activeEventCode:'',upcomingEventCode:''},cur||{},patch);
+  const eventCode=msg;   // コミットのメモに使う
+  const jsonBody=JSON.stringify(merged,null,2);
   const apiUrl='https://api.github.com/repos/longbeachknit/molkkymania-deta/contents/active.json';
   try{
     let sha=null;
@@ -5204,7 +5285,7 @@ async function publishActiveEvent(eventCode){
     const getRes=await fetch(apiUrl+'?t='+Date.now(),{headers:{'Authorization':'token '+AD.githubPat},cache:'no-store'});
     if(getRes.ok){const d=await getRes.json();sha=d.sha;}
     const body={
-      message: eventCode?'Set active event: '+eventCode:'Stop broadcast',
+      message: eventCode,
       content: btoa(unescape(encodeURIComponent(jsonBody)))
     };
     if(sha)body.sha=sha;
@@ -5683,6 +5764,7 @@ const SC_PALETTE=[
 ];
 const SC_COLORS={};SC_PALETTE.forEach(p=>{SC_COLORS[p.key]={bg:p.bg,bd:p.bd,tx:p.tx};});
 function scEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function escSc_(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function scCircled(n){const m=['','①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];return m[n]||('('+n+')');}
 function scColorOf(v){
   v=String(v||'').trim().toLowerCase();
@@ -6605,7 +6687,8 @@ function buildTeamSearchList(query){
 
 // ===== 対戦コート検索画面 =====
 function rTournamentInfo(){
-  const tour=AD.tournaments&&AD.activeTourId?AD.tournaments.find(t=>t.id===AD.activeTourId):null;
+  // 【8-7】大会カードのボタンから開いたときは、そのカードの大会を見る
+  const tour=tiTour();
   const tname=tour?tour.name:'';
   const v=S._tiView; // null=メニュー / 'schedule' / 'regulation' / 'prelim' / 'venue'
 
@@ -7701,7 +7784,11 @@ function renderCourtMapBlock(layout,highlightNo,matchId){
 function rCourtSearch(){
   const q=S._courtSearchQuery||{teamNo:'',matchCode:''};
   const results=S._courtSearchResults||null;
-  const tourSrc=activeTour()||{teams:[],matchRules:[]};
+  // 【8-7】大会カードの「対戦相手を検索」から開いたときは、そのカードの大会を見る
+  const _csT=csTour();
+  const tourSrc=_csT||{teams:[],matchRules:[]};
+  // その大会がいま開催中か。開催前の大会では、ここから試合を始められないようにする
+  const _csLive=isLiveEventCode(S._csEventCode)||!S._csEventCode;
 
   // データ同期中はローディング表示（先に画面遷移して裏で通信するため）
   if(S._csLoading){
@@ -7751,7 +7838,8 @@ function rCourtSearch(){
               <div style="font-size:11px;color:#9ca3af;">No.${r.teamB}</div>
             </div>
           </div>
-          <button class="btn btn-green cs-start-btn" data-matchid="${r.matchId}" style="width:100%;padding:12px;font-size:15px;font-weight:700;">この試合を開始する →</button>
+          ${_csLive?`<button class="btn btn-green cs-start-btn" data-matchid="${r.matchId}" style="width:100%;padding:12px;font-size:15px;font-weight:700;">この試合を開始する →</button>`
+            :`<div style="text-align:center;padding:9px;background:#f3f4f6;border-radius:8px;font-size:12px;color:#6b7280;">この大会はまだ始まっていません（下見用）</div>`}
           ${renderCourtMapBlock(tourSrc.courtLayout,courtNo,r.matchId)}
         </div>`;
       }).join('');
@@ -7765,7 +7853,7 @@ function rCourtSearch(){
   // 検索フォーム本体（チーム名プルダウン／チームNo入力のタブ切替）
   const csMode=S._csMode||'select';
   const csModeTab=(v,l)=>`<button class="cs-mode-tab" data-mode="${v}" style="flex:1;padding:9px 4px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:${csMode===v?'#1D9E75':'#f3f4f6'};color:${csMode===v?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
-  const csW=wTeam();   // シングルス大会なら「選手」、それ以外は「チーム」
+  const csW=wTeam(_csT||null);   // シングルス大会なら「選手」、それ以外は「チーム」
   const csTeamsSorted=(tourSrc.teams||[]).slice().sort((a,b)=>parseInt(a.id,10)-parseInt(b.id,10));
   const csTeamBlock=csMode==='select'
     ?`<div>
@@ -7808,13 +7896,14 @@ function rCourtSearch(){
       :`<button class="btn btn-gray btn-sm" id="btn-cs-toggle" style="width:100%;margin-bottom:12px;font-size:13px;padding:9px;">🔍 他の${csW}・試合区分を検索</button>`)
     :searchForm;
 
-  const headerTitle=personalized?'対戦コートを見る':'対戦コートを検索';
+  const headerTitle=_csLive?(personalized?'対戦コートを見る':'対戦コートを検索'):'対戦相手を検索';
   return`<div style="padding:8px 0 4px;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
       <button class="btn btn-gray btn-sm" id="btn-bk-court-search">← 戻る</button>
       <div style="font-size:18px;font-weight:700;color:#111;">${headerTitle}</div>
     </div>
-    ${(()=>{const atour=activeTour();if(!atour)return'';const cache=_jsonCache[atour.eventCode];const upd=cache&&cache.data&&cache.data.updatedAt?new Date(cache.data.updatedAt).toLocaleTimeString('ja-JP'):'未取得';return`<div style="font-size:12px;color:#9ca3af;margin-bottom:10px;text-align:right;">最終更新: ${upd} <button class="btn btn-gray btn-xs" id="btn-cs-refresh" style="padding:3px 8px;font-size:11px;">🔄 更新</button></div>`;})()} 
+    ${!_csLive?`<div style="background:#EAF2FB;border:1.5px solid #7FB3E8;border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:#24507d;line-height:1.6;">🗓 <b>${escSc_(tourSrc.eventName||'開催前の大会')}</b>（まだ始まっていません）の対戦を表示しています。</div>`:''}
+    ${(()=>{const atour=_csT;if(!atour)return'';const cache=_jsonCache[atour.eventCode];const upd=cache&&cache.data&&cache.data.updatedAt?new Date(cache.data.updatedAt).toLocaleTimeString('ja-JP'):'未取得';return`<div style="font-size:12px;color:#9ca3af;margin-bottom:10px;text-align:right;">最終更新: ${upd} <button class="btn btn-gray btn-xs" id="btn-cs-refresh" style="padding:3px 8px;font-size:11px;">🔄 更新</button></div>`;})()} 
     ${formBlock}
     ${results!==null?`<div style="font-size:13px;color:#6b7280;margin-bottom:8px;">${results.length}件見つかりました</div>`:''}
     ${resultHtml}
@@ -8998,6 +9087,39 @@ function bind(){
     }
   };
 
+  /* 【8-7】「次の大会にする」ボタン。
+     開催中の大会はそのままに、日曜の大会などを「開催前の大会」として参加者へ伝える。
+     参加者のホームに「🗓 開催前の大会」のカードが出て、会場や対戦相手を先に見られる。 */
+  document.querySelectorAll('.admin-set-upcoming').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const code=btn.dataset.code;
+      if(!code){alert('大会コードが設定されていません');return;}
+      if(AD.activeEventCode&&AD.activeEventCode===code){
+        alert('この大会はいま配信中です。\n「次の大会」は、まだ始まっていない別の大会を選んでください。');
+        return;
+      }
+      const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===code);
+      if(!confirm(`大会コード「${code}」を「開催前の大会」にしますか？\n参加者のホームにカードが出て、会場・対戦相手を先に見られるようになります。\n（受付と試合開始は、配信中にするまでできません）`))return;
+      const orig=btn.textContent;btn.disabled=true;btn.textContent='送信中...';
+      let settingsOk=true;
+      if(tour)settingsOk=await publishSettings(tour,{silent:true});
+      const ok=await publishUpcomingEvent(code);
+      btn.disabled=false;btn.textContent=orig;
+      if(ok){
+        AD.upcomingEventCode=code;saveAdmin(AD);S._upcomingEventCode=code;_liveEvtTs=0;render();
+        alert(settingsOk?'✅ 開催前の大会に設定しました':'⚠️ 設定はできましたが、大会設定の配信に失敗しました。\n大会編集画面の「設定を配信する」をお試しください。');
+      }else alert('❌ 設定に失敗しました。GitHub Tokenを確認してください。');
+    });
+  });
+  document.querySelectorAll('.admin-clear-upcoming').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      if(!confirm('「開催前の大会」の表示をやめますか？\n参加者のホームからカードが消えます。'))return;
+      const ok=await publishUpcomingEvent('');
+      if(ok){AD.upcomingEventCode='';saveAdmin(AD);S._upcomingEventCode='';_liveEvtTs=0;render();alert('✅ 解除しました');}
+      else alert('❌ 解除に失敗しました。GitHub Tokenを確認してください。');
+    });
+  });
+
   // 配信中にするボタン
   document.querySelectorAll('.admin-set-active').forEach(btn=>{
     btn.addEventListener('click',async()=>{
@@ -9669,12 +9791,16 @@ function bind(){
   };
   const bbmi=document.getElementById('btn-bk-matchid');if(bbmi)bbmi.onclick=()=>{S.phase='setup';render();};
   const bbmc=document.getElementById('btn-bk-matchconfirm');if(bbmc)bbmc.onclick=()=>{const m=S._matchConfirmMode;S._matchConfirmMode=null;S.phase=S._matchConfirmFrom||(m==='resultOnly'?'resultOnlyMatchId':'matchId');S._matchConfirmFrom=null;render();};
-  const bgcs=document.getElementById('btn-go-court-search');if(bgcs)bgcs.onclick=async()=>{
+  /* 【8-7】対戦コート／対戦相手の検索を開く。
+       evcode を渡すと、その大会を検索する（大会カードの「対戦相手を検索」）。
+       渡さなければ、これまでどおり開催中の大会（「試合」の「対戦コートを検索」）。 */
+  async function openCourtSearch(evcode){
     // 【体感速度改善】先に画面遷移してローディング表示し、通信は裏で実行する
     S._courtSearchExpanded=false;
+    S._csEventCode=String(evcode||'');
     S._courtSearchQuery={teamNo:'',matchCode:''};S._courtSearchResults=null;
     S._csLoading=true;S.phase='courtSearch';render();
-    const eventCode=await resolveActiveEventCode();
+    const eventCode=evcode?String(evcode):await resolveActiveEventCode();
     if(!eventCode){
       S._csLoading=false;
       if(S.phase==='courtSearch'){
@@ -9683,11 +9809,13 @@ function bind(){
       }
       return;
     }
-    // 配信中の大会コードでデータを同期（失敗してもローカルデータで続行）
+    S._csEventCode=String(eventCode);
+    // 対象の大会コードでデータを同期（失敗してもローカルデータで続行）
     await syncAllFromGitHub(eventCode);
-    // ローカルのactiveTourも更新
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
-    if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+    /* 「いまの大会」を切り替えるのは、開催中の大会のときだけ。
+       開催前の大会を見ただけで受付の相手などがすり替わらないようにするため。 */
+    if(tour&&isLiveEventCode(eventCode)){AD.activeTourId=tour.id;saveAdmin(AD);}
     if(S.phase!=='courtSearch'){S._csLoading=false;return;}
     // 受付済みチームが今の大会と一致していれば、自動でそのチームの結果を表示
     const my=getValidMyTeam(eventCode);
@@ -9696,13 +9824,17 @@ function bind(){
       S._courtSearchResults=runCourtSearch(String(my.teamId),'');
     }
     S._csLoading=false;render();
-  };
+  }
+  const bgcs=document.getElementById('btn-go-court-search');if(bgcs)bgcs.onclick=()=>openCourtSearch('');
   // ホーム：パーソナライズ解除
   const bcmt=document.getElementById('btn-clear-myteam');
   if(bcmt)bcmt.onclick=()=>{clearMyTeam();render();};
   // 大会情報サブ画面へのショートカット共通処理
-  async function openTournamentInfoView(view){
+  /* evcode を渡すと、その大会の情報を開く（大会カードのボタン）。
+     渡さなければ、これまでどおり開催中の大会。 */
+  async function openTournamentInfoView(view,evcode){
     // 【体感速度改善】先に画面遷移してローディング表示し、通信は裏で実行する
+    S._tiEventCode=String(evcode||'');
     S._tiView=view;S._tiLoading=true;S._tiError=null;
     if(view==='schedule')S._tiSchedule=[];
     else if(view==='regulation'){S._tiRegulation='';S._tiSections=null;}
@@ -9717,7 +9849,7 @@ function bind(){
     // 【大会の詳細】も端末内に保存済みのデータだけで表示する（通信しない＝API消費ゼロ）。
     if(view==='tourinfo'){S._tiLoading=false;render();return;}
 
-    const eventCode=await resolveActiveEventCode();
+    const eventCode=evcode?String(evcode):await resolveActiveEventCode();
     // 通信中にユーザーが「戻る」等で画面を離れた場合は結果を反映しない
     const stillHere=()=>S.phase==='tournamentInfo'&&S._tiView===view;
     if(!eventCode){
@@ -9727,9 +9859,11 @@ function bind(){
       }
       return;
     }
+    S._tiEventCode=String(eventCode);
     await syncAllFromGitHub(eventCode);
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
-    if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+    // 「いまの大会」を切り替えるのは、開催中の大会のときだけ
+    if(tour&&isLiveEventCode(eventCode)){AD.activeTourId=tour.id;saveAdmin(AD);}
     if(!stillHere())return;
     /* 【8-6】トーナメント表：この大会にトーナメントが2つ設定されていれば「選ぶ画面」を出す。
        1つだけ（＝これまでの大会）なら、今までどおりそのままトーナメント表を開く。 */
@@ -9775,11 +9909,9 @@ function bind(){
     S._tiLoading=false;render();
   }
 
-  const bgreg=document.getElementById('btn-go-regulation');if(bgreg)bgreg.onclick=()=>openTournamentInfoView('regulation');
-  const bgsch=document.getElementById('btn-go-schedule');if(bgsch)bgsch.onclick=()=>openTournamentInfoView('schedule');
+  // ※「試合」グループのボタンは、これまでどおり開催中の大会だけを見る（第2引数を渡さない）
   const bgpre=document.getElementById('btn-go-prelim');if(bgpre)bgpre.onclick=()=>openTournamentInfoView('prelim');
-  const bgven=document.getElementById('btn-go-venue');if(bgven)bgven.onclick=()=>openTournamentInfoView('venue');
-  const bgtour=document.getElementById('btn-go-tourinfo');if(bgtour)bgtour.onclick=()=>openTournamentInfoView('tourinfo');
+
   // 「試合結果のみを送信」→ QRスキャン（結果のみモード）。配信中・開催期間中のみ
   const bgro=document.getElementById('btn-go-result-only');if(bgro)bgro.onclick=async()=>{
     // 【体感速度改善】カメラ起動前に通信＋開催期間チェックが必須のため画面遷移はできないが、
@@ -9816,25 +9948,36 @@ function bind(){
   const bgrem=document.getElementById('btn-go-remaining');if(bgrem)bgrem.onclick=()=>openTournamentInfoView('system');
   const bgbr=document.getElementById('btn-go-bracket');if(bgbr)bgbr.onclick=()=>openTournamentInfoView('bracketPick');
   // ホーム：チームNoを検索
-  const bgts=document.getElementById('btn-go-teamsearch');if(bgts)bgts.onclick=()=>openTournamentInfoView('teamsearch');
+
   // ホーム：大会スプレッドシート（大会設定のsheetUrlを開く）
-  const bgssheet=document.getElementById('btn-go-spreadsheet');
-  if(bgssheet)bgssheet.onclick=async()=>{
-    const eventCode=await resolveActiveEventCode();
+  /* 【8-7】大会スプレッドシートを開く。evcode を渡すと、その大会のものを開く。 */
+  async function openEventSpreadsheet(evcode){
+    const eventCode=evcode?String(evcode):await resolveActiveEventCode();
     if(!eventCode){
       alert('現在、開催中の大会はありません。\n大会が開始されるまでお待ちください。');
       return;
     }
     await syncAllFromGitHub(eventCode);
     const tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode);
-    if(tour){AD.activeTourId=tour.id;saveAdmin(AD);}
+    if(tour&&isLiveEventCode(eventCode)){AD.activeTourId=tour.id;saveAdmin(AD);}
     const url=tour&&tour.sheetUrl&&tour.sheetUrl.trim();
     if(!url){
       alert('この大会の対戦表スプレッドシートURLがまだ設定されていません。\n管理者にお問い合わせください。');
       return;
     }
     window.open(url,'_blank');
-  };
+  }
+
+  /* 【8-7】大会カードのボタン。開催中カード・開催前カードのどちらからでも、
+     そのカードの大会（data-evcode）を開く。 */
+  const _cardBtn=(cls,fn)=>document.querySelectorAll('.'+cls).forEach(b=>b.onclick=()=>fn(b.dataset.evcode||''));
+  _cardBtn('card-btn-venue',      c=>openTournamentInfoView('venue',c));
+  _cardBtn('card-btn-tourinfo',   c=>openTournamentInfoView('tourinfo',c));
+  _cardBtn('card-btn-schedule',   c=>openTournamentInfoView('schedule',c));
+  _cardBtn('card-btn-regulation', c=>openTournamentInfoView('regulation',c));
+  _cardBtn('card-btn-teamsearch', c=>openTournamentInfoView('teamsearch',c));
+  _cardBtn('card-btn-sheet',      c=>openEventSpreadsheet(c));
+  _cardBtn('card-btn-opponent',   c=>openCourtSearch(c));
   const bbcs=document.getElementById('btn-bk-court-search');if(bbcs)bbcs.onclick=()=>{S.phase='setup';render();};
   // 対戦コート：他チーム検索の折りたたみトグル
   const bcst=document.getElementById('btn-cs-toggle');
