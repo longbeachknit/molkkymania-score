@@ -553,6 +553,8 @@ async function syncSettingsFromGitHub(eventCode,useRaw){
   if(data.eventName!==undefined)tour.eventName=data.eventName;
   if(data.displayName!==undefined)tour.displayName=data.displayName;
   if(data.priority!==undefined)tour.priority=data.priority;
+  // 試合形式。届いていない（古い配信）ときはチーム戦のまま
+  if(data.matchType!==undefined)tour.matchType=(String(data.matchType)==='singles'?'singles':'team');
   if(data.matchRules!==undefined)tour.matchRules=data.matchRules;
   if(data.tourneyRules!==undefined)tour.tourneyRules=data.tourneyRules;
   if(data.roundRules!==undefined)tour.roundRules=data.roundRules;
@@ -865,7 +867,7 @@ function triggerTeamsCSV(){
     const text=await file.text();
     const imported=importTeamsCSV(text);
     if(!imported.length){
-      alert('チームデータが見つかりませんでした。\nA列:チームNo、B列:チーム名、C〜G列:メンバー の形式か確認してください。');
+      alert('チームデータが見つかりませんでした。\nA列:チームNo、B列:チーム名、C〜G列:メンバー の形式か確認してください。\n（シングルス大会の場合は B列=モルックネーム、C列=本名フルネーム）');
       return;
     }
     const mode=confirm(imported.length+'件のチームを読み込みました。\n\nOK → 既存データを上書き\nキャンセル → 既存データに追加');
@@ -890,6 +892,9 @@ function makeTournament(overrides){
     gasUrl:'',
     sheetUrl:'',
     priority:'tournament',
+    // 試合形式：'team'＝チーム戦 / 'singles'＝シングルス（1人で出る大会）
+    // 未設定の大会（過去のデータを含む）は 'team'＝チーム戦として扱う
+    matchType:'team',
     matchRules:[],tourneyRules:[],roundRules:[],
     teams:[],matches:[],
     eventPeriodStart:'',eventPeriodEnd:'',
@@ -909,6 +914,22 @@ function makeTournament(overrides){
     folderId:null,lastUsedAt:0, // 管理者の整理用（フォルダ分け・最近使った順）
     courtLayout:{grid:'',labelTop:'',labelBottom:'',labelLeft:'',labelRight:'',centerLabel:{text:'',pos:'bottom'}}
   },overrides);
+}
+
+/* ===== シングルス大会かどうかの判定 =====
+   大会設定の matchType が 'singles' のときだけシングルス扱いにする。
+   未設定（過去の大会データ）は 'team'＝チーム戦。 */
+function isSinglesTour(tour){return !!tour&&String((tour&&tour.matchType)||'team')==='singles';}
+function isSinglesActive(){try{return isSinglesTour(activeTour());}catch(e){return false;}}
+/* 成績閲覧など「大会コード（01_0601 形式）」しか手元に無い場面用。
+   getEventName と同じ探し方で大会を見つけ、シングルスかどうかを返す。 */
+function isSinglesEventCode(eventCode){
+  if(!eventCode)return false;
+  const parts=String(eventCode).split('_');
+  let tour=null;
+  if(parts.length>=2)tour=AD.tournaments&&AD.tournaments.find(t=>t.venueCode===parts[0]&&t.eventCode===parts[1]);
+  if(!tour)tour=AD.tournaments&&AD.tournaments.find(t=>t.eventCode===eventCode||t.eventCode===parts[parts.length-1]);
+  return isSinglesTour(tour);
 }
 
 function loadAdmin(){
@@ -1072,6 +1093,8 @@ async function submitReception(payload){
     q3:payload.q3,
     q4:payload.q4,
     needsDesk:payload.needsDesk,
+    // シングルス大会なら true。受付シートの列の寄せ方（❶❷が無い分を左へ詰める）が変わる
+    isSingles:isSinglesActive(),
     at:new Date().toISOString()
   })});
   const res=await fetch(gasUrl,{method:'POST',mode:'cors',body});
@@ -2735,7 +2758,7 @@ function rBeginner(){
     +P('当日の流れは、「受付する → コートに行く → 試合を始める → 点数を入れる → 結果を送る」です。順番に見ていきましょう。')
 
     +appStep('6-1','まず「受付」をします',
-      P('ホーム画面の '+KEY('📝 大会受付（チーム登録）')+' を押します。')
+      P('ホーム画面の '+KEY('📝 大会受付（'+(isSinglesActive()?'選手':'チーム')+'登録）')+' を押します。')
       +STEP(['チームナンバー、またはチーム名で、自分のチームを選びます',
              '受付パスワード（数字4桁）を入力します<br>パスワードは会場に掲示しています。分からなければスタッフにお聞きください',
              'いくつかの質問にお答えいただいて、受付完了です'])
@@ -2872,7 +2895,7 @@ function rSetup(){
     ?`<div style="margin-bottom:20px;padding:14px 16px;background:#E1F5EE;border-radius:14px;display:flex;align-items:center;gap:12px;">
         <span style="font-size:26px;">👤</span>
         <div style="flex:1;">
-          <div style="font-size:12px;color:#0a6e57;">受付済みチーム</div>
+          <div style="font-size:12px;color:#0a6e57;">受付済み${isSinglesActive()?'選手':'チーム'}</div>
           <div style="font-size:17px;font-weight:800;color:#085041;line-height:1.3;">${_myTeamObj?_myTeamObj.name:'No.'+_my.teamId}</div>
           ${_myTeamObj?`<div style="font-size:12px;color:#0a6e57;">No.${_my.teamId}</div>`:''}
         </div>
@@ -2880,7 +2903,7 @@ function rSetup(){
       </div>`
     :`<button id="btn-go-reception" style="width:100%;padding:24px 20px;font-size:20px;font-weight:700;margin-bottom:20px;background:#FFCB3D;color:#2b2100;border:none;border-radius:14px;display:flex;align-items:center;gap:14px;cursor:pointer;">
         <span style="font-size:32px;">📝</span>
-        <div style="text-align:left;font-size:20px;font-weight:700;">大会受付（チーム登録）</div>
+        <div style="text-align:left;font-size:20px;font-weight:700;">大会受付（${isSinglesActive()?'選手':'チーム'}登録）</div>
       </button>`;
 
   // 開催中：左＝大会情報／右＝縦長の受付 or 受付済み、下＝詳細を見る
@@ -2895,7 +2918,7 @@ function rSetup(){
       </div>`
     :`<button id="btn-go-reception" style="flex-shrink:0;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 8px;background:#FFCB3D;color:#2b2100;border:none;border-radius:12px;cursor:pointer;text-align:center;line-height:1.3;">
         <span style="font-size:30px;">📝</span>
-        <span style="font-size:15px;font-weight:800;">受付<br><span style="font-size:11px;font-weight:700;">（チーム登録）</span></span>
+        <span style="font-size:15px;font-weight:800;">受付<br><span style="font-size:11px;font-weight:700;">（${isSinglesActive()?'選手':'チーム'}登録）</span></span>
       </button>`;
 
   const _eventCard=`<div style="margin-bottom:20px;padding:14px 16px;background:${_themeBg};border:1.5px solid ${_theme};border-radius:14px;">
@@ -3017,6 +3040,7 @@ function rFirst(){
 }
 
 function rOrder(){
+  const _sgl=isSinglesActive();   // シングルス大会かどうか
   const si=S.pIdx!=null?S.pIdx:S.sets.length,sn=si+1;
   const sl=S.fmt==='round2'?`${sn}セット目`:`第${sn}セット`;
   const pf=S.pFirst!=null?S.pFirst:(nfc(si)?S.fid:aF(si));
@@ -3025,11 +3049,23 @@ function rOrder(){
     ${si>0?histTbl(si):''}
     <div style="font-size:17px;font-weight:600;color:#111;margin-bottom:6px;">${sl} 投げ順の設定</div>
     ${autoSwap?`<div style="background:${LB[pf]};border:1.5px solid ${LBR[pf]};border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:${LT[pf]};">先攻後攻は自動入れ替え：先攻 <strong>${S.teams[pf].name}</strong></div>`:''}
-    <div style="font-size:13px;color:#6b7280;margin-bottom:12px;">↑↓またはドラッグで並び替え、チェックで今セットの参加者を選択</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:12px;">${_sgl?'シングルスのため投げ順の並び替えはありません。選手を確認してください。':'↑↓またはドラッグで並び替え、チェックで今セットの参加者を選択'}</div>
     ${[0,1].map(ti=>{
       const team=S.teams[ti],ord=S.pOrders[ti].length>0?S.pOrders[ti]:team.members;
       const excl=S.pExclude[ti]||[];
-      if(!team.members.length)return`<div class="card" style="padding:12px;margin-bottom:12px;opacity:0.5;"><div style="font-size:14px;color:#9ca3af;">${team.name} — メンバー未登録</div></div>`;
+      if(!team.members.length)return`<div class="card" style="padding:12px;margin-bottom:12px;opacity:0.5;"><div style="font-size:14px;color:#9ca3af;">${team.name} — ${_sgl?'選手名未登録':'メンバー未登録'}</div></div>`;
+      // シングルス大会：並び替えも「外す」も意味が無いので、選手の確認だけを出す
+      if(_sgl){
+        return`<div class="card" style="padding:12px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:${C[ti]};flex-shrink:0;"></div>
+            <span style="font-size:14px;font-weight:600;color:#111;">${team.name}</span>
+            <span style="font-size:13px;margin-left:auto;background:${pf===ti?LB[ti]:'#f3f4f6'};color:${pf===ti?LT[ti]:'#374151'};padding:2px 8px;border-radius:99px;">${pf===ti?'先攻':'後攻'}</span>
+          </div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:3px;">選手名（本名）</div>
+          <div style="font-size:16px;font-weight:600;color:#111;">${ord[0]||team.members[0]||'（未登録）'}</div>
+        </div>`;
+      }
       const activeCount=ord.filter(m=>!excl.includes(m)).length;
       const minOk=S.playerMin<=1||activeCount>=S.playerMin;
       const maxOk=S.playerMax>=99||activeCount<=S.playerMax;
@@ -3054,10 +3090,10 @@ function rOrder(){
         </div>
       </div>`;
     }).join('')}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;margin-bottom:6px;">
+    ${_sgl?'':`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;margin-bottom:6px;">
       <button class="btn btn-yellow btn-sm" id="btn-add-member-0" style="padding:10px;font-size:13px;">＋ メンバー追加<br><span style="font-size:11px;color:#92400e;">${S.teams[0].name}</span></button>
       <button class="btn btn-yellow btn-sm" id="btn-add-member-1" style="padding:10px;font-size:13px;">＋ メンバー追加<br><span style="font-size:11px;color:#92400e;">${S.teams[1].name}</span></button>
-    </div>
+    </div>`}
     <div style="display:flex;gap:8px;margin-top:4px;">
       <button class="btn btn-gray" onclick="goBackFromOrder()" style="flex:1;">← 戻る</button>
       <button class="btn btn-green" id="btn-start" style="flex:2;padding:14px;font-size:16px;">ゲーム開始 ▶</button>
@@ -3859,6 +3895,14 @@ function rAdminTourEdit(){
           <input type="text" id="te-reception-pw" value="${tour.receptionPw||''}" placeholder="例: 1234" maxlength="4" inputmode="numeric" style="font-size:18px;letter-spacing:4px;text-align:center;"/>
         </div>
         <div style="border-top:1px solid #e5e7eb;margin-top:4px;padding-top:12px;">
+          <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">👥 試合形式（チーム戦／シングルス）</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:8px;line-height:1.7;"><b>シングルス</b>を選ぶと、1人で出る大会向けの表示に切り替わります。<br>・チーム名の欄に<b>モルックネーム</b>、メンバー①の欄に<b>本名のフルネーム</b>を登録してください<br>・「成績を見る」では、中身が同じになるチームの成績を出さず、個人の成績だけを表示します<br>・投げ順の設定画面は「選手の確認」だけになります（並び替え・外すは出ません）<br>・1セットの人数は自動で1人ちょうどになります<br>何も選ばなかった大会（過去の大会を含む）は<b>チーム戦</b>として扱われます。</div>
+          <select id="te-match-type" style="font-size:14px;">
+            <option value="team" ${isSinglesTour(tour)?'':'selected'}>チーム戦（2人以上のチームで出る）</option>
+            <option value="singles" ${isSinglesTour(tour)?'selected':''}>シングルス（1人で出る）</option>
+          </select>
+        </div>
+        <div style="border-top:1px solid #e5e7eb;margin-top:4px;padding-top:12px;">
           <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">🏆 トーナメント表の設定</div>
           <div style="font-size:12px;color:#6b7280;margin-bottom:10px;line-height:1.7;">トーナメントは2つまで設定できます。<b>トーナメント①</b>はスプレッドシートの「決勝T送信」シートから、<b>トーナメント②</b>は「Bトーナメント送信」シートから配信されたものが表示されます。<br>トーナメントが1つだけの大会は、②を「なし」にしてください。参加者のアプリでは「トーナメント表」を押したときに、どちらを見るか選ぶ画面が出ます（②が「なし」のときは今までどおり、そのまま表が開きます）。<br>チーム数を選ぶと、表の形（ラウンド数・シードの有無）が自動で切り替わります。24・48チームでは上位チームが1回戦免除（シード）になります。</div>
           <div style="background:#f9fafb;border-radius:8px;padding:10px;margin-bottom:8px;">
@@ -3903,11 +3947,11 @@ function rAdminTourEdit(){
 
     <div class="card" style="padding:14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;margin-bottom:6px;">
-        <div style="flex:1;font-size:14px;font-weight:600;color:#111;">参加チーム・メンバー</div>
+        <div style="flex:1;font-size:14px;font-weight:600;color:#111;">${isSinglesTour(tour)?'参加選手':'参加チーム・メンバー'}</div>
         <button class="btn btn-blue btn-xs" id="btn-csv-teams" style="padding:4px 10px;margin-right:6px;">📂 CSV</button>
         <button class="btn btn-green btn-xs" id="btn-add-team" style="padding:4px 10px;">＋ 追加</button>
       </div>
-      <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">CSV: A列=チームNo、B列=チーム名、C〜G列=メンバー　登録済み: ${(tour.teams||[]).length}件</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">${isSinglesTour(tour)?'CSV: A列=選手No、B列=モルックネーム、C列=本名フルネーム（漢字あり・スペースなし）　※シングルスなのでC列に1人だけ書きます':'CSV: A列=チームNo、B列=チーム名、C〜G列=メンバー'}　登録済み: ${(tour.teams||[]).length}件</div>
       ${(tour.teams||[]).length>0?`<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;color:#2E8B57;padding:6px 0;">詳細を表示（${(tour.teams||[]).length}件）</summary>
         <div style="margin-top:6px;">
         ${(tour.teams||[]).map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;">
@@ -4028,7 +4072,12 @@ function showRuleModal(prefix,idx){
 // ===== 成績閲覧 =====
 function rViewPortal(){
   const vs=_viewState;
-  const tabs=[{id:'event',label:'🏆 大会'},{id:'team',label:'👤👤👤 チーム'},{id:'person',label:'👤 個人'}];
+  // シングルス大会は「チームの成績」と「個人の成績」が同じ中身になるため、チームのボタンを出さない
+  const _sglView=isSinglesEventCode(vs.eventCode);
+  if(_sglView&&vs.tab==='team')vs.tab='person';
+  const tabs=[{id:'event',label:'🏆 大会'}]
+    .concat(_sglView?[]:[{id:'team',label:'👤👤👤 チーム'}])
+    .concat([{id:'person',label:_sglView?'👤 選手':'👤 個人'}]);
   const tabHtml=tabs.map(t=>`<button class="btn ${vs.tab===t.id?'btn-gold':'btn-gray'} btn-sm" data-vtab="${t.id}" style="flex:1;padding:8px;font-size:13px;">${t.label}</button>`).join('');
 
   // 大会選択肢（大会名表示）
@@ -5219,6 +5268,7 @@ async function publishSettings(tour,opts){
     gasUrl: tour.gasUrl||'',
     sheetUrl: tour.sheetUrl||'',
     priority: tour.priority||'tournament',
+    matchType: tour.matchType||'team',   // 試合形式（チーム戦／シングルス）も届ける
     matchRules: tour.matchRules||[],
     tourneyRules: tour.tourneyRules||[],
     roundRules: tour.roundRules||[],
@@ -7252,13 +7302,22 @@ function rcpHeader(title,backPhase){
 function rcpChoice(name,value,selected,label,color){
   const on=selected===value;
   const c=color||'#1D9E75';
-  return`<button class="rcp-choice" data-name="${name}" data-value="${value}" style="width:100%;padding:18px 16px;margin-bottom:12px;border:2px solid ${on?c:'#e5e7eb'};border-radius:12px;background:${on?(c==='#1D9E75'?'#E1F5EE':'#FEF3F2'):'#fff'};color:#111;font-size:16px;font-weight:700;cursor:pointer;text-align:center;">${label}</button>`;
+  /* 選ばれたときの「中の色」は、ふちの色に合った薄い色にする。
+     以前は「#1D9E75 以外はすべて赤系」という判定だったため、
+     緑の #2E8B57（「いない」「希望しない」）に赤系の背景が付いてしまい、
+     ふちは緑・中はオレンジという色の反転が起きていた。 */
+  const fill={'#1D9E75':'#E1F5EE','#2E8B57':'#E8F4EC','#E24B4A':'#FEF3F2'}[c]||'#F3F4F6';
+  return`<button class="rcp-choice" data-name="${name}" data-value="${value}" style="width:100%;padding:18px 16px;margin-bottom:12px;border:2px solid ${on?c:'#e5e7eb'};border-radius:12px;background:${on?fill:'#fff'};color:#111;font-size:16px;font-weight:700;cursor:pointer;text-align:center;">${label}</button>`;
 }
 function rcpNextBtn(disabled){
   return`<button class="btn btn-green" id="btn-rcp-next" ${disabled?'disabled':''} style="width:100%;padding:15px;font-size:16px;font-weight:700;margin-top:8px;">次へ →</button>`;
 }
 function rcpProgress(step){
-  const total=4;
+  /* シングルスは❶集合・❷メンバー変更が無いので、全2問として表示する。
+     （❸参加経験が1問目、❹棒貸出が2問目） */
+  const _sgl=isSinglesActive();
+  const total=_sgl?2:4;
+  if(_sgl)step=Math.max(0,step-2);
   let dots='';
   for(let i=1;i<=total;i++){
     dots+=`<div style="flex:1;height:5px;border-radius:3px;background:${i<=step?'#3FBF8F':'#e5e7eb'};"></div>`;
@@ -7271,28 +7330,41 @@ function rReception(){
   const st=_rcpState;
   const tour=activeTour()||{teams:[],eventName:''};
   const teams=tour.teams||[];
-  const teamOpts=teams.map(t=>`<option value="${t.id}" ${String(st.selectedTeamId)===String(t.id)?'selected':''}>No.${t.id}　${t.name}</option>`).join('');
+  /* シングルス大会は「チーム」ではなく「選手」と呼ぶ。
+     チーム名の欄＝モルックネーム、メンバー①＝本名フルネーム なので、
+     一覧では「モルックネーム（本名）」の形で出して本人が選びやすくする。 */
+  const _sgl=isSinglesTour(tour);
+  const _W=_sgl?'選手':'チーム';
+  const realName=(t)=>{
+    const m=String((t&&t.members)||'').split(/[,、]/).map(s=>s.trim()).filter(Boolean);
+    return m.length?m[0]:'';
+  };
+  const teamLabel=(t)=>{
+    const rn=_sgl?realName(t):'';
+    return t.name+(rn?'（'+rn+'）':'');
+  };
+  const teamOpts=teams.map(t=>`<option value="${t.id}" ${String(st.selectedTeamId)===String(t.id)?'selected':''}>No.${t.id}　${teamLabel(t)}</option>`).join('');
 
   const modeTab=(v,l)=>`<button class="rcp-mode-tab" data-mode="${v}" style="flex:1;padding:10px 4px;font-size:14px;font-weight:700;border:none;border-radius:8px;background:${st.mode===v?'#1D9E75':'#f3f4f6'};color:${st.mode===v?'#fff':'#6b7280'};cursor:pointer;">${l}</button>`;
 
   const selectBlock=st.mode==='select'
     ?`<div>
-        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チーム名を選択</div>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">${_sgl?'モルックネームを選択':'チーム名を選択'}</div>
         ${teams.length>0
           ?`<select id="rcp-team-select" style="font-size:16px;">
-              <option value="">-- チームを選択 --</option>${teamOpts}
+              <option value="">-- ${_W}を選択 --</option>${teamOpts}
             </select>`
-          :`<div style="font-size:13px;color:#9ca3af;padding:8px 0;">参加チームが登録されていません</div>`}
+          :`<div style="font-size:13px;color:#9ca3af;padding:8px 0;">参加${_W}が登録されていません</div>`}
       </div>`
     :(()=>{
         const matched=teams.find(t=>String(t.id)===st.teamNo||String(parseInt(t.id,10))===String(parseInt(st.teamNo,10)));
         const preview=st.teamNo
           ?(matched
-            ?`<div style="margin-top:8px;padding:10px 12px;background:#E1F5EE;border-radius:8px;font-size:15px;font-weight:700;color:#085041;">✓ ${matched.name}</div>`
-            :`<div style="margin-top:8px;padding:10px 12px;background:#FCEBEB;border-radius:8px;font-size:13px;color:#b91c1c;">該当するチームが見つかりません</div>`)
+            ?`<div style="margin-top:8px;padding:10px 12px;background:#E1F5EE;border-radius:8px;font-size:15px;font-weight:700;color:#085041;">✓ ${teamLabel(matched)}</div>`
+            :`<div style="margin-top:8px;padding:10px 12px;background:#FCEBEB;border-radius:8px;font-size:13px;color:#b91c1c;">該当する${_W}が見つかりません</div>`)
           :'';
         return`<div>
-          <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">チームNo</div>
+          <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">${_W}No</div>
           <input type="text" id="rcp-team-no" value="${st.teamNo}" placeholder="例: 073" inputmode="numeric" style="font-size:18px;letter-spacing:2px;text-align:center;"/>
           <div id="rcp-team-no-preview">${preview}</div>
         </div>`;
@@ -7300,11 +7372,11 @@ function rReception(){
 
   return`<div style="padding:8px 0 4px;">
     ${rcpHeader('大会受付','setup')}
-    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${tour.eventName||'大会'}の受付を行います。<br>まずはチームを選択してください。</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${tour.eventName||'大会'}の受付を行います。<br>まずは${_sgl?'ご自分の名前':'チーム'}を選択してください。</div>
     <div class="card" style="padding:16px;margin-bottom:12px;">
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        ${modeTab('select','チーム名から選ぶ')}
-        ${modeTab('search','チームNoで入力')}
+        ${modeTab('select',_sgl?'名前から選ぶ':'チーム名から選ぶ')}
+        ${modeTab('search',_W+'Noで入力')}
       </div>
       ${selectBlock}
       ${st.loginError?`<div style="font-size:13px;color:#b91c1c;margin-top:10px;">${st.loginError}</div>`:''}
@@ -7319,7 +7391,7 @@ function rRcpPw(){
   const t=rcpTeam();
   return`<div style="padding:8px 0 4px;">
     ${rcpHeader('大会受付','reception')}
-    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${t?t.name+'（No.'+t.id+'）':''}</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${t?rcpDisplayName(t)+'（No.'+t.id+'）':''}</div>
     <div class="card" style="padding:16px;margin-bottom:12px;">
       <div style="font-size:13px;color:#6b7280;margin-bottom:4px;">受付パスワード（数字4桁／会場掲示）</div>
       <input type="text" id="rcp-pw" value="${st.pwInput}" placeholder="••••" maxlength="4" inputmode="numeric" style="font-size:22px;letter-spacing:10px;text-align:center;"/>
@@ -7330,6 +7402,15 @@ function rRcpPw(){
 }
 
 // 受付対象チームのオブジェクトを取得
+/* 受付画面で名前を出すときの共通の書き方。
+   シングルスは「モルックネーム（本名）」、チーム戦は今までどおりチーム名だけ。 */
+function rcpDisplayName(t){
+  if(!t)return'';
+  if(!isSinglesActive())return t.name;
+  const m=String(t.members||'').split(/[,、]/).map(s=>s.trim()).filter(Boolean);
+  return t.name+(m.length?'（'+m[0]+'）':'');
+}
+
 function rcpTeam(){
   const tour=activeTour()||{teams:[]};
   return(tour.teams||[]).find(t=>String(t.id)===String(_rcpState.selectedTeamId))||null;
@@ -7341,7 +7422,7 @@ function rRcpQ1(){
   return`<div style="padding:8px 0 4px;">
     ${rcpHeader('大会受付','reception')}
     ${rcpProgress(1)}
-    <div style="font-size:17px;font-weight:700;color:#111;line-height:1.5;margin-bottom:20px;">❶ 開会式までに会場に、自分を含めてチームメンバーが最低2人は到着する見込みですか？</div>
+    <div style="font-size:17px;font-weight:700;color:#111;line-height:1.5;margin-bottom:20px;">${isSinglesActive()?'❶ 開会式までに会場に到着する見込みですか？':'❶ 開会式までに会場に、自分を含めてチームメンバーが最低2人は到着する見込みですか？'}</div>
     ${rcpChoice('q1','arrive',st.q1,'到着する','#1D9E75')}
     ${rcpChoice('q1','late',st.q1,'遅れる可能性がある','#E24B4A')}
     ${rcpNextBtn(!st.q1)}
@@ -7355,11 +7436,11 @@ function rRcpQ2(){
   const members=t&&t.members?String(t.members).split(/[,、]/).map(s=>s.trim()).filter(Boolean):[];
   const memberHtml=members.length>0
     ?members.map(m=>`<div style="font-size:14px;color:#111;padding:4px 0;border-bottom:1px solid #f3f4f6;">・${m}</div>`).join('')
-    :`<div style="font-size:13px;color:#9ca3af;">メンバー未登録</div>`;
+    :`<div style="font-size:13px;color:#9ca3af;">${isSinglesActive()?'本名が未登録です':'メンバー未登録'}</div>`;
   return`<div style="padding:8px 0 4px;">
     ${rcpHeader('大会受付','rcpQ1')}
     ${rcpProgress(2)}
-    <div style="font-size:17px;font-weight:700;color:#111;line-height:1.5;margin-bottom:14px;">❷ 以下のチームメンバーから、メンバー変更はありませんか？</div>
+    <div style="font-size:17px;font-weight:700;color:#111;line-height:1.5;margin-bottom:14px;">${isSinglesActive()?'❷ 以下の登録内容（モルックネーム・本名）に間違いはありませんか？':'❷ 以下のチームメンバーから、メンバー変更はありませんか？'}</div>
     <div class="card" style="padding:14px;margin-bottom:18px;">
       <div style="font-size:15px;font-weight:700;color:#1D9E75;margin-bottom:8px;">${t?t.name:'チーム'}<span style="font-size:12px;color:#9ca3af;font-weight:400;margin-left:6px;">No.${t?t.id:'-'}</span></div>
       ${memberHtml}
@@ -7374,11 +7455,11 @@ function rRcpQ2(){
 function rRcpQ3(){
   const st=_rcpState;
   return`<div style="padding:8px 0 4px;">
-    ${rcpHeader('大会受付','rcpQ2')}
+    ${rcpHeader('大会受付',isSinglesActive()?'reception':'rcpQ2')}
     ${rcpProgress(3)}
-    <div style="font-size:17px;font-weight:700;color:#111;line-height:1.5;margin-bottom:20px;">❸ 本大会に参加したことがあるメンバーが、チームに1人はいますか？</div>
-    ${rcpChoice('q3','yes',st.q3,'いる','#1D9E75')}
-    ${rcpChoice('q3','no',st.q3,'いない','#2E8B57')}
+    <div style="font-size:17px;font-weight:700;color:#111;line-height:1.5;margin-bottom:20px;">${isSinglesActive()?'❸ 本大会に参加したことがありますか？':'❸ 本大会に参加したことがあるメンバーが、チームに1人はいますか？'}</div>
+    ${rcpChoice('q3','yes',st.q3,isSinglesActive()?'ある':'いる','#1D9E75')}
+    ${rcpChoice('q3','no',st.q3,isSinglesActive()?'ない':'いない','#2E8B57')}
     ${rcpNextBtn(!st.q3)}
   </div>`;
 }
@@ -7403,7 +7484,7 @@ function rRcpRental(){
     <div style="font-size:17px;font-weight:700;color:#111;margin-bottom:16px;">以下の注意事項をお読みください</div>
     <div class="card" style="padding:16px;margin-bottom:20px;background:#FFF7ED;border-color:#fed7aa;">
       <div style="font-size:15px;color:#92400e;line-height:1.7;">
-        ・モルック棒の貸し出しは1チームにつき1本となります。<br>
+        ・モルック棒の貸し出しは${isSinglesActive()?'1人':'1チーム'}につき1本となります。<br>
         ・大会終了後に必ず返却をしてください。
       </div>
     </div>
@@ -7420,7 +7501,7 @@ function rRcpFinal(){
     <div style="font-size:17px;font-weight:700;color:#111;margin-bottom:16px;">最後にご確認ください</div>
     <div class="card" style="padding:16px;margin-bottom:18px;">
       <div style="font-size:15px;color:#111;line-height:1.7;">
-        ・受付終了後のチームから、コート内で自由に練習が可能です。<br>
+        ・受付終了後の${isSinglesActive()?'方':'チーム'}から、コート内で自由に練習が可能です。<br>
         ・参加賞の缶バッチは、本部にて参加人数分受取が可能です。
       </div>
     </div>
@@ -7439,14 +7520,14 @@ function rRcpDone(){
   const st=_rcpState;
   // 本部での詳細確認が必要か：送信成功時のresultStatusを優先（スキップ時はq1-q4がnullのため）
   const needsDesk=st.resultStatus?(st.resultStatus==='desk'):((st.q1==='late')||(st.q2==='changed')||(st.q3==='no')||(st.q4==='want'));
-  const alreadyNote=st.alreadyDone?`<div style="font-size:13px;color:#0a6e57;background:#E1F5EE;border-radius:8px;padding:8px 12px;margin:0 auto 4px;max-width:340px;">このチームは既に受付が完了しています。</div>`:'';
+  const alreadyNote=st.alreadyDone?`<div style="font-size:13px;color:#0a6e57;background:#E1F5EE;border-radius:8px;padding:8px 12px;margin:0 auto 4px;max-width:340px;">${isSinglesActive()?'この選手は':'このチームは'}既に受付が完了しています。</div>`:'';
   if(needsDesk){
     return`<div style="padding:8px 0 4px;">
       <div style="text-align:center;padding:40px 16px;">
         <div style="font-size:56px;margin-bottom:12px;">⚠️</div>
         <div style="font-size:21px;font-weight:800;color:#92400e;margin-bottom:14px;line-height:1.5;">詳細の確認を行いますので、<br>本部にお越しください</div>
         ${alreadyNote}
-        <div style="font-size:15px;color:#374151;line-height:1.6;">${t?t.name+'（No.'+t.id+'）':''}</div>
+        <div style="font-size:15px;color:#374151;line-height:1.6;">${t?rcpDisplayName(t)+'（No.'+t.id+'）':''}</div>
       </div>
       <button class="btn btn-green" id="btn-rcp-home" style="width:100%;padding:15px;font-size:16px;font-weight:700;">ホームに戻る</button>
     </div>`;
@@ -7456,7 +7537,7 @@ function rRcpDone(){
       <div style="font-size:56px;margin-bottom:12px;">✅</div>
       <div style="font-size:22px;font-weight:800;color:#1D9E75;margin-bottom:10px;">受付が完了しました</div>
       ${alreadyNote}
-      <div style="font-size:15px;color:#374151;line-height:1.6;">${t?t.name+'（No.'+t.id+'）':''}<br>受付ありがとうございました。</div>
+      <div style="font-size:15px;color:#374151;line-height:1.6;">${t?rcpDisplayName(t)+'（No.'+t.id+'）':''}<br>受付ありがとうございました。</div>
     </div>
     <button class="btn btn-green" id="btn-rcp-home" style="width:100%;padding:15px;font-size:16px;font-weight:700;">ホームに戻る</button>
   </div>`;
@@ -7971,7 +8052,7 @@ function rMatchConfirm(){
           <span style="font-size:13px;font-weight:700;color:#111;flex:1;">${team?team.name:'未設定'}</span>
         </div>
         ${team&&team.id?`<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;">No.${team.id}</div>`:''}
-        ${members.length>0?members.map(m=>`<div style="font-size:12px;color:#374151;padding:1px 0;">・${m}</div>`).join(''):`<div style="font-size:12px;color:#9ca3af;">メンバー未登録</div>`}
+        ${members.length>0?members.map(m=>`<div style="font-size:12px;color:#374151;padding:1px 0;">・${m}</div>`).join(''):`<div style="font-size:12px;color:#9ca3af;">${isSinglesActive()?'選手名未登録':'メンバー未登録'}</div>`}
       </div>
       ${gi===0?`<div style="text-align:center;padding-top:20px;font-size:20px;font-weight:700;color:#9ca3af;">VS</div>`:''}
       `).join('')}
@@ -8471,6 +8552,8 @@ function bind(){
   const vesel=document.getElementById('view-event-select');
   if(vesel)vesel.onchange=async()=>{
     _viewState.eventCode=vesel.value;
+    // シングルス大会にはチームのタブが無いので、選手のタブへ移しておく
+    if(isSinglesEventCode(_viewState.eventCode)&&_viewState.tab==='team')_viewState.tab='person';
     _viewState.selectedTeam=null;_viewState.selectedPerson=null;
     // 大会変更時はキャッシュをクリア
     _viewState.teams=[];_viewState.persons=[];_viewState.eventStat=null;_viewState.cumulData=null;
@@ -8938,6 +9021,7 @@ function bind(){
     const peEl=document.getElementById('te-period-end');if(peEl)tour.eventPeriodEnd=peEl.value;
     const rpwEl=document.getElementById('te-reception-pw');if(rpwEl)tour.receptionPw=rpwEl.value.trim();
     const btcEl=document.getElementById('te-bracket-count');if(btcEl)tour.bracketTeamCount=Number(btcEl.value)||64;
+    const mtEl=document.getElementById('te-match-type');if(mtEl)tour.matchType=(mtEl.value==='singles'?'singles':'team');
     // 交流戦の参加申請
     const exEn=document.getElementById('te-exh-enabled');
     const exCn=document.getElementById('te-exh-count');
@@ -8985,7 +9069,7 @@ function bind(){
     }
   }
   // 各入力欄を自動保存（途中で他操作をしても入力が消えないように）
-  ['te-venue','te-code','te-name','te-gasurl','te-sheeturl','te-tour-rules','te-tour-notes','te-period-start','te-period-end','te-reception-pw','te-bracket-count','te-bracket1-name','te-bracket2-count','te-bracket2-name','te-exh-enabled','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
+  ['te-venue','te-code','te-name','te-gasurl','te-sheeturl','te-tour-rules','te-tour-notes','te-period-start','te-period-end','te-reception-pw','te-match-type','te-bracket-count','te-bracket1-name','te-bracket2-count','te-bracket2-name','te-exh-enabled','cl-grid','cl-top','cl-bottom','cl-left','cl-right','cl-center-text','cl-center-pos'].forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.addEventListener('change',()=>{
       const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
@@ -8993,6 +9077,12 @@ function bind(){
     });
   });
   // 交流戦：試合数を変えたら入力欄の数を作り直す
+  // 試合形式（チーム戦／シングルス）を変えたら、説明文などを描き直す
+  const mtSel=document.getElementById('te-match-type');
+  if(mtSel)mtSel.addEventListener('change',()=>{
+    const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
+    captureBasicFields(tour);saveActiveTour(tour);render();
+  });
   const exCntEl=document.getElementById('te-exh-count');
   if(exCntEl)exCntEl.addEventListener('change',()=>{
     const tour=AD.tournaments.find(t=>t.id===S._editingTourId);if(!tour)return;
@@ -9311,7 +9401,7 @@ function bind(){
       const sel=document.getElementById('rcp-team-select');
       const id=sel?sel.value:'';
       _rcpState.selectedTeamId=id||null;
-      if(!id){_rcpState.loginError='チームを選択してください。';render();return;}
+      if(!id){_rcpState.loginError=(isSinglesActive()?'選手':'チーム')+'を選択してください。';render();return;}
       team=teams.find(t=>String(t.id)===String(id));
     } else {
       const tn=(document.getElementById('rcp-team-no')||{value:''}).value.trim();
@@ -9356,8 +9446,8 @@ function bind(){
       S.phase='setup';render();
       return;
     }
-    // 未受付：1人目として質問へ
-    S.phase='rcpQ1';render();
+    // 未受付：1人目として質問へ（シングルスは❶集合・❷メンバー変更が無いので❸から）
+    S.phase=isSinglesActive()?'rcpQ3':'rcpQ1';render();
   };
   // 質問画面：選択肢
   document.querySelectorAll('.rcp-choice').forEach(el=>el.addEventListener('click',()=>{
@@ -9830,6 +9920,8 @@ function bind(){
     // チーム情報をStateに反映
     const r=d.rule;
     S.fmt=r.fmt;S.turnLimit=r.turnLimit;S.playerMin=r.playerMin;S.playerMax=r.playerMax>=99?99:r.playerMax;
+    // シングルス大会は必ず1人。レシピの人数設定に関わらず1人ちょうどにそろえる
+    if(isSinglesActive()){S.playerMin=1;S.playerMax=1;}
     if(d.hasTeams){
       const mA=d.teamA.members?d.teamA.members.split(/[,、]/).map(s=>s.trim()).filter(Boolean):[];
       const mB=d.teamB.members?d.teamB.members.split(/[,、]/).map(s=>s.trim()).filter(Boolean):[];
@@ -9855,6 +9947,8 @@ function bind(){
     if(!d||!d.hasRule)return;
     const r=d.rule;
     S.fmt=r.fmt;S.turnLimit=r.turnLimit;S.playerMin=r.playerMin;S.playerMax=r.playerMax>=99?99:r.playerMax;
+    // シングルス大会は必ず1人。レシピの人数設定に関わらず1人ちょうどにそろえる
+    if(isSinglesActive()){S.playerMin=1;S.playerMax=1;}
     if(d.hasTeams){
       const mA=d.teamA.members?d.teamA.members.split(/[,、]/).map(s=>s.trim()).filter(Boolean):[];
       const mB=d.teamB.members?d.teamB.members.split(/[,、]/).map(s=>s.trim()).filter(Boolean):[];
