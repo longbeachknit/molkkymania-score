@@ -3893,7 +3893,7 @@ function ruleCardsHtml(obj){
       <button class="btn btn-blue btn-xs" id="btn-sc-autogen" style="padding:4px 10px;">ルールから自動生成</button>
       <button class="btn btn-gray btn-xs" id="btn-sc-tpl" style="padding:4px 10px;margin-left:6px;">テンプレを読み込む</button>
     </div>
-    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">「残り試合数を確認」で表示される図です。一度負けると右の列（トーナメント）へ移ります。<br>「ルールから自動生成」を押すと、いまの<strong>試合区分・トーナメント種類・ラウンド名・優先ルール</strong>（ラウンドごとの上書きを含む）にそろえて作り直します。<br>「テンプレを読み込む」を押すと、<strong>よく使う大会の形</strong>（66〜96チーム型・128チーム型など）をそのまま呼び出せます。いまの図に名前を付けて保存し、次の大会で呼び出すこともできます。<br>プレビューの<strong>箱（試合）をタップ</strong>すると、<strong>負けたチームの行き先</strong>を選べます。左右どちらの列でも、2つ下の回戦でも指定できます。${scHasRules?'':'<br>※ 先に試合区分・トーナメント種類・ラウンド名を登録すると自動生成できます。'}</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">「残り試合数を確認」で表示される図です。一度負けると右の列（トーナメント）へ移ります。<br>「ルールから自動生成」を押すと、いまの<strong>試合区分・トーナメント種類・ラウンド名・優先ルール</strong>（ラウンドごとの上書きを含む）にそろえて作り直します。<br>「テンプレを読み込む」を押すと、<strong>よく使う大会の形</strong>（66〜96チーム型・128チーム型など）をそのまま呼び出せます。いまの図に名前を付けて保存し、次の大会で呼び出すこともできます。<br>プレビューの<strong>箱（試合）をタップ</strong>すると、<strong>負けたチームの行き先</strong>を選べます。左右どちらの列でも、2つ下の回戦でも指定できます。<br>プレビューの<strong>矢印をタップ</strong>すると、<strong>その矢印を消せます</strong>（消したあとも、箱をタップして行き先を選び直せば戻せます）。${scHasRules?'':'<br>※ 先に試合区分・トーナメント種類・ラウンド名を登録すると自動生成できます。'}</div>
 
     <details style="margin-bottom:10px;"${scText.trim()?'':' open'}>
       <summary style="cursor:pointer;font-size:13px;color:#2E8B57;padding:6px 0;">① 構成を編集する（トーナメント名・回戦）</summary>
@@ -3917,7 +3917,7 @@ function ruleCardsHtml(obj){
       </div>
     </details>
 
-    <div style="font-size:12px;color:#6b7280;margin:6px 0 4px;">プレビュー　<span style="color:#9ca3af;">（青い ↘ をタップすると「負け矢印」の表示／非表示を切り替えできます）</span></div>
+    <div style="font-size:12px;color:#6b7280;margin:6px 0 4px;">プレビュー　<span style="color:#9ca3af;">（<b>矢印をタップすると、その矢印を消せます</b>／箱をタップすると行き先を選べます）</span></div>
     <div id="sc-preview" style="overflow-x:auto;padding:8px;background:#fafafa;border-radius:8px;">${renderSystemChart(scCh,true)}</div>
   </div>`;
 
@@ -6137,10 +6137,10 @@ function scCollectLinks(ch,cols){
       const on=(ov===true)?true:((ov===false)?false:auto);
       if(!on)continue;
       if(d<0||d>=cols.length||d===c||!has(d,s))continue;
-      out.push({from:{k:'cell',c:c,r:r},to:{k:'cell',c:d,r:s},kind:'lose',label:'負け'});
+      out.push({from:{k:'cell',c:c,r:r},to:{k:'cell',c:d,r:s},kind:'lose',label:'負け',src:'lose',key:key});
     }
   }
-  (ch.links||[]).forEach(l=>{
+  (ch.links||[]).forEach((l,li)=>{
     if(!l)return;
     const a=scRefToPos(l.from,cols),b=scRefToPos(l.to,cols);
     if(!a||!b)return;
@@ -6149,7 +6149,7 @@ function scCollectLinks(ch,cols){
     if(a.k==='cell'&&!has(a.c,a.r))return;
     if(a.k==='prelim'&&(a.i<0||a.i>=nPre))return;
     if(b.k==='prelim'&&(b.i<0||b.i>=nPre))return;
-    out.push({from:a,to:b,kind:(l.kind==='lose'?'lose':'plain'),ci:(l.ci==null?null:Number(l.ci)),label:(l.label==null?'':String(l.label))});
+    out.push({from:a,to:b,kind:(l.kind==='lose'?'lose':'plain'),ci:(l.ci==null?null:Number(l.ci)),label:(l.label==null?'':String(l.label)),src:'link',li:li});
   });
   return out;
 }
@@ -6167,7 +6167,7 @@ function renderSystemChart(ch,editable){
   const rowLabels=ch.rowLabels||[];
   const totalGrid=nCols*2-1;
   const regId='sc'+(++SC_REG_SEQ);
-  SC_REG[regId]={ch:ch,cols:cols};
+  SC_REG[regId]={ch:ch,cols:cols,editable:!!editable};
 
   // 横スクロール不要で全体が収まるよう、幅を100%に固定し列幅を％配分する
   const labelPct=nCols>=5?11:(nCols>=4?12:14);   // 「第10試合」が折り返さない幅
@@ -6286,6 +6286,22 @@ function renderSystemChart(ch,editable){
    色が違っても「これは負けの矢印だ」と分かる。
    何番めの色になるかは「出発するトーナメント」で決まる。 */
 const SC_LINK_COLORS=['#1d4ed8','#0891b2','#38a3f0','#4f46e5','#0e7490','#60a5fa'];
+/* 【8-8】矢印をタップして消す
+     l.src==='lose' … 負けの矢印。「表示しない」印を付ける（あとで箱をタップすれば戻せる）
+     l.src==='link' … テンプレなどが持っている矢印。その1本だけを取り除く         */
+function scDeleteLink(ch,l){
+  if(!ch||!l)return false;
+  if(l.src==='link'){
+    if(ch.links&&l.li!=null&&l.li>=0&&l.li<ch.links.length){ch.links.splice(l.li,1);return true;}
+    return false;
+  }
+  if(!l.key)return false;
+  ch.loseArrows=ch.loseArrows||{};
+  ch.loseArrows[l.key]=false;
+  if(ch.loseTo)delete ch.loseTo[l.key];
+  return true;
+}
+
 function scPaint(root){
   try{
     const reg=SC_REG[root.getAttribute('data-sc-id')];if(!reg)return;
@@ -6331,6 +6347,7 @@ function scPaint(root){
     });
     defs+='</defs>';
     const parts=[defs];
+    const hits=[];   // 【8-8】矢印を押せるようにする透明な線（編集中だけ）
 
     links.forEach((l,idx)=>{
       const A=boxOf(l.from),B=boxOf(l.to);
@@ -6377,12 +6394,30 @@ function scPaint(root){
         }
       }
       parts.push('<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'+dash+' marker-end="url(#'+mk+')"/>');
+      // 【8-8】編集中は、矢印の上に「押せる透明な太い線」を重ねておく（細い矢印でも指で押せるように）
+      if(reg.editable)hits.push('<path class="sc-hit" data-i="'+idx+'" d="'+d+'" fill="none" stroke="rgba(0,0,0,0)" stroke-width="16" stroke-linejoin="round" stroke-linecap="round" style="pointer-events:stroke;cursor:pointer;"><title>タップすると、この矢印を消せます</title></path>');
       const txt=l.label||'';
       if(txt)parts.push('<text x="'+lx+'" y="'+ly+'" font-size="10" font-weight="700" fill="'+color+'" text-anchor="'+anchor+'" dominant-baseline="middle" stroke="#fff" stroke-width="3.5" paint-order="stroke" style="paint-order:stroke;">'+scEsc(txt)+'</text>');
     });
     svg.setAttribute('width',rb.width);
     svg.setAttribute('height',rb.height);
-    svg.innerHTML=parts.join('');
+    svg.innerHTML=parts.concat(hits).join('');
+
+    // 【8-8】矢印をタップしたら、その矢印を消す（管理者のプレビューのときだけ）
+    if(reg.editable){
+      svg.querySelectorAll('path.sc-hit').forEach(p=>{
+        p.addEventListener('click',ev=>{
+          ev.stopPropagation();
+          const l=links[parseInt(p.getAttribute('data-i'),10)];
+          if(!l)return;
+          const nm=(l.kind==='lose')?'負けの矢印':'矢印';
+          if(!confirm('この'+nm+'を消しますか？\n\n（消したあとでも、出発する箱をタップして行き先を選び直せば元に戻せます）'))return;
+          if(!scDeleteLink(reg.ch,l))return;
+          if(window.SC_AFTER_ARROW_EDIT)window.SC_AFTER_ARROW_EDIT();
+          else scPaintAll();
+        });
+      });
+    }
   }catch(e){}
 }
 function scPaintAll(){try{document.querySelectorAll('.sc-chart').forEach(scPaint);}catch(e){}}
@@ -9387,6 +9422,11 @@ function bind(){
   function scNormalize(ch){return(ch&&((ch.columns&&ch.columns.length)||(ch.prelims&&ch.prelims.length)||ch.cornerLabel))?ch:null;}
   // 矢印（負け）クリックで表示/非表示を切替
   function bindScArrows(){
+    // 【8-8】矢印をタップして消したときに、保存して描き直すためのつなぎ
+    window.SC_AFTER_ARROW_EDIT=()=>{
+      const _t=ruleEditTarget();if(!_t)return;
+      _t.save();renderAdminScPreview();
+    };
     // 【8-6】プレビューの「箱」をタップすると、負けたチームの行き先を選べる
     document.querySelectorAll('#sc-preview .sc-box').forEach(el=>{
       el.onclick=()=>{
