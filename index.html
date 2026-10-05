@@ -2968,14 +2968,32 @@ function rSetup(){
   const _period=fmtEventPeriod(_liveTour);
   // 大会カードのテーマ色：場所に設定があればその色、無ければ既定のゴールド
   const _theme=(_venue&&_venue.themeColor)?_venue.themeColor:'#FFC93D';
-  /* 交流戦の参加申請ボタン。
+  /* 交流戦の参加申請ボタン（★2026-10-05 変更：交流戦ごとに分けた）
      ・大会設定で「申請フォームを作る」にしてあること
-     ・対戦表で「交流戦の受付を開始する」を押してあること（GitHub の open:true）
-     の両方がそろったときだけ出る。受付を終了すると消える。 */
+     ・対戦表で「交流戦の受付を開始する（番号を選ぶ）」でその番号を開始してあること
+     の両方がそろった交流戦だけ、名前入りのボタンが出る。
+     これで「いま何を募集しているのか」がボタンを見れば分かる。
+     タイムスケジュールに時間が書いてあれば、ボタンにも時間を添える。
+
+     受付の状況を確かめられなかったとき（通信が詰まった・GitHubの読み取り
+     回数の上限に当たった等）は、ボタンを出さずに「確認できませんでした」と
+     出す。終了したはずのボタンが残ってしまうより、こちらのほうが事故が少ない。 */
   const _exh=exhOf(_liveTour);
   if(_liveTour&&_exh.enabled)maybeRefreshExhibitionOpen(_liveTour.eventCode);
-  const _exhBtn=(_liveTour&&_exh.enabled&&_exh.games.length&&S._exhOpen===true)
-    ? `<button id="btn-go-exhibition" style="width:100%;margin-top:8px;padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;">交流戦参加申請はこちら（受付中）</button>`
+  const _exhOpenList=(_liveTour&&_exh.enabled)
+    ? _exh.games.map((g,i)=>({i:i,name:g.name})).filter(x=>exhGameIsOpen_(x.i))
+    : [];
+  // 受付中のものがあるときだけ、時間を出すためにタイムスケジュールを読む
+  if(_exhOpenList.length&&_liveTour)maybeLoadExhSchedule(_liveTour.eventCode);
+  const _exhBtn=(_liveTour&&_exh.enabled&&_exh.games.length)
+    ? (_exhOpenList.length
+        ? _exhOpenList.map(x=>{
+            const _t=exhTimeFromSchedule_(S._exSched,x.name);
+            return`<button class="btn-go-exhibition" data-i="${x.i}" style="width:100%;margin-top:8px;padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;line-height:1.6;">${esc(x.name)}の参加申請はこちら（受付中）${_t?`<br><span style="font-size:11px;font-weight:700;color:#6b7280;">🕐 ${esc(_t)}</span>`:''}</button>`;
+          }).join('')
+        : (S._exhUnknown===true
+            ? `<div style="margin-top:8px;padding:10px 12px;background:#f3f4f6;border-radius:10px;font-size:11px;color:#6b7280;line-height:1.7;">いま交流戦の受付状況を確認できませんでした。<br>少し時間をおいて、もう一度ホーム画面を開いてください。</div>`
+            : ''))
     : '';
   const _themeBg=_theme+'2E';   // 背景ハイライト（薄め）
   const _themeSoft=_theme+'4D'; // 受付済みボックス（やや濃いめ）
@@ -7406,24 +7424,83 @@ function exhOf(tour){
   return {enabled:e.enabled===true,count:n,games:games};
 }
 
-/* いま受付中かどうかを GitHub から確かめる。
+/* =========================================================================
+   交流戦の「何時から何時か」を、配信済みのタイムスケジュールから拾う
+   （案B／2026-10-05 追加）
 
-   【速さのはなし】GitHub から読む道は2本ある。
-     ① api.github.com …「対戦表を配信」で使っているのと同じ道。
-        置いた“その瞬間”の中身がそのまま返るので、いちばん速い。
-        ただし1つの回線あたり1時間60回までという上限がある。
-     ② raw.githubusercontent.com … 上限は実質ないが、
-        途中のキャッシュのせいで数分ふるい内容が返ることがある。
-   受付の開始／終了はすぐ伝わってほしいので、まず①を使い、
-   ①がだめだったとき（上限に当たった等）だけ②に切り替える。
-   こうすると、ふだんは最速・もしもの時もボタンが出ないままにはならない。 */
-async function fetchExhibitionOpen_(code){
-  const fileName=toJsonFileCode(code)+'_exhibition.json';
-  // ① 速い道（対戦表の配信と同じ）
+   考え方
+     時間を入れる欄をどこかに新しく作るのではなく、
+     すでに配信している {大会コード}_info.json の中の
+     タイムスケジュール（区分／時間）から、名前で探して持ってくる。
+     だから対戦表側の作業は増えない。時間がずれたら、これまでどおり
+     「大会概要（レギュレーション・タイムスケジュール最新版）」の
+     時間セルを直せばよい（直した時点で自動配信される）。
+
+   探し方（ここが大事）
+     「交流戦①」と完全に同じ区分名だけを探すのではなく、
+     区分名の中に「交流戦①」が含まれていれば当たりとする。
+       例）「Bトーナメントのあとに交流戦①」 → 当たり
+     さらに、書き方のゆれも吸収する。
+       ・空白（半角・全角）は無視
+       ・全角の英数字は半角として扱う
+       ・「①」と「1」は同じものとして扱う（交流戦① ＝ 交流戦1）
+       ・英字の大文字・小文字は区別しない
+     時間が空っぽの行（＝見出しの帯）は時間がないので飛ばす。
+     当たりが複数あったら、いちばん上の行（＝早い時間）を使う。
+
+   見つからなかったとき
+     何も出さない（「時間 未定」などとは出さない）。
+     タイムスケジュールにまだ書かれていない、という状態なので、
+     書き足せばそのまま出るようになる。
+   ========================================================================= */
+
+const EXH_SCHED_TTL = 60000;   // 一度読んだら60秒は読み直さない
+const EXH_CIRCLE_   = '①②③④⑤⑥⑦⑧⑨';
+
+// 照合用に、書き方のゆれをならす
+function exhNorm_(s){
+  return String(s==null?'':s)
+    .replace(/[\s　]/g,'')                                   // 空白を消す
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)) // 全角英数→半角
+    .replace(/[①-⑨]/g,c=>String(EXH_CIRCLE_.indexOf(c)+1))       // ①→1
+    .toLowerCase();
+}
+
+/* タイムスケジュールの行から、その交流戦の時間を探して返す。見つからなければ ''。 */
+function exhTimeFromSchedule_(rows,gameName){
+  const key=exhNorm_(gameName);
+  if(!key)return '';
+  const list=rows||[];
+  for(let i=0;i<list.length;i++){
+    const r=list[i];
+    if(!r)continue;
+    if(r.type==='gap'||r.type==='header')continue;   // 区切りと見出しは飛ばす
+    const time=String(r.time==null?'':r.time).trim();
+    if(!time)continue;                               // 時間が無い行は使えない
+    if(exhNorm_(r.name).indexOf(key)>=0)return time; // 含まれていれば当たり
+  }
+  return '';
+}
+
+/* タイムスケジュール（_info.json）を取ってくる。
+
+   読む道は交流戦の受付と同じ2段構え。
+     ① api.github.com … 置いたその瞬間の中身が返る（速い）。1端末1時間60回まで
+     ② raw.githubusercontent.com … 上限なし。ただし数分ふるいことがある
+   この画面は参加者が申し込むときに開くだけで、ずっと見張ってはいないので、
+   ①を使っても回数をほとんど使わない。時間のずれをすぐ反映したいので①を優先する。 */
+let _exhSchedCache_={code:'',at:0,rows:null};
+async function fetchExhSchedule_(code){
+  if(!code)return [];
+  const fc=toJsonFileCode(code);
+  if(_exhSchedCache_.code===fc&&_exhSchedCache_.rows&&(Date.now()-_exhSchedCache_.at)<EXH_SCHED_TTL){
+    return _exhSchedCache_.rows;
+  }
+  const fileName=fc+'_info.json';
+  // ① 速い道
   try{
     const res=await fetch(GITHUB_DATA_BASE+'/'+fileName+'?t='+Date.now(),
       {cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
-    if(res.status===404)return false;          // まだ一度も受付を開始していない
     if(res.ok){
       const api=await res.json();
       const b64=String(api.content||'').replace(/\s/g,'');
@@ -7431,17 +7508,115 @@ async function fetchExhibitionOpen_(code){
       const bytes=new Uint8Array(bin.length);
       for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
       const d=JSON.parse(new TextDecoder('utf-8').decode(bytes));
-      return !!(d&&d.open===true);
+      const rows=(d&&d.schedule)||[];
+      _exhSchedCache_={code:fc,at:Date.now(),rows:rows};
+      return rows;
     }
   }catch(e){}
-  // ② 控えの道（少し遅れることがある）
+  // ② 控えの道
   try{
     const res2=await fetch(GITHUB_RAW_BASE+'/'+fileName+'?t='+Date.now(),{cache:'no-store'});
-    if(!res2.ok)return false;
-    const d2=await res2.json();
-    return !!(d2&&d2.open===true);
+    if(res2.ok){
+      const d2=await res2.json();
+      const rows2=(d2&&d2.schedule)||[];
+      _exhSchedCache_={code:fc,at:Date.now(),rows:rows2};
+      return rows2;
+    }
   }catch(e){}
-  return false;
+  return [];
+}
+
+/* 交流戦の画面を開いたときに、1回だけ読みにいく。
+   （60秒以内に読み直すことはしない。通信を増やしすぎないため） */
+let _exhSchedBusy_=false;
+function maybeLoadExhSchedule(code){
+  if(!code||_exhSchedBusy_)return;
+  const fc=toJsonFileCode(code);
+  if(S._exSchedCode===fc&&(Date.now()-(S._exSchedAt||0))<EXH_SCHED_TTL)return;
+  _exhSchedBusy_=true;
+  fetchExhSchedule_(code).then(rows=>{
+    _exhSchedBusy_=false;
+    S._exSched=rows;S._exSchedCode=fc;S._exSchedAt=Date.now();
+    if(S.phase==='exhibition'||S.phase==='setup')render();
+  }).catch(()=>{
+    _exhSchedBusy_=false;S._exSchedCode=fc;S._exSchedAt=Date.now();
+  });
+}
+
+/* いま受付中かどうかを GitHub から確かめる（★2026-10-05 変更：交流戦ごと）
+
+   【どこから読むか】
+     api.github.com から読む。「対戦表を配信」で使っているのと同じ道で、
+     置いた“その瞬間”の中身がそのまま返る＝受付の開始／終了がすぐ伝わる。
+     （1つの回線あたり1時間60回までという上限がある）
+
+   【読めなかったときは「受付していない」とみなす】
+     以前は、読めなかったとき raw.githubusercontent.com に切り替えていた。
+     こちらは上限が実質ないが、途中のキャッシュのせいで
+     数分ふるい内容が返ることがある。そのため
+     「本部が受付を終了したのに、その端末ではボタンが残る」
+     ということが起きていた。
+     終了したはずのボタンが残るほうが事故になるので、
+     確かめられなかったときはボタンを出さない（受付していない扱い）に変えた。
+     そのかわり画面に「確認できませんでした」と出して、
+     黙って消えたように見えないようにしてある。
+     ※念のため、対戦表側（GAS）でも
+       「受付していない交流戦の申し込みは断る」ようにしてあるので、
+       万一ボタンが残っても間違った申し込みは入らない。
+
+   【返す形】
+     { ok:確かめられたか, games:{1:true,2:false,…}, anyOpen:どれか受付中か } */
+async function fetchExhibitionOpen_(code){
+  const fileName=toJsonFileCode(code)+'_exhibition.json';
+  const read=async()=>{
+    const res=await fetch(GITHUB_DATA_BASE+'/'+fileName+'?t='+Date.now(),
+      {cache:'no-store',headers:{'Accept':'application/vnd.github.v3+json'}});
+    // まだ一度も受付を開始していない大会。これは「確かめられた」ので ok:true
+    if(res.status===404)return exhParseOpenJson_(null);
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const api=await res.json();
+    const b64=String(api.content||'').replace(/\s/g,'');
+    const bin=atob(b64);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+    return exhParseOpenJson_(JSON.parse(new TextDecoder('utf-8').decode(bytes)));
+  };
+  try{ return await read(); }
+  catch(e1){
+    await new Promise(r=>setTimeout(r,500));          // 1回だけやり直す
+    try{ return await read(); }
+    catch(e2){ return {ok:false,games:{},anyOpen:false}; }   // ★確かめられなかった
+  }
+}
+
+/* 届いたファイルの中身を「交流戦ごとの受付オン・オフ」に直す。
+     新しい対戦表 … {open:…, games:{"1":true,"2":false}}
+     古い対戦表 …… {open:true} だけ（games が入っていない）
+                   → この場合は、どの交流戦も受付中として扱う（今までと同じ動き） */
+function exhParseOpenJson_(d){
+  const games={};
+  let anyOpen=false;
+  const g=(d&&d.games)||null;
+  if(g&&typeof g==='object'){
+    for(let i=1;i<=9;i++){
+      const on=(g[i]===true||g[String(i)]===true);
+      games[i]=on;
+      if(on)anyOpen=true;
+    }
+  }else{
+    const legacy=!!(d&&d.open===true);
+    for(let i=1;i<=9;i++)games[i]=legacy;
+    anyOpen=legacy;
+  }
+  return {ok:true,games:games,anyOpen:anyOpen};
+}
+
+/* その交流戦（0から数えた番号）が、いま受付中かどうか。
+   まだ受付状況を確かめられていないときは false（＝出さない）。 */
+function exhGameIsOpen_(i){
+  const g=S._exhGames;
+  if(!g)return false;
+  return g[i+1]===true;
 }
 
 /* いつ見にいくか（「開催中の大会」の確認と同じ考え方）
@@ -7458,11 +7633,16 @@ function maybeRefreshExhibitionOpen(code){
   _exhWasAway=false;
   if(!first&&!back&&(Date.now()-_exhOpenAt)<CACHE_TTL)return;
   _exhOpenBusy=true;
-  fetchExhibitionOpen_(code).then(open=>{
+  fetchExhibitionOpen_(code).then(r=>{
     _exhOpenCode=code;_exhOpenAt=Date.now();_exhOpenBusy=false;
-    if(S._exhOpen!==open){S._exhOpen=open;if(S.phase==='setup')render();}
+    // 前回と中身が変わったときだけ描き直す（むだに画面を作り直さない）
+    const before=JSON.stringify([S._exhOpen,S._exhGames||{},S._exhUnknown===true]);
+    S._exhOpen=r.anyOpen;S._exhGames=r.games;S._exhUnknown=(r.ok!==true);
+    const after=JSON.stringify([S._exhOpen,S._exhGames||{},S._exhUnknown===true]);
+    if(before!==after&&(S.phase==='setup'||S.phase==='exhibition'))render();
   }).catch(()=>{
     _exhOpenAt=Date.now();_exhOpenBusy=false;
+    S._exhGames={};S._exhOpen=false;S._exhUnknown=true;
   });
 }
 
@@ -7484,7 +7664,13 @@ async function submitExhibition(payload){
   })});
   const res=await fetch(gasUrl,{method:'POST',mode:'cors',body});
   const json=await res.json();
-  if(json.status!=='ok')throw new Error(json.message||'送信エラー');
+  if(json.status!=='ok'){
+    /* ★2026-10-05 追加：対戦表側で「その交流戦は受付していない」と
+         断られたとき。アプリの表示がほんの少し古かったということなので、
+         次にこの画面やホームを開いたときに受付状況を取り直させる。 */
+    if(json&&json.closed===true){_exhOpenCode='';_exhOpenAt=0;}
+    throw new Error(json.message||'送信エラー');
+  }
   return json;
 }
 
@@ -7498,6 +7684,11 @@ function rExhibition(){
   const tour=activeTour()||{};
   const ex=exhOf(tour);
   const v=S._exView||'team';
+  // ★交流戦の時間を出すため、配信済みのタイムスケジュールを読みにいく（案B）
+  if(ex.count>0)maybeLoadExhSchedule(tour.eventCode);
+  // ★受付が終わっていないかも、この画面で取り直す
+  if(ex.count>0)maybeRefreshExhibitionOpen(tour.eventCode);
+  const schedReady=(S._exSchedCode===toJsonFileCode(tour.eventCode||''));
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const wrap=inner=>`<div style="padding:16px;max-width:480px;margin:0 auto;">${inner}</div>`;
   const head=(title,backId)=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
@@ -7517,8 +7708,11 @@ function rExhibition(){
       <div style="background:#E1F5EE;border-radius:12px;padding:16px;margin:18px 0;">
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;"><span style="color:#6b7280;">チーム</span><span style="font-weight:700;color:#111;">No.${esc(S._exTeamNo)}　${esc(S._exTeamName)}</span></div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-top:1px solid #b7e2d2;"><span style="color:#6b7280;">申し込んだ試合</span><span style="font-weight:700;color:#111;">${esc(g.name)}</span></div>
+        ${exhTimeFromSchedule_(S._exSched,g.name)?`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-top:1px solid #b7e2d2;"><span style="color:#6b7280;">時間</span><span style="font-weight:700;color:#111;">${esc(exhTimeFromSchedule_(S._exSched,g.name))}</span></div>`:''}
       </div>
-      <button id="btn-ex-again" style="width:100%;padding:13px;margin-bottom:10px;border:1.5px solid #1D9E75;border-radius:10px;background:#fff;color:#0a6e57;font-size:14px;font-weight:700;cursor:pointer;">もう一方の交流戦にも申し込む</button>
+      ${ex.games.map((gg,ii)=>ii).filter(ii=>exhGameIsOpen_(ii)&&ii!==S._exGame).length
+        ?`<button id="btn-ex-again" style="width:100%;padding:13px;margin-bottom:10px;border:1.5px solid #1D9E75;border-radius:10px;background:#fff;color:#0a6e57;font-size:14px;font-weight:700;cursor:pointer;">ほかの交流戦にも申し込む</button>`
+        :''}
       <button id="btn-ex-home" style="width:100%;padding:15px;border:none;border-radius:12px;background:#1D9E75;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">ホームに戻る</button>
     `);
   }
@@ -7526,13 +7720,22 @@ function rExhibition(){
   // ── どの交流戦に出るかを選ぶ ──
   if(v==='game'){
     const sel=S._exGame;
-    const cards=ex.games.map((g,i)=>{
+    /* ★2026-10-05 変更：受付中の交流戦だけを並べる。
+         data-i には「もとの番号」を入れたままにするので、
+         送信するときの番号（交流戦①＝1）はずれない。 */
+    const openList=ex.games.map((g,i)=>({g:g,i:i})).filter(x=>exhGameIsOpen_(x.i));
+    const cards=openList.map(({g,i})=>{
       const on=sel===i;
+      // ★この交流戦が何時からかを、タイムスケジュールの区分名から探す（案B）
+      const gTime=exhTimeFromSchedule_(S._exSched,g.name);
       return`<button class="ex-game" data-i="${i}" style="width:100%;text-align:left;padding:16px;margin-bottom:12px;border:2px solid ${on?'#1D9E75':'#e5e7eb'};border-radius:12px;background:${on?'#E1F5EE':'#fff'};cursor:pointer;">
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="width:22px;height:22px;border-radius:11px;border:2px solid ${on?'#1D9E75':'#d1d5db'};background:${on?'#1D9E75':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;">${on?'✓':''}</span>
           <span style="font-size:16px;font-weight:800;color:#111;">${esc(g.name)}</span>
         </div>
+        ${gTime
+          ?`<div style="font-size:13px;font-weight:700;color:#0a6e57;margin:8px 0 0 32px;">🕐 ${esc(gTime)}</div>`
+          :(schedReady?'':`<div style="font-size:12px;color:#9ca3af;margin:8px 0 0 32px;">🕐 時間を確認中...</div>`)}
         ${g.desc?`<div style="font-size:13px;color:#4b5563;line-height:1.7;margin:8px 0 0 32px;white-space:pre-wrap;">${esc(g.desc)}</div>`:''}
       </button>`;
     }).join('');
@@ -7541,7 +7744,7 @@ function rExhibition(){
         申し込むチーム：<b>No.${esc(S._exTeamNo)}　${esc(S._exTeamName)}</b>
       </div>
       <div style="font-size:14px;font-weight:700;color:#111;margin-bottom:10px;">出たい交流戦を選んでください</div>
-      ${cards||'<div style="font-size:13px;color:#9ca3af;padding:12px 0;">交流戦が設定されていません。</div>'}
+      ${cards||`<div style="font-size:13px;color:#9ca3af;padding:12px 0;line-height:1.8;">${ex.games.length?'いま受付中の交流戦はありません。<br>本部の案内をお待ちください。':'交流戦が設定されていません。'}</div>`}
       ${S._exError?`<div style="padding:12px;background:#fee2e2;border-radius:10px;color:#dc2626;font-size:13px;line-height:1.7;margin-bottom:12px;">${esc(S._exError)}</div>`:''}
       <button id="btn-ex-submit" ${(sel==null||S._exSubmitting)?'disabled':''} style="width:100%;padding:16px;border:none;border-radius:12px;background:${(sel==null||S._exSubmitting)?'#d1d5db':'#1D9E75'};color:#fff;font-size:17px;font-weight:800;cursor:${(sel==null||S._exSubmitting)?'default':'pointer'};">${S._exSubmitting?'送信中...':'参加を申請する'}</button>
       <div style="font-size:11px;color:#9ca3af;text-align:center;margin-top:10px;line-height:1.7;">送信が対戦表に書き込まれたことを確認してから、完了画面が出ます。<br>両方に出たい場合は、送信後にもう一度申し込めます。</div>
@@ -9798,22 +10001,31 @@ function bind(){
     }
   };
   // ===== 交流戦 参加申請 =====
-  const bgex=document.getElementById('btn-go-exhibition');
-  if(bgex)bgex.onclick=async()=>{
-    const code=await resolveActiveEventCode();
-    if(!code){alert('現在、開催中の大会はありません。');return;}
-    await syncAllFromGitHub(code);
-    const t=(AD.tournaments||[]).find(x=>x.eventCode===code);
-    if(t){AD.activeTourId=t.id;saveAdmin(AD);}
-    resetExhibition();
-    // 受付済みなら自分のチームを最初から選んでおく
-    const my=getValidMyTeam(code);
-    if(my&&my.teamId){
-      const tm=((t&&t.teams)||[]).find(x=>String(x.id)===String(my.teamId));
-      if(tm){S._exTeamNo=String(tm.id);S._exTeamName=tm.name||'';}
-    }
-    S.phase='exhibition';render();
-  };
+  /* ★2026-10-05 変更：ボタンが交流戦ごとに複数並ぶようになったので、
+       「どの交流戦のボタンを押したか（data-i）」を受け取って、
+       その交流戦を最初から選んだ状態で画面を開く。 */
+  document.querySelectorAll('.btn-go-exhibition').forEach(bgex=>{
+    bgex.onclick=async()=>{
+      const pick=parseInt(bgex.dataset.i,10);
+      const code=await resolveActiveEventCode();
+      if(!code){alert('現在、開催中の大会はありません。');return;}
+      await syncAllFromGitHub(code);
+      const t=(AD.tournaments||[]).find(x=>x.eventCode===code);
+      if(t){AD.activeTourId=t.id;saveAdmin(AD);}
+      resetExhibition();
+      if(pick>=0)S._exGame=pick;                 // 押した交流戦を選んでおく
+      // 受付済みなら自分のチームを最初から選んでおく
+      const my=getValidMyTeam(code);
+      if(my&&my.teamId){
+        const tm=((t&&t.teams)||[]).find(x=>String(x.id)===String(my.teamId));
+        if(tm){
+          S._exTeamNo=String(tm.id);S._exTeamName=tm.name||'';
+          S._exView='game';                      // チームが分かっているなら選択画面へ進む
+        }
+      }
+      S.phase='exhibition';render();
+    };
+  });
   const exSel=document.getElementById('ex-team');
   if(exSel)exSel.addEventListener('change',()=>{
     const v=exSel.value;
