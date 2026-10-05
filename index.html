@@ -1616,7 +1616,13 @@ async function refreshLiveEvent(){
     const remote=await fetchActiveEvent();
     const code=(remote&&remote.hasOwnProperty('activeEventCode'))?(remote.activeEventCode||''):(AD.activeEventCode||'');
     if(code){
-      await syncAllFromGitHub(code);
+      /* ★2026-10-05 変更：ここで「設定」と「対戦カード」の両方を取っていたが、
+           ホーム画面は対戦カードを1つも使っていない。
+           対戦カードは「対戦相手を検索」を開いたときに取り直しているので、
+           ここでは設定だけにした。
+           これでホームを開くたびの読み取りが1回ぶん減る
+           （GitHubを読めるのは1つの回線あたり1時間60回までなので、これが効く）。 */
+      await syncSettingsFromGitHub(code);
       const t=(AD.tournaments||[]).find(x=>x.eventCode===code);
       if(t){AD.activeTourId=t.id;saveAdmin(AD);}
       S._liveEventCode=code;
@@ -2983,13 +2989,15 @@ function rSetup(){
   const _exhOpenList=(_liveTour&&_exh.enabled)
     ? _exh.games.map((g,i)=>({i:i,name:g.name})).filter(x=>exhGameIsOpen_(x.i))
     : [];
-  // 受付中のものがあるときだけ、時間を出すためにタイムスケジュールを読む
-  if(_exhOpenList.length&&_liveTour)maybeLoadExhSchedule(_liveTour.eventCode);
+  /* 時間の出どころ。
+     新しい対戦表なら、受付オン・オフと一緒に時間も届いているので何も読まない。
+     古い対戦表のときだけ、これまでどおりタイムスケジュールを読みにいく。 */
+  if(_exhOpenList.length&&_liveTour&&S._exhHasTimes!==true)maybeLoadExhSchedule(_liveTour.eventCode);
   const _exhBtn=(_liveTour&&_exh.enabled&&_exh.games.length)
     ? (_exhOpenList.length
         ? _exhOpenList.map(x=>{
-            const _t=exhTimeFromSchedule_(S._exSched,x.name);
-            return`<button class="btn-go-exhibition" data-i="${x.i}" style="width:100%;margin-top:8px;padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;line-height:1.6;">${esc(x.name)}の参加申請はこちら（受付中）${_t?`<br><span style="font-size:11px;font-weight:700;color:#6b7280;">🕐 ${esc(_t)}</span>`:''}</button>`;
+            const _t=exhTimeOf_(x.i,x.name);
+            return`<button class="btn-go-exhibition" data-i="${x.i}" style="width:100%;margin-top:8px;padding:10px 6px;font-size:13px;font-weight:700;background:#fff;border:1.5px solid ${_theme};border-radius:10px;color:#1a1a1a;cursor:pointer;line-height:1.6;">${escH(x.name)}の参加申請はこちら（受付中）${_t?`<br><span style="font-size:11px;font-weight:700;color:#6b7280;">🕐 ${escH(_t)}</span>`:''}</button>`;
           }).join('')
         : (S._exhUnknown===true
             ? `<div style="margin-top:8px;padding:10px 12px;background:#f3f4f6;border-radius:10px;font-size:11px;color:#6b7280;line-height:1.7;">いま交流戦の受付状況を確認できませんでした。<br>少し時間をおいて、もう一度ホーム画面を開いてください。</div>`
@@ -7608,7 +7616,33 @@ function exhParseOpenJson_(d){
     for(let i=1;i<=9;i++)games[i]=legacy;
     anyOpen=legacy;
   }
-  return {ok:true,games:games,anyOpen:anyOpen};
+  /* ★2026-10-05 追加：交流戦の時間。
+       新しい対戦表は times を一緒に送ってくるので、アプリは
+       タイムスケジュールのファイルを別に読まなくてよい（通信1回ぶん節約）。
+       古い対戦表は times が無いので、そのときだけ今までどおり自分で読む。 */
+  const times={};
+  const tsrc=(d&&d.times)||null;
+  const hasTimes=!!(tsrc&&typeof tsrc==='object');
+  if(hasTimes){
+    for(let i=1;i<=9;i++){
+      const v=(tsrc[i]!==undefined)?tsrc[i]:tsrc[String(i)];
+      times[i]=String(v==null?'':v).trim();
+    }
+  }
+  return {ok:true,games:games,anyOpen:anyOpen,times:times,hasTimes:hasTimes};
+}
+
+/* その交流戦（0から数えた番号）の時間を返す。
+     新しい対戦表 … 受付オン・オフのファイルに一緒に届いている（通信ゼロ）
+     古い対戦表 …… 届かないので、タイムスケジュールのファイルから自分で探す */
+function exhTimeOf_(i,name){
+  if(S._exhHasTimes===true){
+    // ※ null>=0 は JavaScript では true になってしまうので、数字かどうかから見る
+    if(typeof i!=='number'||!isFinite(i)||i<0)return '';
+    const t=(S._exhTimes||{})[i+1];
+    return String(t==null?'':t).trim();
+  }
+  return exhTimeFromSchedule_(S._exSched,name);
 }
 
 /* その交流戦（0から数えた番号）が、いま受付中かどうか。
@@ -7636,13 +7670,15 @@ function maybeRefreshExhibitionOpen(code){
   fetchExhibitionOpen_(code).then(r=>{
     _exhOpenCode=code;_exhOpenAt=Date.now();_exhOpenBusy=false;
     // 前回と中身が変わったときだけ描き直す（むだに画面を作り直さない）
-    const before=JSON.stringify([S._exhOpen,S._exhGames||{},S._exhUnknown===true]);
+    const before=JSON.stringify([S._exhOpen,S._exhGames||{},S._exhUnknown===true,S._exhTimes||{}]);
     S._exhOpen=r.anyOpen;S._exhGames=r.games;S._exhUnknown=(r.ok!==true);
-    const after=JSON.stringify([S._exhOpen,S._exhGames||{},S._exhUnknown===true]);
+    S._exhTimes=r.times||{};S._exhHasTimes=(r.hasTimes===true);
+    const after=JSON.stringify([S._exhOpen,S._exhGames||{},S._exhUnknown===true,S._exhTimes||{}]);
     if(before!==after&&(S.phase==='setup'||S.phase==='exhibition'))render();
   }).catch(()=>{
     _exhOpenAt=Date.now();_exhOpenBusy=false;
     S._exhGames={};S._exhOpen=false;S._exhUnknown=true;
+    S._exhTimes={};S._exhHasTimes=false;
   });
 }
 
@@ -7684,11 +7720,11 @@ function rExhibition(){
   const tour=activeTour()||{};
   const ex=exhOf(tour);
   const v=S._exView||'team';
-  // ★交流戦の時間を出すため、配信済みのタイムスケジュールを読みにいく（案B）
-  if(ex.count>0)maybeLoadExhSchedule(tour.eventCode);
-  // ★受付が終わっていないかも、この画面で取り直す
+  // ★受付が終わっていないかを、この画面でも取り直す（時間もここで一緒に届く）
   if(ex.count>0)maybeRefreshExhibitionOpen(tour.eventCode);
-  const schedReady=(S._exSchedCode===toJsonFileCode(tour.eventCode||''));
+  /* 古い対戦表のときだけ、時間をタイムスケジュールから自分で読む */
+  if(ex.count>0&&S._exhHasTimes!==true)maybeLoadExhSchedule(tour.eventCode);
+  const schedReady=(S._exhHasTimes===true)||(S._exSchedCode===toJsonFileCode(tour.eventCode||''));
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const wrap=inner=>`<div style="padding:16px;max-width:480px;margin:0 auto;">${inner}</div>`;
   const head=(title,backId)=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
@@ -7708,7 +7744,7 @@ function rExhibition(){
       <div style="background:#E1F5EE;border-radius:12px;padding:16px;margin:18px 0;">
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;"><span style="color:#6b7280;">チーム</span><span style="font-weight:700;color:#111;">No.${esc(S._exTeamNo)}　${esc(S._exTeamName)}</span></div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-top:1px solid #b7e2d2;"><span style="color:#6b7280;">申し込んだ試合</span><span style="font-weight:700;color:#111;">${esc(g.name)}</span></div>
-        ${exhTimeFromSchedule_(S._exSched,g.name)?`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-top:1px solid #b7e2d2;"><span style="color:#6b7280;">時間</span><span style="font-weight:700;color:#111;">${esc(exhTimeFromSchedule_(S._exSched,g.name))}</span></div>`:''}
+        ${exhTimeOf_(S._exGame,g.name)?`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-top:1px solid #b7e2d2;"><span style="color:#6b7280;">時間</span><span style="font-weight:700;color:#111;">${esc(exhTimeOf_(S._exGame,g.name))}</span></div>`:''}
       </div>
       ${ex.games.map((gg,ii)=>ii).filter(ii=>exhGameIsOpen_(ii)&&ii!==S._exGame).length
         ?`<button id="btn-ex-again" style="width:100%;padding:13px;margin-bottom:10px;border:1.5px solid #1D9E75;border-radius:10px;background:#fff;color:#0a6e57;font-size:14px;font-weight:700;cursor:pointer;">ほかの交流戦にも申し込む</button>`
@@ -7726,8 +7762,8 @@ function rExhibition(){
     const openList=ex.games.map((g,i)=>({g:g,i:i})).filter(x=>exhGameIsOpen_(x.i));
     const cards=openList.map(({g,i})=>{
       const on=sel===i;
-      // ★この交流戦が何時からかを、タイムスケジュールの区分名から探す（案B）
-      const gTime=exhTimeFromSchedule_(S._exSched,g.name);
+      // ★この交流戦が何時からか（届いていればそれを、無ければ自分で探した結果）
+      const gTime=exhTimeOf_(i,g.name);
       return`<button class="ex-game" data-i="${i}" style="width:100%;text-align:left;padding:16px;margin-bottom:12px;border:2px solid ${on?'#1D9E75':'#e5e7eb'};border-radius:12px;background:${on?'#E1F5EE':'#fff'};cursor:pointer;">
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="width:22px;height:22px;border-radius:11px;border:2px solid ${on?'#1D9E75':'#d1d5db'};background:${on?'#1D9E75':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;">${on?'✓':''}</span>
