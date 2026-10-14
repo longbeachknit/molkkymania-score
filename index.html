@@ -6393,6 +6393,16 @@ function scPaint(root){
         const y1=pb?pb.cy:(A.y+A.h+12);
         d='M'+exX+','+(A.y+A.h+1)+' L'+exX+','+y1+' L'+enX+','+y1+' L'+enX+','+(B.y-3);
         lx=(exX+enX)/2;ly=y1;anchor='middle';
+      }else if(l.from.k==='cell'&&l.to.k==='cell'&&l.from.r===l.to.r&&l.from.c!==l.to.c){
+        /* 【追加 2026-10-14】同じ段（同じ試合）の箱どうしは、横にまっすぐ1本で引く。
+           例）5位タイ決定T 1回戦 →（不戦勝の場合）→ 不戦勝交流戦②
+           箱の横の辺から出て、行き先の箱の横の辺に入る。文字は線の上に置く。 */
+        const right=l.to.c>l.from.c;
+        const y=A.cy;
+        const sx=right?(A.x+A.w+1):(A.x-1);
+        const ex=right?(B.x-3):(B.x+B.w+3);
+        d='M'+sx+','+y+' L'+ex+','+y;
+        lx=(sx+ex)/2;ly=y-9;anchor='middle';
       }else if(l.from.k==='prelim'||(l.from.k==='cell'&&l.to.k==='cell'&&l.from.c===l.to.c)){
         // まっすぐ下へ（予選のバー → 真下の箱）
         const x=B.cx;
