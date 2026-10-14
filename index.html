@@ -5855,7 +5855,8 @@ const SC_PALETTE=[
   {key:'orange',label:'オレンジ',      bg:'#FCE3CF',bd:'#EFB483',tx:'#7a3e12'},
   {key:'teal',  label:'ティール',      bg:'#D2EDEA',bd:'#8FCFC7',tx:'#134e48'},
   {key:'red',   label:'レッド',        bg:'#F6D4D2',bd:'#E59C97',tx:'#7a1f1a'},
-  {key:'indigo',label:'インディゴ',    bg:'#D9DCEC',bd:'#A3A9D1',tx:'#2a2e63'}
+  {key:'indigo',label:'インディゴ',    bg:'#D9DCEC',bd:'#A3A9D1',tx:'#2a2e63'},
+  {key:'white', label:'ホワイト（交流戦）',bg:'#FFFFFF',bd:'#555555',tx:'#222222'}   // 【追加】交流戦などの白い箱
 ];
 const SC_COLORS={};SC_PALETTE.forEach(p=>{SC_COLORS[p.key]={bg:p.bg,bd:p.bd,tx:p.tx};});
 function scEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -6670,6 +6671,48 @@ const SC_BUILTIN_TEMPLATES=[
       '15位タイ\\nトーナメント | green | 2 |  | 1回戦, 2回戦, 3回戦, 4回戦, 15位タイ決定戦',
       '交流戦 | green | 3 |  | 1回戦, 2回戦'
     ].join('\n')
+  },
+  {
+    id:'sc_bi_prelim4_16',
+    ver:1,   // ★内容を直したらこの数字を1つ増やす（端末側に「最新に更新」ボタンが出る）
+    name:'予選4試合型（決勝トーナメント16＋5位タイ決定T＋11位タイ決定T）',
+    desc:'予選4試合のあと、上位16チームは決勝トーナメントへ、次点の2チームは不戦勝交流戦①へ。決勝トーナメント1回戦・2回戦で負けたチームは5位タイ決定Tへ、5位タイ決定Tの1回戦・2回戦で負けたチームは11位タイ決定Tへ移ります。5位タイ決定Tの1回戦が不戦勝になった場合は、不戦勝交流戦②を行います。白い箱は交流戦です。（例：対戦表C（18〜30）など）',
+    chart:{
+      enabled:true,cornerLabel:'',
+      prelims:['予選第1試合','予選第2試合','予選第3試合','予選第4試合'],
+      rowLabels:['第1試合','第2試合','第3試合','第4試合'],
+      legend:[{label:'表裏',color:'gray'},{label:'3先',color:'pink'},{label:'2先',color:'green'},{label:'交流戦',color:'white'}],
+      // 左：決勝トーナメント／5位タイ決定T／11位タイ決定T／右端：不戦勝交流戦②
+      columns:[
+        {name:'決勝\\nトーナメント',startRow:0,note:'上位16チーム',cells:['1回戦','2回戦','準決勝','決勝、3決']},
+        {name:'5位タイ\\n決定T',startRow:0,note:'次点の2チーム',cells:['不戦勝交流戦①','1回戦','2回戦','5位タイ決定戦']},
+        {name:'11位タイ\\n決定T',startRow:2,note:'',cells:['1回戦','11位タイ決定戦']},
+        {name:'不戦勝\\n交流戦',startRow:1,note:'',cells:['不戦勝交流戦②']}
+      ],
+      colors:{'決勝\\nトーナメント':'pink','5位タイ\\n決定T':'green','11位タイ\\n決定T':'green','不戦勝\\n交流戦':'white'},
+      // 5位タイ決定Tの一番上（不戦勝交流戦①）だけ白い箱にする
+      cellColors:{'5位タイ\\n決定T@0':'white'},
+      /* 矢印は自動では出さず、下の4本だけを出す。
+           ・決勝トーナメント 1回戦／2回戦 で負け → 5位タイ決定T 1回戦／2回戦
+           ・5位タイ決定T    1回戦／2回戦 で負け → 11位タイ決定T 1回戦／11位タイ決定戦
+         ＠のうしろは「上から何行目か」（0から数える）。
+         不戦勝交流戦① → 5位タイ決定T 1回戦 の ↓ は、同じ列なので自動で出る。 */
+      autoLose:false,
+      loseArrows:{
+        '決勝\\nトーナメント@0':true,'決勝\\nトーナメント@1':true,
+        '5位タイ\\n決定T@1':true,'5位タイ\\n決定T@2':true
+      },
+      loseTo:{
+        '決勝\\nトーナメント@0':'5位タイ\\n決定T@1',
+        '決勝\\nトーナメント@1':'5位タイ\\n決定T@2',
+        '5位タイ\\n決定T@1':'11位タイ\\n決定T@2',
+        '5位タイ\\n決定T@2':'11位タイ\\n決定T@3'
+      },
+      // 5位タイ決定T 1回戦が不戦勝になったとき → 不戦勝交流戦②
+      links:[
+        {from:'5位タイ\\n決定T@1',to:'不戦勝\\n交流戦@1',kind:'plain',label:'不戦勝の場合'}
+      ]
+    }
   }
 ];
 
